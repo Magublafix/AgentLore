@@ -65,9 +65,18 @@ Before the final commit, update every affected doc:
 
 | Doc | Update when |
 |-----|-------------|
-| `PROJECT.md` | Architecture decisions, schema changes, new tools |
+| `docs/architecture.md` | New component, changed runtime flow, new deployment unit, new ADR, updated risk or quality scenario |
+| `PROJECT.md` | Phase checklist item completed, constraint added or changed |
 | `README.md` | New setup steps, changed ports, new dependencies |
 | Docstrings | Any public function/class added or changed |
+
+**arc42 update rules:**
+- New building block → update Section 5
+- New runtime flow → update Section 6
+- New deployment unit → update Section 7
+- Significant architectural decision → add a row to Section 9 (ADR table); create `docs/adr/ADR-NNN.md` for complex decisions
+- New risk identified → add a row to Section 11
+- New term → add to Section 12 Glossary
 
 Docs and code go in the **same commit**.
 
