@@ -10,6 +10,24 @@ Lore is a typed, linked knowledge graph for AI coding agents. Full spec: `PROJEC
 
 ---
 
+## Story Lifecycle
+
+Stories move through three files as they progress:
+
+| File | Contains | When to update |
+|------|----------|----------------|
+| `backlog.md` | Open stories, prioritized top-to-bottom | Add new stories here; re-order by priority |
+| `sprints.md` | Planned and in-progress stories for the current sprint | Move from backlog when sprint is planned; update status during work |
+| `features.md` | Implemented and shipped stories | Move here from sprints.md when all DoD gates pass |
+
+**Rules:**
+- Stories only move forward — backlog → sprints → features. Never backwards.
+- `features.md` is append-only. Never edit or remove entries.
+- When starting a sprint, move chosen stories from `backlog.md` to a new sprint block in `sprints.md`.
+- When a story's DoD passes, move it to `features.md` and mark it done in `sprints.md`.
+
+---
+
 ## Stack Reference
 
 | Layer | Choice |
