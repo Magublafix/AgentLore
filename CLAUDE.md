@@ -26,6 +26,38 @@ Stories move through three files as they progress:
 - When starting a sprint, move chosen stories from `backlog.md` to a new sprint block in `sprints.md`.
 - When a story's DoD passes, move it to `features.md` and mark it done in `sprints.md`.
 
+### Story Format
+
+Every story — in backlog, sprints, and features — uses this format:
+
+```markdown
+## [LORE-NNN] Title
+
+**Phase:** N
+**Priority:** high | medium | low
+**Effort:** S | M | L
+**Agent:** <primary agent responsible>
+**Phase item:** PROJECT.md §Development Phases > Phase N > checklist item text
+
+**As a** [role]
+**I want to be able to** [action]
+**So that** [benefit]
+
+**Acceptance Criteria:**
+- [ ] ...
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+```
+
+**Rules:**
+- The user story line **must** follow the form: `As a [role] I want to be able to [action] so that [benefit]`. No other phrasing.
+- IDs are sequential and never reused: LORE-001, LORE-002, …
+- In `features.md`, replace the DoD checklist with: `**What changed:**` and `**Implementation notes:**`
+
 ---
 
 ## Stack Reference
