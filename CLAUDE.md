@@ -6,7 +6,7 @@ These rules are **mandatory** and override default behavior for every task in th
 
 ## Project Overview
 
-Lore is a typed, linked knowledge graph for AI coding agents. Full spec: `docs/lore-project-description.md`.
+Lore is a typed, linked knowledge graph for AI coding agents. Full spec: `PROJECT.md`.
 
 ---
 
@@ -30,7 +30,7 @@ Project structure: `lore/mcp/`, `lore/selfhosted/`, `lore/semantic-server/`, `lo
 A story or task is **not done** until all four gates pass. Do not mark anything complete or move to the next story until every gate is checked.
 
 ### Gate 1 — Acceptance Criteria
-Every acceptance criterion in the task must be met. Check `docs/lore-project-description.md` development phases for the relevant checklist items before closing.
+Every acceptance criterion in the task must be met. Check `PROJECT.md` development phases for the relevant checklist items before closing.
 
 After confirming all AC are met, run `/cost` and record the token count — you will need it for the phase summary.
 
@@ -47,7 +47,7 @@ Before the final commit, update every affected doc:
 
 | Doc | Update when |
 |-----|-------------|
-| `docs/lore-project-description.md` | Architecture decisions, schema changes, new tools |
+| `PROJECT.md` | Architecture decisions, schema changes, new tools |
 | `README.md` | New setup steps, changed ports, new dependencies |
 | Docstrings | Any public function/class added or changed |
 
