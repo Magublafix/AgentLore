@@ -28,7 +28,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
 | LORE-001 | SQLite schema and Qdrant collection setup | python-mcp-engineer | done | 50785 |
-| LORE-002 | Embedding pipeline | python-mcp-engineer | planned | — |
+| LORE-002 | Embedding pipeline | python-mcp-engineer | done | 54484 |
 | LORE-003 | FastAPI selfhosted service | python-mcp-engineer | planned | — |
 | LORE-004 | Docker image for selfhosted backend | devops-docker-engineer | planned | — |
 | LORE-005 | MCP server with selfhosted routing | python-mcp-engineer | planned | — |

@@ -258,6 +258,25 @@ def update_concept_stats(
     conn.commit()
 
 
+def update_embedding(conn: sqlite3.Connection, concept_id: str, embedding: bytes) -> None:
+    """Update the embedding BLOB for an existing concept.
+
+    Called by the indexer after computing a vector so that the raw float32
+    bytes are persisted alongside the Qdrant entry.  The concept must already
+    exist in the database (i.e. :func:`insert_concept` was already called).
+
+    Args:
+        conn: An active SQLite connection (from :func:`init_db`).
+        concept_id: Primary key of the concept to update.
+        embedding: Raw float32 bytes produced by the embedding pipeline.
+    """
+    conn.execute(
+        "UPDATE concepts SET embedding = ? WHERE concept_id = ?",
+        (embedding, concept_id),
+    )
+    conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # Link CRUD
 # ---------------------------------------------------------------------------

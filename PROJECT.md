@@ -434,7 +434,7 @@ Build the MCP server and the self-hosted backend. This is the fastest
 path to a working system with full semantic search.
 
 - [x] Qdrant + SQLite schema (concepts, links, ratings, session_usage)
-- [ ] Embedding pipeline (sentence-transformers, all-MiniLM-L6-v2)
+- [x] Embedding pipeline (sentence-transformers, all-MiniLM-L6-v2)
 - [ ] FastAPI service wrapping Qdrant + SQLite
 - [ ] Docker image: single container, `docker run -p 8765:8765 lore/selfhosted`
 - [ ] MCP server with `LORE_BACKEND=selfhosted` routing:

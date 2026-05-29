@@ -115,7 +115,7 @@ lore/
 | `mcp/server.py` | FastMCP entry point; registers all MCP tools |
 | `mcp/router.py` | Reads `LORE_BACKEND`; dispatches to correct backend |
 | `mcp/models.py` | `Concept`, `Link`, `Rating` dataclasses |
-| `mcp/embeddings.py` | sentence-transformers wrapper (Backend 1 only) |
+| `mcp/embeddings.py` | `EmbeddingModel` — sentence-transformers wrapper; `embed()` and `embed_batch()` produce 384-dim vectors offline |
 | `mcp/backends/selfhosted.py` | Backend 1 client (Qdrant + SQLite) |
 | `mcp/backends/gists.py` | Backend 2 client (GitHub Gists API) |
 | `mcp/backends/semantic.py` | Backend 3 client (semantic search server) |
@@ -128,6 +128,7 @@ lore/
 | `selfhosted/db.py` | SQLite schema + CRUD operations (concepts, links, ratings, session_usage) |
 | `selfhosted/schema.sql` | Table definitions for concepts, links, ratings, session_usage |
 | `selfhosted/vector_store.py` | Qdrant collection init, vector upsert, and similarity search |
+| `selfhosted/indexer.py` | Wires embedding model to storage: `index_concept()` and `search_concepts()` |
 | `selfhosted/Dockerfile` | Single-container image (`docker run -p 8765:8765 lore/selfhosted`) |
 
 ### 5.4 Level 2 — Skill Layer

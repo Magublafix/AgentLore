@@ -307,6 +307,12 @@ class TestRatings:
                 _make_rating("00000000-0000-0000-0000-deadbeef0000", outcome=3),
             )
 
+    def test_update_embedding_nonexistent_concept_is_silent_noop(self) -> None:
+        """update_embedding on an unknown concept_id must not raise."""
+        from lore.selfhosted.db import update_embedding
+        conn = init_db(":memory:")
+        update_embedding(conn, "does-not-exist", b"\x00" * (384 * 4))  # must not raise
+
     def test_rating_fields_round_trip(self, conn: sqlite3.Connection) -> None:
         """Rating fields must persist correctly, including optional hours_saved and notes."""
         cid = insert_concept(conn, _make_concept())
