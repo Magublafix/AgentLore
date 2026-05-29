@@ -45,3 +45,17 @@ Feature format:
 **What changed:** `EmbeddingModel` wraps `all-MiniLM-L6-v2` fully offline. `index_concept()` embeds `when_to_use + name`, stores the BLOB in SQLite, and upserts the vector to Qdrant. `search_concepts()` embeds the query, hits Qdrant, fetches full records from SQLite, and applies type/language filters in-memory.
 
 **Implementation notes:** Embedding target is `when_to_use + " " + name` — `content` is deliberately excluded (too long, too specific). In-memory filtering uses `limit * 4` Qdrant candidates to guard against filter attrition. `update_embedding()` added to `db.py`. LORE-003 must create `EmbeddingModel` once at startup (in `lifespan`) and inject it — the indexer accepts it as a parameter for this reason.
+
+---
+
+## [LORE-003] FastAPI selfhosted service
+
+**Sprint:** 1   **Shipped:** 2026-05-29   **Phase:** 1   **Tokens:** 69828
+
+**As a** Lore MCP server
+**I want to be able to** submit, retrieve, search, link, and rate concepts via HTTP
+**So that** the MCP layer has a clean, backend-agnostic HTTP boundary to call
+
+**What changed:** `lore/selfhosted/api.py` exposes all five concept operations under `/v1/` as a FastAPI service. A single `EmbeddingModel`, SQLite connection, and `QdrantClient` are created in `lifespan` and shared across requests. Content scanner stub wired at submit time — real scanner slots in without API changes in LORE-005. 25 tests.
+
+**Implementation notes:** SQLite insert happens before Qdrant upsert; Qdrant failure returns HTTP 503 with the `concept_id` so the caller can retry. SQLite insert is not rolled back (documented in arc42 Section 5.3 and R-5). `QDRANT_HOST`, `QDRANT_PORT`, and `LORE_DB_PATH` are env-configurable for Docker. Entry point: `uvicorn lore.selfhosted.api:app --host 0.0.0.0 --port 8765`.

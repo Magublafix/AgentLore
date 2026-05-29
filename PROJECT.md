@@ -435,7 +435,7 @@ path to a working system with full semantic search.
 
 - [x] Qdrant + SQLite schema (concepts, links, ratings, session_usage)
 - [x] Embedding pipeline (sentence-transformers, all-MiniLM-L6-v2)
-- [ ] FastAPI service wrapping Qdrant + SQLite
+- [x] FastAPI service wrapping Qdrant + SQLite
 - [ ] Docker image: single container, `docker run -p 8765:8765 lore/selfhosted`
 - [ ] MCP server with `LORE_BACKEND=selfhosted` routing:
       search_concepts, get_concept, submit_concept, link_concepts, rate_concept

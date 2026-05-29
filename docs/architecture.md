@@ -71,11 +71,11 @@ Full product spec: `PROJECT.md`.
 | Interface | Protocol | Notes |
 |-----------|----------|-------|
 | Agent ↔ MCP server | MCP over stdio or HTTP | FastMCP handles transport |
-| MCP server ↔ Backend 1 | Python function calls | In-process (selfhosted.py) |
+| MCP server ↔ Backend 1 | HTTP (FastAPI) | `selfhosted/api.py` on :8765 |
 | MCP server ↔ Backend 2 | HTTPS (GitHub REST API) | PyGithub or httpx |
 | MCP server ↔ Backend 3 | HTTPS (FastAPI) | Optional; falls back to Backend 2 |
 | Backend 1 ↔ Qdrant | gRPC / HTTP | qdrant-client SDK |
-| Backend 1 ↔ SQLite | File I/O | aiosqlite |
+| Backend 1 ↔ SQLite | File I/O | sqlite3 (synchronous, WAL mode) |
 | Stop hook ↔ session file | File I/O | `~/.lore/session.json` |
 
 ---
@@ -124,12 +124,30 @@ lore/
 
 | Component | Responsibility |
 |-----------|---------------|
-| `selfhosted/api.py` | FastAPI service exposing search/store endpoints |
+| `selfhosted/api.py` | FastAPI HTTP service exposing all /v1/ endpoints; shared EmbeddingModel, SQLite connection, and QdrantClient live in FastAPI lifespan |
 | `selfhosted/db.py` | SQLite schema + CRUD operations (concepts, links, ratings, session_usage) |
 | `selfhosted/schema.sql` | Table definitions for concepts, links, ratings, session_usage |
 | `selfhosted/vector_store.py` | Qdrant collection init, vector upsert, and similarity search |
 | `selfhosted/indexer.py` | Wires embedding model to storage: `index_concept()` and `search_concepts()` |
+| `core/scanner.py` | Content scan stub (Phase 1: always returns []); real scanner delivered in LORE-005 |
 | `selfhosted/Dockerfile` | Single-container image (`docker run -p 8765:8765 lore/selfhosted`) |
+
+#### Known gap — SQLite/Qdrant write ordering in `POST /v1/concepts`
+
+The submit endpoint inserts the concept into SQLite first, then calls
+`index_concept()` to push the vector into Qdrant.  If Qdrant is unavailable
+after the SQLite insert completes, the concept exists in SQLite but is not
+present in the vector index and therefore not discoverable via
+`POST /v1/concepts/search`.
+
+This is a deliberate Phase 1 trade-off documented in the `api.py` module
+docstring.  The API returns HTTP 503 with the `concept_id` so the caller or
+operator can re-index the concept later.  Rolling back the SQLite insert on
+Qdrant failure would leave the caller with no concept_id to retry with.
+
+Re-indexing path (future work, tracked as R-5): a
+`POST /v1/concepts/{concept_id}/reindex` endpoint or a background task that
+reconciles SQLite concept_ids against Qdrant point IDs.
 
 ### 5.4 Level 2 — Skill Layer
 
@@ -256,6 +274,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-003 | Embed `when_to_use + name` as the search surface | accepted | — |
 | ADR-004 | GitHub Gists as Backend 2 storage | accepted | — |
 | ADR-005 | `hours_saved` as primary rating signal | accepted | — |
+| ADR-006 | SQLite-first write ordering in submit_concept — no rollback on Qdrant failure | accepted | 2026-05-29 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 
@@ -283,6 +302,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | R-2 | Near-duplicate concepts degrade community corpus quality | Medium | High | Deduplication on publish (Phase 3) |
 | R-3 | Embedding model (all-MiniLM-L6-v2) produces poor matches for highly technical queries | Low | Medium | Evaluate at Phase 1; swap model if needed |
 | R-4 | Stop hook fails silently and ratings are never collected | Low | High | Hook must exit 0 but log errors to `~/.lore/hook.log` |
+| R-5 | Concept inserted to SQLite but Qdrant unavailable — concept saved but not searchable | Low | Medium | API returns 503 + concept_id; operator can re-index; future reindex endpoint planned |
 
 ---
 
@@ -298,3 +318,4 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | Session file | `~/.lore/session.json` — tracks concept IDs used in the current agent session |
 | Stop hook | Bash script fired by Claude Code when a session ends; collects batch ratings |
 | Seed graph | Five linked concepts pre-loaded on first run to validate the full retrieval path |
+| Content scanner | `core/scanner.py` — checks concept fields for credential patterns, internal URLs, and LORE_BLOCK_PATTERNS before persisting |
