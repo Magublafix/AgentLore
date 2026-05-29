@@ -125,8 +125,9 @@ lore/
 | Component | Responsibility |
 |-----------|---------------|
 | `selfhosted/api.py` | FastAPI service exposing search/store endpoints |
-| `selfhosted/db.py` | SQLite schema + async CRUD operations |
+| `selfhosted/db.py` | SQLite schema + CRUD operations (concepts, links, ratings, session_usage) |
 | `selfhosted/schema.sql` | Table definitions for concepts, links, ratings, session_usage |
+| `selfhosted/vector_store.py` | Qdrant collection init, vector upsert, and similarity search |
 | `selfhosted/Dockerfile` | Single-container image (`docker run -p 8765:8765 lore/selfhosted`) |
 
 ### 5.4 Level 2 — Skill Layer

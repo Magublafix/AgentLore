@@ -258,6 +258,18 @@ Input:
 Output: concept_id, confirmation
 ```
 
+Before writing, `submit_concept` runs a content scan across all text fields:
+
+- **Credential patterns** — API keys, tokens, Bearer strings, long hex/base64 strings
+- **Internal URL patterns** — `localhost` (non-example), `.internal`, `.corp`, `.local` domains
+- **Configurable blocklist** — regex patterns from `LORE_BLOCK_PATTERNS` env var for team-specific sensitive strings
+
+On a match the tool rejects with a structured error identifying which field triggered
+and why, so the agent can generalize and resubmit. The scan cannot be bypassed
+— it runs regardless of `LORE_CAPTURE_MODE`. In `confirm` mode the user sees
+the concept before submission; in `auto` mode the scan is the only gate, so it
+must pass cleanly.
+
 ### link_concepts
 
 ```
@@ -309,12 +321,43 @@ Located at `.claude/skills/search-concepts.md`. When invoked:
 2. Appends returned concept IDs to `~/.lore/session.json`
 3. Returns the full concept graph to the agent
 
+### capture-concept skill
+
+Located at `.claude/skills/capture-concept.md`. Called by the agent at any
+point during a task when it believes it has encountered something worth
+preserving. The skill embeds structured reflection criteria to help the agent
+evaluate quality before submitting.
+
+**Reflection criteria** (embedded in the skill prompt):
+- Is this generalizable beyond this specific codebase or task?
+- Is there a gotcha, surprise, or non-obvious constraint another agent would rediscover?
+- Would this save a future agent meaningful time?
+
+**Mandatory generalization step** — before constructing the submission the skill
+instructs the agent:
+
+> Replace all codebase-specific names, internal URLs, credentials, schema
+> details, and domain-specific terminology with generic placeholders. You are
+> capturing the *pattern*, not the *implementation*. If you cannot describe
+> this concept without referencing specifics, it is not ready to submit.
+
+If the concept passes, behaviour depends on `LORE_CAPTURE_MODE`:
+
+| Mode | Behaviour |
+|---|---|
+| `confirm` (default) | Agent surfaces the concept to the user: "I want to capture this — approve?" User approves or rejects before `submit_concept` is called. |
+| `auto` | Agent calls `submit_concept` directly without user confirmation. |
+
+Agents call this skill by judgment — there is no automatic trigger mid-task.
+The Stop hook (below) provides the session-end prompt that surfaces concepts
+the agent may have noted but not yet captured.
+
 ### Stop hook
 
 Registered in `.claude/settings.json`. Fires when a session ends:
 
 1. Reads `~/.lore/session.json` for concept IDs used this session
-2. If any concepts were used, presents a batch prompt:
+2. If any concepts were used, presents a batch rating prompt:
 
 ```
 This session you used these Lore concepts:
@@ -327,7 +370,16 @@ Rate usefulness 1-5.
 ```
 
 3. Calls `rate_concept` for each response
-4. Clears the session file
+4. Injects a session-end reflection prompt:
+
+```
+Reflect on this session — did you encounter any non-trivial patterns,
+gotchas, or solutions that would save another agent meaningful time?
+If yes, call capture-concept for each one before closing.
+```
+
+5. Agent responds: calls `capture-concept` for any qualifying concepts, or skips
+6. Clears the session file
 
 ---
 
@@ -344,6 +396,8 @@ Rate usefulness 1-5.
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Fully offline in Backend 1; server-side in Backend 3 |
 | Claude Code skill | Bash + markdown skill file | Leverages Stop hook |
 | Session tracking | JSON file (~/.lore/session.json) | Simple, hook-compatible |
+| Capture mode | `LORE_CAPTURE_MODE=confirm\|auto` env var | Confirm is safe default; auto unlocks autonomous growth |
+| Leak prevention | `LORE_BLOCK_PATTERNS` env var (regex list) | Team-specific sensitive strings blocked at submit time |
 
 ---
 
@@ -379,15 +433,16 @@ backends are built incrementally and remain independently useful.
 Build the MCP server and the self-hosted backend. This is the fastest
 path to a working system with full semantic search.
 
-- [ ] Qdrant + SQLite schema (concepts, links, ratings, session_usage)
+- [x] Qdrant + SQLite schema (concepts, links, ratings, session_usage)
 - [ ] Embedding pipeline (sentence-transformers, all-MiniLM-L6-v2)
 - [ ] FastAPI service wrapping Qdrant + SQLite
 - [ ] Docker image: single container, `docker run -p 8765:8765 lore/selfhosted`
 - [ ] MCP server with `LORE_BACKEND=selfhosted` routing:
       search_concepts, get_concept, submit_concept, link_concepts, rate_concept
 - [ ] Seed the REST CLI concept graph (5 linked concepts)
-- [ ] Claude Code skill file
-- [ ] Stop hook with batch rating prompt including hours_saved
+- [ ] Claude Code search-concepts skill file
+- [ ] capture-concept skill file (confirm/auto mode, structured reflection criteria)
+- [ ] Stop hook: batch rating prompt (hours_saved) + session-end reflection prompt
 - [ ] Manual test: agent searches, follows links, rates at session end
 
 ### Phase 2 — Backend 2: GitHub Gists (community, tag search)
@@ -424,8 +479,9 @@ truth. The server indexes the public corpus and serves vector search.
 - [ ] Publish self-hosted Docker image to Docker Hub as `lore/selfhosted`
 - [ ] Hosted public semantic search instance
 - [ ] Concept graph browser (read-only web UI)
-- [ ] Agent-autonomous publishing: `submit_concept` callable by agents
-      without human confirmation (gated by `LORE_ALLOW_AUTO_PUBLISH=true`)
+- [ ] Flip `LORE_CAPTURE_MODE` default to `auto` — agent-autonomous publishing
+      without user confirmation (Phase 1 capture-concept skill supports both modes;
+      this phase makes `auto` the recommended default)
 
 ---
 
@@ -452,9 +508,10 @@ lore/
 │   ├── watcher.py              # Gist watcher + indexer
 │   └── Dockerfile
 ├── skills/
-│   ├── search-concepts.md      # Claude Code skill
+│   ├── search-concepts.md      # Claude Code skill — search + session tracking
+│   ├── capture-concept.md      # Claude Code skill — agent-initiated concept submission
 │   └── hooks/
-│       └── stop.sh             # Stop hook — batch rating collection
+│       └── stop.sh             # Stop hook — batch rating + session-end reflection prompt
 ├── seed/
 │   └── concepts.json           # Seed concept graph (REST CLI + 4 linked)
 ├── tests/
@@ -478,6 +535,12 @@ lore/
   agents should never need a second round-trip to discover the graph.
 - `hours_saved` is optional but encouraged — it's the strongest
   signal in the rating system.
+- `submit_concept` content scan is mandatory and cannot be bypassed — it runs
+  regardless of `LORE_CAPTURE_MODE`. In `auto` mode this is the only leak gate.
+- `confirm` mode is strongly recommended for teams on sensitive codebases —
+  human review is the final guard the scan cannot replace.
+- `LORE_BLOCK_PATTERNS` accepts a comma-separated list of regex strings for
+  team-specific sensitive terms (internal service names, proprietary identifiers).
 - Backends are not mutually exclusive in future: a team could run
   Backend 1 for private concepts and Backend 2/3 for public ones —
   but multi-backend fan-out is out of scope until Phase 4.
