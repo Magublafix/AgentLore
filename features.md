@@ -59,3 +59,17 @@ Feature format:
 **What changed:** `lore/selfhosted/api.py` exposes all five concept operations under `/v1/` as a FastAPI service. A single `EmbeddingModel`, SQLite connection, and `QdrantClient` are created in `lifespan` and shared across requests. Content scanner stub wired at submit time — real scanner slots in without API changes in LORE-005. 25 tests.
 
 **Implementation notes:** SQLite insert happens before Qdrant upsert; Qdrant failure returns HTTP 503 with the `concept_id` so the caller can retry. SQLite insert is not rolled back (documented in arc42 Section 5.3 and R-5). `QDRANT_HOST`, `QDRANT_PORT`, and `LORE_DB_PATH` are env-configurable for Docker. Entry point: `uvicorn lore.selfhosted.api:app --host 0.0.0.0 --port 8765`.
+
+---
+
+## [LORE-004] Docker image for selfhosted backend
+
+**Sprint:** 1   **Shipped:** 2026-05-31   **Phase:** 1   **Tokens:** 68874
+
+**As a** Lore operator
+**I want to be able to** run the selfhosted backend as a single Docker container with no network access at runtime
+**So that** the self-hosted backend can be deployed in air-gapped environments with a single `docker run` command
+
+**What changed:** `lore/selfhosted/Dockerfile` ships a production-ready multi-stage image (~2.9 GB) with the `all-MiniLM-L6-v2` model baked in. `docker-compose.yml` brings up the full stack (lore-selfhosted + Qdrant) with health checks and named volumes. Offline boot verified with `--network none`.
+
+**Implementation notes:** `TRANSFORMERS_OFFLINE=1` + `HF_DATASETS_OFFLINE=1` are required in the runtime stage — newer `huggingface_hub` does a HEAD request to HuggingFace Hub before loading cached weights, which fails in air-gapped containers. Healthcheck uses Python urllib (not curl) — curl is absent from `python:3.11-slim`. Qdrant sidecar healthcheck retains curl (Qdrant's image ships it). Non-root user `lore` uid 1000; `/data` volume for SQLite.

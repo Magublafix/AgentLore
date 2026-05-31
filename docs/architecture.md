@@ -212,6 +212,32 @@ docker compose up -d
   └── qdrant           (vector store)                              :6333
 ```
 
+#### Docker image — `lore/selfhosted`
+
+| Property | Value |
+|----------|-------|
+| Build | Multi-stage (builder + runtime) |
+| Base image | `python:3.11-slim` |
+| Baked model | `all-MiniLM-L6-v2` (~90 MB weights at `/app/.cache`) — no network at runtime |
+| Total image size | ~2.9 GB (PyTorch ~1.8 GB dominates; model weights ~90 MB; `python:3.11-slim` base ~130 MB) |
+| Runtime user | `lore` (uid 1000, non-root) |
+| Exposed port | `8765` |
+| Healthcheck | `python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/v1/health')"` (no curl dependency) |
+| Qdrant sidecar | Required — see `docker-compose.yml`; lore-selfhosted waits for Qdrant healthy before starting |
+| Data volume | `/data` — mount here for SQLite persistence (`LORE_DB_PATH=/data/lore.db`) |
+
+**Single-command startup:**
+```
+docker run -p 8765:8765 lore/selfhosted
+```
+
+**Full stack with Qdrant:**
+```
+docker compose up -d
+```
+
+The builder stage installs all dependencies and pre-downloads the embedding model. The runtime stage copies only the installed site-packages, uvicorn binary, model cache, and source — keeping the image lean and guaranteeing offline operation.
+
 ### Backend 2 (GitHub Gists)
 
 No deployment. Requires `LORE_GITHUB_TOKEN` env var only.
