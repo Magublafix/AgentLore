@@ -112,13 +112,10 @@ lore/
 
 | Component | Responsibility |
 |-----------|---------------|
-| `mcp/server.py` | FastMCP entry point; registers all MCP tools |
-| `mcp/router.py` | Reads `LORE_BACKEND`; dispatches to correct backend |
+| `mcp/server.py` | FastMCP entry point; registers all 5 MCP tools; reads `LORE_BACKEND` and routes HTTP calls to the selfhosted FastAPI service at `LORE_SELFHOSTED_URL` (Phase 1); raises `NotImplementedError` for unknown backends |
 | `mcp/models.py` | `Concept`, `Link`, `Rating` dataclasses |
 | `mcp/embeddings.py` | `EmbeddingModel` — sentence-transformers wrapper; `embed()` and `embed_batch()` produce 384-dim vectors offline |
-| `mcp/backends/selfhosted.py` | Backend 1 client (Qdrant + SQLite) |
-| `mcp/backends/gists.py` | Backend 2 client (GitHub Gists API) |
-| `mcp/backends/semantic.py` | Backend 3 client (semantic search server) |
+| `core/scanner.py` | `scan_content()` — checks all concept text fields for credential patterns, long hex/base64, internal URLs, and `LORE_BLOCK_PATTERNS` custom blocklist before any write; returns structured violation list; cannot be bypassed |
 
 ### 5.3 Level 2 — Self-hosted Backend
 
@@ -129,7 +126,7 @@ lore/
 | `selfhosted/schema.sql` | Table definitions for concepts, links, ratings, session_usage |
 | `selfhosted/vector_store.py` | Qdrant collection init, vector upsert, and similarity search |
 | `selfhosted/indexer.py` | Wires embedding model to storage: `index_concept()` and `search_concepts()` |
-| `core/scanner.py` | Content scan stub (Phase 1: always returns []); real scanner delivered in LORE-005 |
+| `core/scanner.py` | `scan_content()` — credential, hex/base64, internal URL, and custom blocklist detection; called by `submit_concept` before any write |
 | `selfhosted/Dockerfile` | Single-container image (`docker run -p 8765:8765 lore/selfhosted`) |
 
 #### Known gap — SQLite/Qdrant write ordering in `POST /v1/concepts`
@@ -167,11 +164,10 @@ Agent
   │  invoke search_concepts(problem="...")
   ▼
 MCP server (server.py)
-  │  validate inputs
+  │  validate inputs; LORE_BACKEND=selfhosted
+  │  POST /v1/concepts/search → selfhosted FastAPI (one HTTP call)
   ▼
-Router (router.py)  ── LORE_BACKEND=selfhosted
-  ▼
-selfhosted.py
+selfhosted/api.py
   │  embed problem → all-MiniLM-L6-v2
   │  query Qdrant → top-N concept_ids by cosine similarity
   │  fetch full records + links from SQLite
@@ -179,7 +175,7 @@ selfhosted.py
 MCP server
   │  return Concept[] with embedded link graph
   ▼
-Agent  ← full concept graph in one call
+Agent  ← full concept graph in one call (no N+1 fetches)
 ```
 
 ### 6.2 Session Rating (Stop Hook)
@@ -301,6 +297,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-004 | GitHub Gists as Backend 2 storage | accepted | — |
 | ADR-005 | `hours_saved` as primary rating signal | accepted | — |
 | ADR-006 | SQLite-first write ordering in submit_concept — no rollback on Qdrant failure | accepted | 2026-05-29 |
+| ADR-007 | Content scanner in MCP layer, not FastAPI layer — scan before any network call | accepted | 2026-06-01 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 

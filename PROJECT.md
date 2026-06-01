@@ -437,7 +437,7 @@ path to a working system with full semantic search.
 - [x] Embedding pipeline (sentence-transformers, all-MiniLM-L6-v2)
 - [x] FastAPI service wrapping Qdrant + SQLite
 - [x] Docker image: single container, `docker run -p 8765:8765 lore/selfhosted`
-- [ ] MCP server with `LORE_BACKEND=selfhosted` routing:
+- [x] MCP server with `LORE_BACKEND=selfhosted` routing:
       search_concepts, get_concept, submit_concept, link_concepts, rate_concept
 - [ ] Seed the REST CLI concept graph (5 linked concepts)
 - [ ] Claude Code search-concepts skill file

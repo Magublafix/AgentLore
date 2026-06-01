@@ -73,3 +73,17 @@ Feature format:
 **What changed:** `lore/selfhosted/Dockerfile` ships a production-ready multi-stage image (~2.9 GB) with the `all-MiniLM-L6-v2` model baked in. `docker-compose.yml` brings up the full stack (lore-selfhosted + Qdrant) with health checks and named volumes. Offline boot verified with `--network none`.
 
 **Implementation notes:** `TRANSFORMERS_OFFLINE=1` + `HF_DATASETS_OFFLINE=1` are required in the runtime stage — newer `huggingface_hub` does a HEAD request to HuggingFace Hub before loading cached weights, which fails in air-gapped containers. Healthcheck uses Python urllib (not curl) — curl is absent from `python:3.11-slim`. Qdrant sidecar healthcheck retains curl (Qdrant's image ships it). Non-root user `lore` uid 1000; `/data` volume for SQLite.
+
+---
+
+## [LORE-005] MCP server with selfhosted routing
+
+**Sprint:** 1   **Shipped:** 2026-06-01   **Phase:** 1   **Tokens:** —
+
+**As a** AI coding agent
+**I want to be able to** call `search_concepts`, `get_concept`, `submit_concept`, `link_concepts`, and `rate_concept` via MCP
+**So that** I can retrieve and contribute to the Lore knowledge graph without knowing which backend stores the data
+
+**What changed:** `lore/mcp/server.py` implements all five MCP tools via FastMCP, routing HTTP calls to the selfhosted FastAPI backend at `LORE_SELFHOSTED_URL`. `lore/core/scanner.py` runs a mandatory content scan on every `submit_concept` call — rejects credentials, internal URLs, and custom blocklist matches with a structured error before any write reaches the backend. `python -m lore.mcp.server` starts cleanly. 160 tests, 99.04% coverage.
+
+**Implementation notes:** Routing is done directly in `server.py` (no separate router module) — `LORE_BACKEND` is read at startup; non-selfhosted values raise `NotImplementedError` immediately. Scanner runs client-side before the HTTP call — rejection is instant and does not consume a round-trip. `LORE_BLOCK_PATTERNS` env var accepts semicolon-separated regexes compiled once at import. `httpx.ConnectError` propagates raw to the MCP caller (not wrapped). 422 from the backend maps to `ValueError`; all other HTTP errors map to `RuntimeError`.
