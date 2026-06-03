@@ -87,3 +87,59 @@ Feature format:
 **What changed:** `lore/mcp/server.py` implements all five MCP tools via FastMCP, routing HTTP calls to the selfhosted FastAPI backend at `LORE_SELFHOSTED_URL`. `lore/core/scanner.py` runs a mandatory content scan on every `submit_concept` call — rejects credentials, internal URLs, and custom blocklist matches with a structured error before any write reaches the backend. `python -m lore.mcp.server` starts cleanly. 160 tests, 99.04% coverage.
 
 **Implementation notes:** Routing is done directly in `server.py` (no separate router module) — `LORE_BACKEND` is read at startup; non-selfhosted values raise `NotImplementedError` immediately. Scanner runs client-side before the HTTP call — rejection is instant and does not consume a round-trip. `LORE_BLOCK_PATTERNS` env var accepts semicolon-separated regexes compiled once at import. `httpx.ConnectError` propagates raw to the MCP caller (not wrapped). 422 from the backend maps to `ValueError`; all other HTTP errors map to `RuntimeError`.
+
+---
+
+## [LORE-007] search-concepts skill
+
+**Sprint:** 1   **Shipped:** 2026-06-02   **Phase:** 1   **Tokens:** —
+
+**As a** AI coding agent
+**I want to be able to** invoke `/search-concepts` to search the Lore knowledge graph and have used concept IDs automatically tracked in my session file
+**So that** I can retrieve relevant prior knowledge before implementing a solution and enable automatic end-of-session ratings
+
+**What changed:** `.claude/skills/search-concepts.md` instructs agents to call `search_concepts(problem=..., limit=5)`, read the full linked concept graph in one call, and append all returned concept IDs to `~/.lore/session.json`. The session file is created if missing and reset if corrupted.
+
+**Implementation notes:** Session file format is a plain JSON array of concept ID strings. Agents are instructed not to make a second MCP call for linked concepts — they are included in the first response. MCP errors are silently swallowed so a missing backend never blocks a task.
+
+---
+
+## [LORE-008] capture-concept skill
+
+**Sprint:** 1   **Shipped:** 2026-06-02   **Phase:** 1   **Tokens:** —
+
+**As a** AI coding agent
+**I want to be able to** invoke `/capture-concept` to submit a generalized insight to the Lore knowledge graph, with a mandatory reflection gate and mode-based confirmation
+**So that** discovered patterns are preserved for future agents without leaking session-specific details
+
+**What changed:** `.claude/skills/capture-concept.md` implements the full capture flow: reflection gate (3 criteria), mandatory generalization step, `LORE_CAPTURE_MODE` gate (`confirm` default / `auto`), and `submit_concept` call with the correct parameter names. Scanner rejections prompt in-skill retry after further generalization.
+
+**Implementation notes:** `confirm` mode is the default — any value other than `auto` (including absent) uses confirm. Scanner retry is capped at one attempt per field. Successful submissions also append to `~/.lore/session.json` so they appear in the end-of-session rating prompt.
+
+---
+
+## [LORE-009] Stop hook: batch rating and session-end reflection
+
+**Sprint:** 1   **Shipped:** 2026-06-02   **Phase:** 1   **Tokens:** —
+
+**As a** AI coding agent
+**I want to** automatically be prompted to rate used Lore concepts and reflect on capturable insights when my session ends
+**So that** the knowledge graph accumulates quality signals without requiring explicit agent discipline mid-task
+
+**What changed:** `.claude/hooks/lore-stop.sh` fires at session end via `.claude/settings.json` Stop hook. It reads `~/.lore/session.json`, resolves concept names via the selfhosted API (best-effort), emits a structured rating prompt and reflection prompt to stdout for Claude to act on, then clears the session file.
+
+**Implementation notes:** Hook always exits 0 — never blocks session close. If the selfhosted backend is unreachable, concept IDs are shown instead of names. Session file is cleared after the prompt is emitted; if the hook is killed mid-run the session file remains intact for the next invocation (idempotent). `LORE_SELFHOSTED_URL` env var configures the backend URL (default `http://localhost:8765`).
+
+---
+
+## [LORE-006] Seed concept graph
+
+**Sprint:** 1   **Shipped:** 2026-06-03   **Phase:** 1   **Tokens:** —
+
+**As a** Lore operator
+**I want to be able to** run `python -m lore.seed.concepts` to pre-populate the knowledge graph with a validated REST CLI concept graph
+**So that** the retrieval path can be verified end-to-end on first run without requiring manual concept creation
+
+**What changed:** `lore/seed/concepts.py` inserts 6 REST CLI concepts (project, tool, architecture, testing, 2×pattern) and 5 directed links from the anchor concept, directly via SQLite and Qdrant — no HTTP, no running server required. 17 seed tests, 177 total, 98.32% coverage.
+
+**Implementation notes:** Idempotency is checked against the anchor concept name before any write — second call returns `SeedResult(skipped=True)` immediately with zero writes. Qdrant indexing is best-effort; SQLite inserts always complete even if Qdrant is unavailable. `_CONCEPT_DEFS` and `_LINK_DEFS` are exported for test assertions. `seed()` accepts injected `conn`, `qdrant_client`, and `embedding_model` for testing without infrastructure.

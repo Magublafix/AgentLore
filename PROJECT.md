@@ -439,10 +439,10 @@ path to a working system with full semantic search.
 - [x] Docker image: single container, `docker run -p 8765:8765 lore/selfhosted`
 - [x] MCP server with `LORE_BACKEND=selfhosted` routing:
       search_concepts, get_concept, submit_concept, link_concepts, rate_concept
-- [ ] Seed the REST CLI concept graph (5 linked concepts)
-- [ ] Claude Code search-concepts skill file
-- [ ] capture-concept skill file (confirm/auto mode, structured reflection criteria)
-- [ ] Stop hook: batch rating prompt (hours_saved) + session-end reflection prompt
+- [x] Seed the REST CLI concept graph (5 linked concepts)
+- [x] Claude Code search-concepts skill file
+- [x] capture-concept skill file (confirm/auto mode, structured reflection criteria)
+- [x] Stop hook: batch rating prompt (hours_saved) + session-end reflection prompt
 - [ ] Manual test: agent searches, follows links, rates at session end
 
 ### Phase 2 — Backend 2: GitHub Gists (community, tag search)

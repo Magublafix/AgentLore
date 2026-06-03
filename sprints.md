@@ -32,10 +32,10 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 | LORE-003 | FastAPI selfhosted service | python-mcp-engineer | done | 69828 |
 | LORE-004 | Docker image for selfhosted backend | devops-docker-engineer | done | 68874 |
 | LORE-005 | MCP server with selfhosted routing | python-mcp-engineer | done | — |
-| LORE-006 | Seed concept graph | python-mcp-engineer | planned | — |
-| LORE-007 | search-concepts skill | skill-engineer | planned | — |
-| LORE-008 | capture-concept skill | skill-engineer | planned | — |
-| LORE-009 | Stop hook: batch rating and session-end reflection | skill-engineer | planned | — |
+| LORE-006 | Seed concept graph | python-mcp-engineer | done | — |
+| LORE-007 | search-concepts skill | skill-engineer | done | — |
+| LORE-008 | capture-concept skill | skill-engineer | done | — |
+| LORE-009 | Stop hook: batch rating and session-end reflection | skill-engineer | done | — |
 
 ### Notes
 - LORE-001 → LORE-002 → LORE-003 → LORE-004 → LORE-005 → LORE-006 is the backend dependency chain; must implement in order.

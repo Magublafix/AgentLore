@@ -150,8 +150,16 @@ reconciles SQLite concept_ids against Qdrant point IDs.
 
 | Component | Responsibility |
 |-----------|---------------|
-| `skills/search-concepts.md` | Claude Code skill: calls MCP, appends to session.json |
-| `skills/hooks/stop.sh` | Stop hook: reads session.json, presents batch rating prompt, clears file |
+| `.claude/skills/search-concepts.md` | Claude Code skill: calls `search_concepts(problem=...)`, appends returned concept IDs to `~/.lore/session.json` |
+| `.claude/skills/capture-concept.md` | Claude Code skill: reflection gate, mandatory generalization step, `LORE_CAPTURE_MODE` gate, calls `submit_concept` with correct parameters |
+| `.claude/hooks/lore-stop.sh` | Stop hook: reads session.json, resolves concept names via selfhosted API, emits batch rating + reflection prompts, clears session file; always exits 0 |
+| `.claude/settings.json` | Registers lore-stop.sh as a Claude Code Stop hook |
+
+### 5.5 Level 2 — Seed Layer
+
+| Component | Responsibility |
+|-----------|---------------|
+| `seed/concepts.py` | Idempotent seed loader: inserts 6 REST CLI concepts + 5 links directly via SQLite/Qdrant (no HTTP); validates the full retrieval path on first run |
 
 ---
 
