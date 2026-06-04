@@ -23,6 +23,7 @@ SQLite data is always inserted.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass
 from typing import Optional
@@ -34,10 +35,10 @@ from lore.selfhosted.db import init_db, insert_concept, insert_link
 # Default paths / collection names — match the rest of the codebase
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DB_PATH = "lore.db"
-_DEFAULT_COLLECTION = "lore_concepts"
-_QDRANT_HOST = "localhost"
-_QDRANT_PORT = 6333
+_DEFAULT_DB_PATH = os.environ.get("LORE_DB_PATH", "lore.db")
+_DEFAULT_COLLECTION = "concepts"
+_QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
+_QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
 
 # ---------------------------------------------------------------------------
 # Seed data

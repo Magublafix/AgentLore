@@ -129,10 +129,11 @@ def search_vectors(
         List of ``concept_id`` strings, ordered by relevance.  The list may
         be shorter than ``limit`` if the collection has fewer vectors.
     """
-    results = client.search(
+    # qdrant-client ≥1.7 replaced .search() with .query_points()
+    response = client.query_points(
         collection_name=collection_name,
-        query_vector=query_vector,
+        query=query_vector,
         limit=limit,
         with_payload=True,
     )
-    return [hit.payload["concept_id"] for hit in results if hit.payload]
+    return [hit.payload["concept_id"] for hit in response.points if hit.payload]

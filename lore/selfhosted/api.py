@@ -247,22 +247,35 @@ def _concept_to_dict(concept: Concept) -> dict:
     }
 
 
-def _link_to_dict(link: Link) -> dict:
+def _link_to_dict(link: Link, conn: Optional[sqlite3.Connection] = None) -> dict:
     """Serialize a :class:`Link` to a plain dict for JSON responses.
+
+    When ``conn`` is provided the linked concept's ``name``, ``type``, and
+    ``when_to_use`` are fetched and included so callers get the full graph
+    in a single API call — no second round-trip needed.
 
     Args:
         link: The link to serialize.
+        conn: Optional SQLite connection for linked-concept enrichment.
 
     Returns:
-        A JSON-serializable dictionary with all link fields.
+        A JSON-serializable dictionary with all link fields plus optional
+        ``name``, ``type``, and ``when_to_use`` from the linked concept.
     """
-    return {
+    d = {
         "link_id": link.link_id,
         "from_id": link.from_id,
         "to_id": link.to_id,
         "rel": link.rel,
         "label": link.label,
     }
+    if conn is not None:
+        linked = get_concept(conn, link.to_id)
+        if linked is not None:
+            d["name"] = linked.name
+            d["type"] = linked.type
+            d["when_to_use"] = linked.when_to_use
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -490,7 +503,7 @@ def _register_routes(app: FastAPI) -> None:
 
         links = get_links_for_concept(conn, concept_id)
         result = _concept_to_dict(concept)
-        result["links"] = [_link_to_dict(lnk) for lnk in links]
+        result["links"] = [_link_to_dict(lnk, conn) for lnk in links]
         return result
 
     @app.post("/v1/concepts/search")
@@ -535,7 +548,7 @@ def _register_routes(app: FastAPI) -> None:
         for concept in concepts:
             links = get_links_for_concept(conn, concept.concept_id)
             entry = _concept_to_dict(concept)
-            entry["links"] = [_link_to_dict(lnk) for lnk in links]
+            entry["links"] = [_link_to_dict(lnk, conn) for lnk in links]
             results.append(entry)
 
             if x_session_id:

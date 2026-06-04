@@ -166,30 +166,36 @@ class TestSearchVectors:
         hit.score = score
         return hit
 
+    def _mock_response(self, hits: list) -> MagicMock:
+        """Wrap hits in a response object with a .points attribute (qdrant-client ≥1.7)."""
+        resp = MagicMock()
+        resp.points = hits
+        return resp
+
     def test_returns_concept_ids_in_order(self) -> None:
         """search_vectors must return concept_ids in the order Qdrant returns them."""
         client = MagicMock()
-        client.search.return_value = [
+        client.query_points.return_value = self._mock_response([
             self._mock_hit("cid-1", 0.95),
             self._mock_hit("cid-2", 0.80),
             self._mock_hit("cid-3", 0.70),
-        ]
+        ])
 
         result = search_vectors(client, "concepts", _fake_vector(), limit=3)
         assert result == ["cid-1", "cid-2", "cid-3"]
 
     def test_passes_limit_to_qdrant(self) -> None:
-        """search_vectors must forward the limit parameter to client.search."""
+        """search_vectors must forward the limit parameter to client.query_points."""
         client = MagicMock()
-        client.search.return_value = []
+        client.query_points.return_value = self._mock_response([])
         search_vectors(client, "concepts", _fake_vector(), limit=10)
-        call_kwargs = client.search.call_args.kwargs
+        call_kwargs = client.query_points.call_args.kwargs
         assert call_kwargs["limit"] == 10
 
     def test_empty_results_returns_empty_list(self) -> None:
         """An empty Qdrant result set must return an empty list."""
         client = MagicMock()
-        client.search.return_value = []
+        client.query_points.return_value = self._mock_response([])
         result = search_vectors(client, "concepts", _fake_vector())
         assert result == []
 
@@ -199,7 +205,7 @@ class TestSearchVectors:
         hit_ok = self._mock_hit("cid-good")
         hit_bad = MagicMock()
         hit_bad.payload = None
-        client.search.return_value = [hit_ok, hit_bad]
+        client.query_points.return_value = self._mock_response([hit_ok, hit_bad])
 
         result = search_vectors(client, "concepts", _fake_vector())
         assert result == ["cid-good"]
@@ -207,7 +213,7 @@ class TestSearchVectors:
     def test_default_limit_is_5(self) -> None:
         """Calling search_vectors without a limit argument must default to 5."""
         client = MagicMock()
-        client.search.return_value = []
+        client.query_points.return_value = self._mock_response([])
         search_vectors(client, "concepts", _fake_vector())
-        call_kwargs = client.search.call_args.kwargs
+        call_kwargs = client.query_points.call_args.kwargs
         assert call_kwargs["limit"] == 5

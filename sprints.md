@@ -22,7 +22,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 1 — 2026-05-29 → 2026-06-12
 **Goal:** Deliver a working selfhosted backend (SQLite + Qdrant + FastAPI + Docker) wired to the MCP server, with agent-facing skills and a Stop hook — full Phase 1.
-**Status:** in-progress
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |

@@ -443,7 +443,7 @@ path to a working system with full semantic search.
 - [x] Claude Code search-concepts skill file
 - [x] capture-concept skill file (confirm/auto mode, structured reflection criteria)
 - [x] Stop hook: batch rating prompt (hours_saved) + session-end reflection prompt
-- [ ] Manual test: agent searches, follows links, rates at session end
+- [x] Manual test: agent searches, follows links, rates at session end
 
 ### Phase 2 — Backend 2: GitHub Gists (community, tag search)
 

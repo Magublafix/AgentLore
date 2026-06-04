@@ -129,6 +129,10 @@ lore/
 | `core/scanner.py` | `scan_content()` — credential, hex/base64, internal URL, and custom blocklist detection; called by `submit_concept` before any write |
 | `selfhosted/Dockerfile` | Single-container image (`docker run -p 8765:8765 lore/selfhosted`) |
 
+#### Link enrichment — `name`, `type`, `when_to_use` in every link object
+
+The `_link_to_dict()` helper fetches the linked concept from SQLite and includes `name`, `type`, and `when_to_use` in every link object. This satisfies the "no second round-trip" constraint: an agent calling `search_concepts` or `get_concept` receives the full linked graph in one call. Links that reference a non-existent concept fall back to ID-only (no error).
+
 #### Known gap — SQLite/Qdrant write ordering in `POST /v1/concepts`
 
 The submit endpoint inserts the concept into SQLite first, then calls
@@ -306,6 +310,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-005 | `hours_saved` as primary rating signal | accepted | — |
 | ADR-006 | SQLite-first write ordering in submit_concept — no rollback on Qdrant failure | accepted | 2026-05-29 |
 | ADR-007 | Content scanner in MCP layer, not FastAPI layer — scan before any network call | accepted | 2026-06-01 |
+| ADR-008 | Link responses enriched with `name`, `type`, `when_to_use` — no second round-trip for graph traversal | accepted | 2026-06-04 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 

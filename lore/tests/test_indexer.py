@@ -56,20 +56,20 @@ def _make_model(vector: list[float] | None = None) -> MagicMock:
 def _make_qdrant_client(hit_concept_ids: list[str] | None = None) -> MagicMock:
     """Return a mock QdrantClient.
 
-    If ``hit_concept_ids`` is provided, ``client.search`` returns fake hits
-    carrying those IDs in their payloads.
+    Uses query_points (qdrant-client ≥1.7) which returns a response object
+    with a .points attribute rather than a bare list.
     """
     client = MagicMock()
-    if hit_concept_ids is not None:
-        def _make_hit(cid: str) -> MagicMock:
-            hit = MagicMock()
-            hit.payload = {"concept_id": cid}
-            hit.score = 0.9
-            return hit
 
-        client.search.return_value = [_make_hit(cid) for cid in hit_concept_ids]
-    else:
-        client.search.return_value = []
+    def _make_hit(cid: str) -> MagicMock:
+        hit = MagicMock()
+        hit.payload = {"concept_id": cid}
+        hit.score = 0.9
+        return hit
+
+    resp = MagicMock()
+    resp.points = [_make_hit(cid) for cid in (hit_concept_ids or [])]
+    client.query_points.return_value = resp
     return client
 
 
@@ -306,4 +306,4 @@ class TestSearchConcepts:
 
         search_concepts(conn, qdrant, model, "some problem")
 
-        qdrant.search.assert_called_once()
+        qdrant.query_points.assert_called_once()
