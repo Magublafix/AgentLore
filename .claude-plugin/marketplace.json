@@ -7,7 +7,7 @@
     {
       "name": "lore",
       "description": "Typed, linked knowledge graph for AI coding agents — search reusable concepts, capture new ones, and rate what helped.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "source": "./",
       "author": {
         "name": "magublafix"
