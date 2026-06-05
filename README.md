@@ -1,0 +1,205 @@
+# Lore
+
+**A typed, linked knowledge graph for AI coding agents.**
+
+Lore lets Claude Code agents search for reusable patterns, capture new ones, and rate what actually helped — so every agent session builds on the work of the last.
+
+---
+
+## What it does
+
+When you invoke `/search-concepts`, the agent queries a local knowledge graph for concepts matching the current problem. It gets back not just the best match but the full linked graph — architecture decisions, test strategies, related tools — in a single call. No second round-trip.
+
+At session end, a Stop hook prompts the agent to rate what it used and capture anything worth preserving for the next session.
+
+---
+
+## Prerequisites
+
+- Docker + Docker Compose
+- Python 3.11+
+- [Claude Code](https://claude.ai/code)
+
+---
+
+## 1. Start the backend
+
+```bash
+git clone https://github.com/your-org/lore
+cd lore
+docker compose up -d
+```
+
+This starts the selfhosted backend (FastAPI + SQLite + Qdrant) on port 8765. The embedding model is baked into the image — no network access required at runtime.
+
+Verify:
+```bash
+curl http://localhost:8765/v1/health
+# {"status":"ok","qdrant":true,"db":true}
+```
+
+---
+
+## 2. Seed the concept graph
+
+```bash
+docker exec agentlore-lore-selfhosted-1 python -m lore.seed.concepts
+# [lore.seed] Done. concepts=6, links=5, indexed=6
+```
+
+This loads the REST CLI blueprint — five linked concepts covering project structure, tool setup, testing strategy, pagination, and auth. It validates the full retrieval path and gives you something to search against immediately.
+
+---
+
+## 3. Register the MCP server in Claude Code
+
+Add the Lore MCP server to your Claude Code configuration:
+
+```bash
+claude mcp add lore \
+  --command "$(pwd)/.venv/bin/python" \
+  --args "-m lore.mcp.server" \
+  --env LORE_BACKEND=selfhosted \
+  --env LORE_SELFHOSTED_URL=http://localhost:8765
+```
+
+Or add it manually to `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "lore": {
+      "command": "/path/to/lore/.venv/bin/python",
+      "args": ["-m", "lore.mcp.server"],
+      "env": {
+        "LORE_BACKEND": "selfhosted",
+        "LORE_SELFHOSTED_URL": "http://localhost:8765"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 4. Install skills and Stop hook
+
+The skills and Stop hook live in `.claude/` and are active whenever Claude Code is open in this project directory.
+
+To use them across **all** your Claude Code projects, copy them to your global Claude config:
+
+```bash
+# Skills
+cp .claude/skills/search-concepts.md ~/.claude/skills/
+cp .claude/skills/capture-concept.md ~/.claude/skills/
+
+# Stop hook — merge with your existing ~/.claude/settings.json if you have one
+cp .claude/settings.json ~/.claude/settings.json
+```
+
+---
+
+## 5. Use it
+
+### Search before you build
+
+In any Claude Code session, invoke:
+
+```
+/search-concepts
+```
+
+Claude will ask what problem you're solving, call the `search_concepts` MCP tool, and return the most relevant concepts with their full linked graph. Concept IDs are appended to `~/.lore/session.json` for end-of-session rating.
+
+### Capture what you discover
+
+When Claude solves something non-obvious — a workaround, a pattern derived from failure, a gotcha — invoke:
+
+```
+/capture-concept
+```
+
+Claude applies a reflection gate (is this generalizable? would it save another agent time?), strips session-specific details, and submits it to the graph. In `confirm` mode (default) it shows you the concept first and waits for approval.
+
+### Rate at session end
+
+The Stop hook fires automatically when the session closes. It reads `~/.lore/session.json`, lists the concepts you used, and asks Claude to rate each one (`outcome` 1–5, `hours_saved`) and reflect on anything worth capturing.
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `LORE_BACKEND` | `selfhosted` | Backend selector. Only `selfhosted` is implemented in Phase 1. |
+| `LORE_SELFHOSTED_URL` | `http://localhost:8765` | Selfhosted backend URL |
+| `LORE_CAPTURE_MODE` | `confirm` | `confirm` — shows concept and waits for approval before submitting. `auto` — submits directly without user confirmation. |
+| `LORE_BLOCK_PATTERNS` | _(empty)_ | Semicolon-separated regex patterns blocked at submit time. Use for team-specific sensitive strings: `LORE_BLOCK_PATTERNS=corp\.internal;secret-project` |
+
+---
+
+## MCP tools
+
+These are available to Claude whenever the Lore MCP server is registered:
+
+| Tool | What it does |
+|---|---|
+| `search_concepts` | Semantic search by problem description. Returns matched concepts with full linked graph. |
+| `get_concept` | Retrieve a specific concept by ID with all links (both directions). |
+| `submit_concept` | Add a new concept. Mandatory content scan runs before write — rejects credentials, internal URLs, and `LORE_BLOCK_PATTERNS`. |
+| `link_concepts` | Add a directed link between two existing concepts. |
+| `rate_concept` | Record outcome (1–5) and hours saved for a concept. Updates rolling averages. |
+
+---
+
+## Project layout
+
+```
+lore/
+├── mcp/server.py          # FastMCP server — MCP tool definitions
+├── core/scanner.py        # Content scanner (called by submit_concept)
+├── selfhosted/            # FastAPI service + SQLite + Qdrant
+│   ├── api.py             # HTTP endpoints (/v1/*)
+│   ├── db.py              # SQLite CRUD
+│   ├── indexer.py         # Embedding + vector upsert
+│   ├── vector_store.py    # Qdrant operations
+│   └── Dockerfile         # Single-container image (~2.9 GB, model baked in)
+├── seed/concepts.py       # REST CLI blueprint — 6 concepts, 5 links
+└── tests/                 # 177 tests, 98% coverage
+.claude/
+├── skills/search-concepts.md   # /search-concepts skill
+├── skills/capture-concept.md   # /capture-concept skill
+├── hooks/lore-stop.sh          # Stop hook
+└── settings.json               # Hook registration
+docker-compose.yml              # lore-selfhosted + qdrant
+```
+
+---
+
+## Ports
+
+| Service | Port |
+|---|---|
+| Lore selfhosted API | 8765 |
+| Qdrant HTTP | 6333 |
+| Qdrant gRPC | 6334 |
+
+---
+
+## Verify everything works
+
+```bash
+# Search
+curl -s -X POST http://localhost:8765/v1/concepts/search \
+  -H "Content-Type: application/json" \
+  -d '{"problem": "building a typed CLI client for a REST API", "limit": 3}' \
+  | python3 -m json.tool | grep '"name"'
+```
+
+You should see the REST CLI blueprint concepts with their linked graph.
+
+---
+
+## Full spec
+
+See [`PROJECT.md`](PROJECT.md) for the full product specification, development phases, and MCP tool schemas.
