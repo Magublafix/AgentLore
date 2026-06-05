@@ -1,0 +1,17 @@
+{
+  "description": "Lore — session-end rating and reflection hook",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '${CLAUDE_PLUGIN_ROOT}/hooks/lore-stop.sh'",
+            "async": false
+          }
+        ]
+      }
+    ]
+  }
+}

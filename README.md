@@ -81,20 +81,19 @@ Or add it manually to `~/.claude/claude_desktop_config.json`:
 
 ---
 
-## 4. Install skills and Stop hook
+## 4. Install the Lore plugin
 
-The skills and Stop hook live in `.claude/` and are active whenever Claude Code is open in this project directory.
-
-To use them across **all** your Claude Code projects, copy them to your global Claude config:
+Lore is a Claude Code plugin. Installing it makes `/search-concepts`, `/capture-concept`, and the Stop hook available across **all** your Claude Code projects.
 
 ```bash
-# Skills
-cp .claude/skills/search-concepts.md ~/.claude/skills/
-cp .claude/skills/capture-concept.md ~/.claude/skills/
+# Add the Lore repo as a marketplace
+claude plugins marketplace add /path/to/cloned/lore
 
-# Stop hook — merge with your existing ~/.claude/settings.json if you have one
-cp .claude/settings.json ~/.claude/settings.json
+# Install the plugin
+claude plugins install lore
 ```
+
+Restart Claude Code to activate.
 
 ---
 
