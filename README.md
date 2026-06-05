@@ -57,10 +57,9 @@ Add the Lore MCP server to your Claude Code configuration:
 
 ```bash
 claude mcp add lore \
-  --command "$(pwd)/.venv/bin/python" \
-  --args "-m lore.mcp.server" \
-  --env LORE_BACKEND=selfhosted \
-  --env LORE_SELFHOSTED_URL=http://localhost:8765
+  -e LORE_BACKEND=selfhosted \
+  -e LORE_SELFHOSTED_URL=http://localhost:8765 \
+  -- "$(pwd)/.venv/bin/python" -m lore.mcp.server
 ```
 
 Or add it manually to `~/.claude/claude_desktop_config.json`:
