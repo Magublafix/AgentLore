@@ -59,6 +59,7 @@ Add the Lore MCP server to your Claude Code configuration:
 claude mcp add lore \
   -e LORE_BACKEND=selfhosted \
   -e LORE_SELFHOSTED_URL=http://localhost:8765 \
+  -e PYTHONPATH="$(pwd)" \
   -- "$(pwd)/.venv/bin/python" -m lore.mcp.server
 ```
 
@@ -72,12 +73,15 @@ Or add it manually to `~/.claude/claude_desktop_config.json`:
       "args": ["-m", "lore.mcp.server"],
       "env": {
         "LORE_BACKEND": "selfhosted",
-        "LORE_SELFHOSTED_URL": "http://localhost:8765"
+        "LORE_SELFHOSTED_URL": "http://localhost:8765",
+        "PYTHONPATH": "/path/to/lore"
       }
     }
   }
 }
 ```
+
+> **Note:** `PYTHONPATH` is required because another package named `lore` exists on PyPI (Instacart's data science framework). Without it, Claude Code spawns the MCP subprocess from a different working directory and imports the wrong package.
 
 ---
 
@@ -122,6 +126,18 @@ Claude applies a reflection gate (is this generalizable? would it save another a
 ### Rate at session end
 
 The Stop hook fires automatically when the session closes. It reads `~/.lore/session.json`, lists the concepts you used, and asks Claude to rate each one (`outcome` 1–5, `hours_saved`) and reflect on anything worth capturing.
+
+**Prerequisite for automatic rating:** Claude Code must be allowed to call `mcp__lore__rate_concept` without prompting, otherwise the Stop hook output is injected but the tool call blocks waiting for approval. Add this to your project or global `settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": ["mcp__lore__rate_concept"]
+  }
+}
+```
+
+If you prefer not to grant this permission, skip the allowlist entry and invoke `/capture-concept` manually at the end of each session instead — similar to how `/wrapup` works in brain-tools.
 
 ---
 

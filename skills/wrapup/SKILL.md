@@ -1,0 +1,102 @@
+---
+description: End-of-session wrapup for Lore — rate tracked concepts, capture new insights, and clear the session file. Use in persistent remote sessions where the Stop hook does not fire automatically.
+---
+
+# wrapup
+
+Manually close out a Lore tracking session: resolve and rate every concept used, capture any new insights, then clear the session file.
+
+## When to invoke
+
+Invoke at the end of a work session when running `claude --remote` or any other persistent session where the Stop hook (`lore-stop.sh`) does not fire automatically. This skill is the manual equivalent of that hook.
+
+Do not invoke mid-session — it clears the session file as its final step.
+
+## Steps
+
+### 1. Read the session file
+
+Read `~/.lore/session.json`.
+
+- If the file does not exist, tell the user: "No concepts tracked this session." and stop.
+- If the file exists but contains an empty array (`[]`), tell the user: "No concepts tracked this session." and stop.
+- If the file is not valid JSON, treat it as empty: tell the user "Session file was corrupted — nothing to rate." and stop.
+
+### 2. Resolve concept names
+
+For each concept ID in the session array, call:
+
+```
+get_concept(concept_id="<uuid>")
+```
+
+This returns a record with fields: `concept_id`, `name`, `type`, `content`, `avg_rating`, `usage_count`.
+
+Collect the name and type for each concept so you can present a readable list to the user.
+
+If the MCP backend is unreachable or returns an error for a given ID, fall back to displaying the raw concept ID for that entry. Do not abort the wrapup — continue with whatever names resolved successfully.
+
+### 3. Present the concept list
+
+Display the full list of concepts used this session, one per line, in this format:
+
+```
+1. <name> (<type>) — ID: <concept_id>
+2. <name> (<type>) — ID: <concept_id>
+...
+```
+
+For any concept whose name could not be resolved, show:
+
+```
+N. <concept_id> (unresolved)
+```
+
+### 4. Rate each concept (agent-autonomous)
+
+Do not prompt the user for ratings. You assess and submit each rating yourself based on your recollection of the session.
+
+For each concept, reflect:
+- Did this concept directly inform a decision or save a lookup? → `outcome` 4–5
+- Did it appear in search results but wasn't directly applied? → `outcome` 2–3
+- Was it irrelevant or misleading? → `outcome` 1
+- If you genuinely cannot recall using the concept, default to `outcome` 3
+
+Estimate `hours_saved` honestly — omit if zero or uncertain.
+
+Then call:
+
+```
+rate_concept(
+  concept_id="<id>",
+  outcome=<1-5>,
+  hours_saved=<float>   ← omit if zero or uncertain
+)
+```
+
+If `rate_concept` fails for a given concept (backend unreachable), note the failure silently and continue. Do not abort the loop.
+
+### 5. Reflection gate (agent-autonomous)
+
+Do not ask the user. Reflect on the session yourself and apply the capture criteria:
+
+- Non-obvious workaround or gotcha
+- Pattern derived from multiple failed attempts
+- Domain-specific rule not in standard docs
+- Technique with measurable time value
+
+If any moment in this session meets at least one criterion, invoke `/lore:capture-concept` for it. Let that skill handle generalization and submission. If nothing qualifies, move on silently.
+
+### 6. Clear the session file
+
+Write `[]` back to `~/.lore/session.json`, overwriting whatever was there.
+
+Only do this after all `rate_concept` calls have been attempted (success or failure). Do not clear the file early.
+
+### 7. Confirm completion
+
+Tell the user:
+
+> "Session wrapped up. Rated N concept(s)."
+
+Where N is the count of concepts for which `rate_concept` was called (regardless of whether individual calls succeeded).

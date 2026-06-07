@@ -1,3 +1,7 @@
+---
+description: Search the Lore knowledge graph for concepts relevant to the current task. Use before implementing a solution when you encounter a problem domain, technique, pattern, API, or error type that could have prior knowledge stored.
+---
+
 # search-concepts
 
 Search the Lore knowledge graph for concepts relevant to the current task and track them in the session file.

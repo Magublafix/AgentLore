@@ -1,3 +1,7 @@
+---
+description: Capture a non-obvious insight, workaround, or pattern as a reusable concept in the Lore knowledge graph. Use after solving a non-trivial problem, discovering a gotcha, or deriving a pattern from multiple attempts.
+---
+
 # capture-concept
 
 Reflect on a recently learned insight and optionally submit it to the Lore knowledge graph.
