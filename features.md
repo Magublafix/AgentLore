@@ -143,3 +143,45 @@ Feature format:
 **What changed:** `lore/seed/concepts.py` inserts 6 REST CLI concepts (project, tool, architecture, testing, 2×pattern) and 5 directed links from the anchor concept, directly via SQLite and Qdrant — no HTTP, no running server required. 17 seed tests, 177 total, 98.32% coverage.
 
 **Implementation notes:** Idempotency is checked against the anchor concept name before any write — second call returns `SeedResult(skipped=True)` immediately with zero writes. Qdrant indexing is best-effort; SQLite inserts always complete even if Qdrant is unavailable. `_CONCEPT_DEFS` and `_LINK_DEFS` are exported for test assertions. `seed()` accepts injected `conn`, `qdrant_client`, and `embedding_model` for testing without infrastructure.
+
+---
+
+## [LORE-015] Define radev CLI scope and test suite
+
+**Sprint:** 2   **Shipped:** 2026-06-11   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** reference a fixed CLI specification and a runnable test suite before each benchmark run
+**So that** both runs target an identical definition of done and results are directly comparable
+
+**What changed:** `samples/radev/tests/test_radev_cli.py` defines 9 tests (list×2, create×2, get×2, update×1, delete×2) that invoke `radev` via subprocess. `samples/radev/tests/conftest.py` spins a local mock server mirroring restful-api.dev so tests run without external deps or rate limits. `samples/radev/benchmarks/run.py` is the repeatable Anthropic SDK agentic runner.
+
+**Implementation notes:** `RADEV_BASE_URL` env var routes the CLI to any server; conftest reuses it if already set (benchmark runner pre-sets it). Mock server uses stdlib only — no external packages. `capture-concept` and `wrapup` SKILL.md updated: agents now enumerate 3–6 concrete implementation areas before applying capture criteria, replacing a broad sweep that consistently under-captured insights.
+
+---
+
+## [LORE-016] Run 1 — Implement radev CLI without Lore
+
+**Sprint:** 2   **Shipped:** 2026-06-11   **Phase:** Benchmark   **Tokens:** 163,279
+
+**As a** Lore developer
+**I want to be able to** implement the radev CLI in a fresh Claude Code session without Lore skills active
+**So that** we establish a baseline token count and prompt count, and populate the concept graph via `lore:wrapup` at session end
+
+**What changed:** `samples/radev/results/run1.md` records the baseline: 21 turns, 163,279 total tokens, 160.9s elapsed, 9/9 tests passed. Agent captured concepts post-submit in the same loop using the `capture-concept` skill.
+
+**Implementation notes:** Run 1 has no `search_concepts` tool available — pure cold-start build. Concepts are submitted directly to `~/.lore/lore.db` via SQLite INSERT (no running server required at benchmark time). Loop exits on `end_turn` stop reason, not on `submit` return value, so the agent can continue to concept capture after submitting passing tests.
+
+---
+
+## [LORE-017] Run 2 — Implement radev CLI with Lore concepts
+
+**Sprint:** 2   **Shipped:** 2026-06-12   **Phase:** Benchmark   **Tokens:** 150,867
+
+**As a** Lore developer
+**I want to be able to** implement the same radev CLI in a fresh Claude Code session with Lore concepts from Run 1 available
+**So that** we can measure how much Lore reduces tokens and prompts compared to the baseline
+
+**What changed:** `samples/radev/results/run2.md` and `samples/radev/results/comparison.md` record the Lore-assisted result: 17 turns (-19%), 150,867 total tokens (-7.6%), 143.7s elapsed (-10.7%), 9/9 tests passed. 8 concepts were available from Run 1.
+
+**Implementation notes:** `search_concepts` does a keyword search against `~/.lore/lore.db` and returns matching concepts injected into the system prompt at session start. Savings are conservative — the concept graph was populated in the same benchmark session; a mature graph with accumulated domain knowledge would be expected to show larger reductions.

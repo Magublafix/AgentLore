@@ -111,7 +111,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 **DoD:**
 - [x] AC above met — tokens recorded (163,279)
-- [ ] `samples/radev/results/run1.md` committed
+- [x] `samples/radev/results/run1.md` committed
 
 ---
 
@@ -137,4 +137,4 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 **DoD:**
 - [x] AC above met — tokens recorded (150,867)
-- [ ] `samples/radev/results/run2.md` and `samples/radev/results/comparison.md` committed
+- [x] `samples/radev/results/run2.md` and `samples/radev/results/comparison.md` committed
