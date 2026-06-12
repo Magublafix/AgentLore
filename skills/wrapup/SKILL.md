@@ -78,14 +78,22 @@ If `rate_concept` fails for a given concept (backend unreachable), note the fail
 
 ### 5. Reflection gate (agent-autonomous)
 
-Do not ask the user. Reflect on the session yourself and apply the capture criteria:
+Do not ask the user. Work through these steps:
 
+**5a. Enumerate what was built or solved.**
+List 3–6 concrete implementation areas from this session — specific decisions, errors encountered, APIs used, patterns applied. Do this before evaluating anything. A blank-slate "was anything non-obvious?" check will miss too much.
+
+Examples of areas to enumerate: dependency wiring, error handling approach, data model decisions, API integration, test setup, packaging, configuration management, a specific error that required iteration.
+
+**5b. Evaluate each area against the capture criteria.**
+For each area from 5a, ask: does it meet at least one of these?
 - Non-obvious workaround or gotcha
 - Pattern derived from multiple failed attempts
 - Domain-specific rule not in standard docs
 - Technique with measurable time value
 
-If any moment in this session meets at least one criterion, invoke `/lore:capture-concept` for it. Let that skill handle generalization and submission. If nothing qualifies, move on silently.
+**5c. Capture qualifying areas.**
+For each area that qualifies, invoke `/lore:capture-concept`. Let that skill handle generalization and submission. If nothing qualifies, move on silently.
 
 ### 6. Clear the session file
 

@@ -16,7 +16,11 @@ Do not invoke for obvious, well-documented facts. The test: would a competent en
 
 ### 1. Apply reflection criteria
 
-Ask: does this insight meet at least one of these?
+If you were given a specific insight to evaluate, apply the criteria directly to it and proceed.
+
+If invoked without a specific insight (e.g. at session end), first enumerate 3–6 concrete implementation areas from recent work before evaluating anything. A broad "was anything non-obvious?" check will miss too much. List the areas, then evaluate each one.
+
+For each candidate, ask: does it meet at least one of these?
 - Non-obvious workaround or gotcha
 - Pattern derived from multiple failed attempts
 - Domain-specific rule not in standard docs
