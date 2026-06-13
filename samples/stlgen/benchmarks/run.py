@@ -1,0 +1,1063 @@
+#!/usr/bin/env python3
+"""
+Lore effectiveness benchmark — text2stl CLI (4-run progressive design).
+
+Same hard task, same 20-turn budget, run four times.  What changes each time
+is what Lore contains and whether concepts have been rated.
+
+  Run 1 — no Lore search available; captures concepts as it works.
+           Forced 15-turn capture phase after main loop (win or lose).
+  Run 2 — Lore search active; uses unrated concepts from Run 1.
+           Captures new patterns it finds.
+  Run 3 — Lore search active; concepts from Runs 1+2, rated by wrapup
+           phase that ran automatically after Run 2.
+  Run 4 — Lore search active; all prior concepts, more rated.
+
+Progression tests:
+  - Does Lore help at all?            (Run 1 baseline → Run 2)
+  - Does more accumulated knowledge help? (Run 2 → Run 3)
+  - Does concept rating improve relevance? (Run 3 → Run 4)
+
+The task is deliberately hard (no approach hint) so early runs may fail
+while later runs may succeed — that qualitative jump is the clearest signal.
+
+Usage:
+  python benchmarks/run.py --run 1        # baseline
+  python benchmarks/run.py --run 2        # after Run 1 + wrapup
+  python benchmarks/run.py --run 3        # after Run 2 + wrapup
+  python benchmarks/run.py --run 4        # after Run 3 + wrapup
+  python benchmarks/run.py --dry-run --run 1
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+import anthropic
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+MODEL = "claude-sonnet-4-6"
+MAX_TURNS = 20          # same budget for every run
+MAX_TURNS_CAPTURE = 15  # forced post-loop capture phase
+MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
+
+# Provider — set LORE_LLM_PROVIDER=local to use Ollama / any OpenAI-compatible server.
+# See samples/stlgen/README.md §"Running with a local LLM" for setup instructions.
+PROVIDER       = os.environ.get("LORE_LLM_PROVIDER", "anthropic")   # "anthropic" | "local"
+LOCAL_BASE_URL = os.environ.get("LORE_LOCAL_BASE_URL", "http://localhost:11434/v1")
+LOCAL_MODEL    = os.environ.get("LORE_LOCAL_MODEL", "qwen2.5-coder:7b")
+LOCAL_MAX_TOKENS = 4096  # conservative ceiling for 7B models
+
+LORE_DB_PATH = Path(os.environ.get("LORE_DB_PATH", "~/.lore/lore.db")).expanduser()
+SESSION_FILE = Path(os.environ.get("LORE_SESSION_FILE", "~/.lore/session.json")).expanduser()
+
+REPO_ROOT = Path(__file__).parents[3]
+SKILLS_DIR = REPO_ROOT / "skills"
+SAMPLES_DIR = Path(__file__).parent.parent
+RESULTS_DIR = SAMPLES_DIR / "results"
+TEST_FILE = SAMPLES_DIR / "tests" / "test_text2stl_cli.py"
+CONFTEST_FILE = SAMPLES_DIR / "tests" / "conftest.py"
+
+# ---------------------------------------------------------------------------
+# Skill loader
+# ---------------------------------------------------------------------------
+
+def _load_skill(name: str) -> str:
+    path = SKILLS_DIR / name / "SKILL.md"
+    if not path.exists():
+        return f"[skill {name} not found at {path}]"
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---"):
+        end = text.index("---", 3)
+        text = text[end + 3:].lstrip()
+    return text
+
+# ---------------------------------------------------------------------------
+# Task prompt (same for all 4 runs — only Lore availability changes)
+# ---------------------------------------------------------------------------
+
+_TASK = """\
+Build a Linux CLI tool called `text2stl` that converts a text string into a
+3D-printable STL file with readable, correctly formed characters.
+
+Usage:
+  text2stl "Hello" -o output.stl   — write STL to output.stl
+  text2stl "Hello"                  — write to "Hello.stl" in cwd
+
+Requirements:
+- Accept exactly one positional argument: a string of 1–15 printable ASCII characters.
+- Exit code 1 (with error to stderr) if the string is empty or exceeds 15 characters.
+- Generate a valid, 3D-printable STL:
+    • Raised letter geometry — characters must be recognizable when printed.
+    • Mesh must be water-tight (manifold) — no open edges, no self-intersections.
+    • All face normals must point outward (positive volume).
+- Installable via `pip install -e .`
+- Entry point registered as `text2stl` in pyproject.toml.
+
+A test file is at tests/test_text2stl_cli.py.
+Note: the tests import `trimesh`, `numpy`, and `PIL`. Include them as
+dependencies in pyproject.toml so `pip install -e .` installs them.
+
+Run with: pip install -e . && pytest tests/ -v
+"""
+
+_CAPTURE_SUFFIX = """
+IMPORTANT — capture DOMAIN concepts as you work:
+Whenever you discover something useful about 3D text generation, font libraries,
+STL mesh construction, geometry pipelines, or Python packaging — call
+`submit_concept` immediately. Examples of things worth capturing:
+  - Which library (or combination) works for generating 3D text geometry
+  - How to convert font glyph outlines to extrudable 2D polygons
+  - How to build a watertight manifold STL mesh from character shapes
+  - Approaches that failed and why (use `dont_use_when`)
+  - Non-obvious pip/packaging steps for CLI entry points
+
+Do NOT capture concepts about the Lore system itself (session files,
+capture-concept mechanics, rate_concept, etc.).
+
+When all 13 tests pass, call `submit`.
+"""
+
+_SEARCH_SUFFIX = """
+Before writing any code, use the `search_concepts` skill to search Lore for
+patterns relevant to 3D text generation, STL mesh construction, font libraries,
+and Python CLI packaging.
+
+IMPORTANT — capture new DOMAIN concepts as you work:
+Call `submit_concept` for any domain insight not already in Lore — about
+geometry, fonts, STL format, mesh validity, or packaging.
+Do NOT capture concepts about the Lore system itself.
+
+When all 13 tests pass, call `submit`.
+"""
+
+TASK_PROMPT_NO_LORE  = _TASK + _CAPTURE_SUFFIX
+TASK_PROMPT_WITH_LORE = _TASK + _SEARCH_SUFFIX
+
+# Forced capture prompt — injected into the same conversation after the main loop
+FORCED_CAPTURE_PROMPT = """\
+The main coding phase is now complete (turn limit reached or task submitted).
+You have full context of what you just attempted above.
+
+Now extract domain knowledge from this session.
+Call `submit_concept` for every insight that would help a future agent with this task:
+  - Which Python libraries work (or don't) for 3D text geometry
+  - How to extract font glyph outlines and turn them into extrudable 2D polygons
+  - How to build a watertight (manifold) STL from character shapes
+  - Approaches that failed and why — capture these with `dont_use_when`
+  - Specific errors and what caused them
+  - Non-obvious pip / pyproject.toml steps for CLI entry points
+
+Focus only on domain knowledge (3D geometry, STL format, fonts, Python packaging).
+Do NOT submit concepts about the Lore system itself.
+
+Call `submit` when you have nothing more to add.
+"""
+
+# ---------------------------------------------------------------------------
+# Tool definitions (identical signatures to lore/mcp/server.py)
+# ---------------------------------------------------------------------------
+
+TOOL_BASH = {
+    "name": "bash",
+    "description": "Run a shell command in the project working directory.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"command": {"type": "string"}},
+        "required": ["command"],
+    },
+}
+
+TOOL_WRITE_FILE = {
+    "name": "write_file",
+    "description": "Write text content to a file (relative to project root). Creates parent directories.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "content": {"type": "string"},
+        },
+        "required": ["path", "content"],
+    },
+}
+
+TOOL_READ_FILE = {
+    "name": "read_file",
+    "description": "Read a file's text content.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+    },
+}
+
+TOOL_SUBMIT = {
+    "name": "submit",
+    "description": "Signal that the task (or capture phase) is complete.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"summary": {"type": "string"}},
+        "required": ["summary"],
+    },
+}
+
+TOOL_SEARCH_CONCEPTS = {
+    "name": "search_concepts",
+    "description": (
+        "Search the Lore knowledge graph for concepts matching a problem description. "
+        "Returns ranked results, each including the full concept record plus its "
+        "directly linked concepts — no second call needed."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "problem": {"type": "string"},
+            "type": {"type": "string"},
+            "language": {"type": "string"},
+            "limit": {"type": "integer", "default": 5},
+        },
+        "required": ["problem"],
+    },
+}
+
+TOOL_SUBMIT_CONCEPT = {
+    "name": "submit_concept",
+    "description": (
+        "Submit a new concept to the Lore knowledge graph. "
+        "Content is scanned for credentials and internal URLs before any write."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "type": {"type": "string", "enum": ["project", "pattern", "tool", "testing", "architecture"]},
+            "content": {"type": "string"},
+            "when_to_use": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "language": {"type": "string"},
+            "dont_use_when": {"type": "string"},
+        },
+        "required": ["name", "type", "content", "when_to_use", "tags"],
+    },
+}
+
+TOOL_RATE_CONCEPT = {
+    "name": "rate_concept",
+    "description": "Rate a concept based on how useful it was in this session.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "concept_id": {"type": "string"},
+            "outcome": {"type": "integer", "description": "1-5: 5=extremely helpful, 1=not helpful"},
+            "hours_saved": {"type": "number", "description": "Estimated hours saved (omit if zero or uncertain)"},
+            "notes": {"type": "string", "description": "Optional free-text notes"},
+        },
+        "required": ["concept_id", "outcome"],
+    },
+}
+
+TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT]
+TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT]
+TOOLS_CAPTURE   = [TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT]
+TOOLS_WRAPUP    = [TOOL_RATE_CONCEPT, TOOL_SUBMIT]
+
+# ---------------------------------------------------------------------------
+# System prompt builders
+# ---------------------------------------------------------------------------
+
+def build_system_no_lore() -> str:
+    capture_skill = _load_skill("capture-concept")
+    return (
+        "You are an expert Python developer. Implement the CLI exactly as specified. "
+        "Use the provided tools to write files and run shell commands. "
+        "Capture useful concepts with submit_concept as soon as you discover them.\n\n"
+        "---\n"
+        f"# Lore Skill: capture-concept\n\n{capture_skill}\n"
+        "---\n\n"
+        "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts."
+    )
+
+
+def build_system_with_lore() -> str:
+    search_skill  = _load_skill("search-concepts")
+    capture_skill = _load_skill("capture-concept")
+    return (
+        "You are an expert Python developer. Implement the CLI exactly as specified. "
+        "Use the provided tools to write files and run shell commands. "
+        "Search Lore before writing any code. Capture new patterns as you find them.\n\n"
+        "---\n"
+        f"# Lore Skill: search-concepts\n\n{search_skill}\n\n"
+        f"# Lore Skill: capture-concept\n\n{capture_skill}\n"
+        "---\n\n"
+        "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts."
+    )
+
+
+def build_system_capture() -> str:
+    capture_skill = _load_skill("capture-concept")
+    return (
+        "You are a senior developer reflecting on a just-completed coding attempt. "
+        "Extract and record everything you learned from the session.\n\n"
+        "---\n"
+        f"# Lore Skill: capture-concept\n\n{capture_skill}\n"
+        "---\n\n"
+        "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts."
+    )
+
+# ---------------------------------------------------------------------------
+# Lore DB helpers
+# ---------------------------------------------------------------------------
+
+def _ensure_db() -> None:
+    if LORE_DB_PATH.exists():
+        return
+    LORE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    schema_path = REPO_ROOT / "lore" / "selfhosted" / "schema.sql"
+    conn = sqlite3.connect(str(LORE_DB_PATH))
+    if schema_path.exists():
+        conn.executescript(schema_path.read_text())
+    else:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS concepts (
+                concept_id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
+                content TEXT NOT NULL, language TEXT, when_to_use TEXT,
+                dont_use_when TEXT, tags TEXT, source_url TEXT, author TEXT,
+                avg_rating REAL DEFAULT 0, usage_count INTEGER DEFAULT 0,
+                time_saved_avg_hours REAL, created_at TEXT, embedding BLOB
+            );
+        """)
+    conn.commit()
+    conn.close()
+
+
+def handle_search_concepts(inputs: dict) -> str:
+    _ensure_db()
+    problem = inputs["problem"]
+    limit = inputs.get("limit", 5)
+    type_filter = inputs.get("type")
+    language_filter = inputs.get("language")
+
+    terms = problem.split()[:8]
+    clauses = " OR ".join(["name LIKE ? OR content LIKE ? OR tags LIKE ?"] * len(terms))
+    params: list = []
+    for t in terms:
+        like = f"%{t}%"
+        params.extend([like, like, like])
+
+    extra = ""
+    if type_filter:
+        extra += " AND type = ?"
+        params.append(type_filter)
+    if language_filter:
+        extra += " AND (language = ? OR language IS NULL)"
+        params.append(language_filter)
+    params.append(limit)
+
+    try:
+        conn = sqlite3.connect(str(LORE_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            f"SELECT * FROM concepts WHERE ({clauses}){extra} "
+            f"ORDER BY avg_rating DESC, usage_count DESC LIMIT ?",
+            params,
+        ).fetchall()
+        conn.close()
+    except sqlite3.Error as exc:
+        return json.dumps({"error": str(exc), "results": []})
+
+    results = [
+        {
+            "concept_id": r["concept_id"],
+            "name": r["name"],
+            "type": r["type"],
+            "content": r["content"],
+            "when_to_use": r["when_to_use"] or "",
+            "dont_use_when": r["dont_use_when"] or "",
+            "avg_rating": r["avg_rating"] or 0.0,
+            "usage_count": r["usage_count"] or 0,
+            "links": [],
+        }
+        for r in rows
+    ]
+    _update_session(r["concept_id"] for r in rows)
+    return json.dumps({"results": results})
+
+
+def handle_submit_concept(inputs: dict) -> str:
+    _ensure_db()
+    concept_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        conn = sqlite3.connect(str(LORE_DB_PATH))
+        conn.execute(
+            """
+            INSERT INTO concepts (
+                concept_id, name, type, content, language,
+                when_to_use, dont_use_when, tags,
+                source_url, author, avg_rating, usage_count,
+                time_saved_avg_hours, created_at, embedding
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                concept_id,
+                inputs["name"], inputs["type"], inputs["content"],
+                inputs.get("language"), inputs.get("when_to_use", ""),
+                inputs.get("dont_use_when", ""),
+                json.dumps(inputs.get("tags", [])),
+                inputs.get("source_url"), "benchmark",
+                0.0, 0, None, now, None,
+            ),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as exc:
+        return json.dumps({"error": str(exc)})
+    _update_session([concept_id])
+    return json.dumps({"concept_id": concept_id, "name": inputs["name"]})
+
+
+def handle_rate_concept(inputs: dict) -> str:
+    """Insert a rating and recompute avg_rating on the concept — mirrors db.insert_rating."""
+    _ensure_db()
+    concept_id = inputs["concept_id"]
+    outcome = int(inputs["outcome"])
+    if not 1 <= outcome <= 5:
+        return json.dumps({"error": "outcome must be 1-5"})
+    hours_saved = inputs.get("hours_saved")
+    notes = inputs.get("notes")
+    now = datetime.now(timezone.utc).isoformat()
+    rating_id = str(uuid.uuid4())
+    session_id = f"benchmark-run"
+
+    try:
+        conn = sqlite3.connect(str(LORE_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        # Verify concept exists
+        if not conn.execute("SELECT 1 FROM concepts WHERE concept_id=?", (concept_id,)).fetchone():
+            conn.close()
+            return json.dumps({"error": f"concept {concept_id} not found"})
+        conn.execute(
+            "INSERT INTO ratings (rating_id,concept_id,session_id,outcome,hours_saved,notes,rated_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (rating_id, concept_id, session_id, outcome, hours_saved, notes, now),
+        )
+        # Recompute aggregates
+        agg = conn.execute(
+            "SELECT AVG(CAST(outcome AS REAL)) AS avg_o, AVG(hours_saved) AS avg_h "
+            "FROM ratings WHERE concept_id=?",
+            (concept_id,),
+        ).fetchone()
+        usage_row = conn.execute(
+            "SELECT usage_count FROM concepts WHERE concept_id=?", (concept_id,)
+        ).fetchone()
+        usage_count = usage_row["usage_count"] if usage_row else 0
+        conn.execute(
+            "UPDATE concepts SET avg_rating=?, usage_count=?, time_saved_avg_hours=? WHERE concept_id=?",
+            (agg["avg_o"] or 0.0, usage_count, agg["avg_h"], concept_id),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps({"rated": concept_id, "outcome": outcome, "avg_rating": agg["avg_o"] or 0.0})
+
+
+def _update_session(concept_ids) -> None:
+    try:
+        SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        existing = json.loads(SESSION_FILE.read_text()) if SESSION_FILE.exists() else []
+        if not isinstance(existing, list):
+            existing = []
+        new_ids = [cid for cid in concept_ids if cid not in existing]
+        SESSION_FILE.write_text(json.dumps(existing + new_ids))
+    except Exception:
+        pass
+
+# ---------------------------------------------------------------------------
+# Tool dispatcher
+# ---------------------------------------------------------------------------
+
+def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
+    if name == "bash" and workdir:
+        try:
+            result = subprocess.run(
+                inputs["command"], shell=True, cwd=workdir,
+                capture_output=True, text=True, timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            return "[error: timed out after 120s]"
+        out = result.stdout
+        if result.stderr:
+            out += f"\n[stderr]\n{result.stderr}"
+        if result.returncode != 0:
+            out += f"\n[exit {result.returncode}]"
+        return out.strip() or "(no output)"
+
+    if name == "write_file" and workdir:
+        path = workdir / inputs["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(inputs["content"], encoding="utf-8")
+        return f"Written {inputs['path']} ({len(inputs['content'])} chars)"
+
+    if name == "read_file" and workdir:
+        path = workdir / inputs["path"]
+        return path.read_text(encoding="utf-8") if path.exists() else f"[not found: {inputs['path']}]"
+
+    if name == "submit":
+        return "Phase complete."
+
+    if name == "search_concepts":
+        return handle_search_concepts(inputs)
+
+    if name == "submit_concept":
+        return handle_submit_concept(inputs)
+
+    if name == "rate_concept":
+        return handle_rate_concept(inputs)
+
+    return f"[error: unknown tool {name!r}]"
+
+# ---------------------------------------------------------------------------
+# Agent loops
+# ---------------------------------------------------------------------------
+
+def _tools_to_openai(tools: list[dict]) -> list[dict]:
+    """Convert Anthropic tool schema format to OpenAI function-calling format."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in tools
+    ]
+
+
+def _run_agent_openai(
+    system: str,
+    tools: list[dict],
+    messages: list[dict],
+    workdir: Path | None,
+    max_turns: int,
+    verbose: bool,
+    label: str = "",
+) -> tuple[int, int, int, bool, list[dict]]:
+    """OpenAI-compatible agent loop (Ollama / vLLM / llama.cpp).
+
+    `messages` is the existing conversation — pass [system_msg, first_user_msg]
+    for a fresh loop, or an extended list to continue a prior session.
+    Returns (input_tokens, output_tokens, turns_used, submitted, messages).
+    """
+    import openai as _openai
+    client = _openai.OpenAI(base_url=LOCAL_BASE_URL, api_key="ollama")
+    oai_tools = _tools_to_openai(tools)
+    total_in = total_out = turns = 0
+    submitted = False
+
+    while turns < max_turns:
+        response = client.chat.completions.create(
+            model=LOCAL_MODEL,
+            max_tokens=LOCAL_MAX_TOKENS,
+            tools=oai_tools,
+            messages=messages,
+        )
+        usage = response.usage
+        total_in  += usage.prompt_tokens     if usage else 0
+        total_out += usage.completion_tokens if usage else 0
+        turns += 1
+
+        choice = response.choices[0]
+        if verbose:
+            print(f"  {label}turn {turns:02d}/{max_turns} | finish={choice.finish_reason} "
+                  f"| in={usage.prompt_tokens if usage else '?'} "
+                  f"out={usage.completion_tokens if usage else '?'}")
+
+        msg = choice.message
+        # Store assistant turn as plain dict (openai objects aren't JSON-serialisable)
+        assistant_entry: dict = {"role": "assistant", "content": msg.content or ""}
+        if msg.tool_calls:
+            assistant_entry["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ]
+        messages.append(assistant_entry)
+
+        if choice.finish_reason == "stop" or not msg.tool_calls:
+            break
+
+        tool_results = []
+        for tc in msg.tool_calls:
+            name   = tc.function.name
+            inputs = json.loads(tc.function.arguments)
+            if verbose:
+                print(f"    → {name}({json.dumps(inputs)[:100]})")
+            result = handle_tool(name, inputs, workdir)
+            if name == "submit":
+                submitted = True
+            if verbose:
+                print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
+            tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+
+        messages.extend(tool_results)
+
+    return total_in, total_out, turns, submitted, messages
+
+
+def run_agent(
+    system: str,
+    tools: list[dict],
+    first_message: str,
+    workdir: Path | None,
+    max_turns: int,
+    verbose: bool,
+) -> tuple[int, int, int, bool, list[dict]]:
+    """Returns (input_tokens, output_tokens, turns_used, submitted, messages).
+
+    The messages list is returned so a follow-on phase (capture, wrapup) can
+    continue the same conversation without losing context.
+    Messages are in provider-native format (Anthropic or OpenAI), consistent
+    with the PROVIDER constant so capture/wrapup phases can continue them.
+    """
+    if PROVIDER == "local":
+        seed: list[dict] = [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": first_message},
+        ]
+        return _run_agent_openai(system, tools, seed, workdir, max_turns, verbose)
+
+    # Anthropic path
+    client = anthropic.Anthropic()
+    messages: list[dict] = [{"role": "user", "content": first_message}]
+    total_in = total_out = turns = 0
+    submitted = False
+
+    while turns < max_turns:
+        response = client.messages.create(
+            model=MODEL, max_tokens=8192,
+            system=system, tools=tools, messages=messages,
+        )
+        total_in += response.usage.input_tokens
+        total_out += response.usage.output_tokens
+        turns += 1
+
+        if verbose:
+            print(f"  turn {turns:02d}/{max_turns} | stop={response.stop_reason} "
+                  f"| in={response.usage.input_tokens:,} out={response.usage.output_tokens:,}")
+
+        assistant_content = response.content
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        if response.stop_reason == "end_turn":
+            break
+
+        tool_results = []
+        for block in assistant_content:
+            if block.type != "tool_use":
+                continue
+            if verbose:
+                print(f"    → {block.name}({json.dumps(block.input)[:100]})")
+            result = handle_tool(block.name, block.input, workdir)
+            if block.name == "submit":
+                submitted = True
+            if verbose:
+                print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": result,
+            })
+
+        if tool_results:
+            messages.append({"role": "user", "content": tool_results})
+
+    return total_in, total_out, turns, submitted, messages
+
+
+def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple[int, int, int]:
+    """
+    Continue the same conversation for concept extraction — the agent has full
+    context of what it tried above, so no activity log or fresh agent needed.
+    Messages are provider-native (set by run_agent). Returns (in, out, turns).
+    """
+    print(f"\n  [capture] continuing session for concept extraction — up to {MAX_TURNS_CAPTURE} turns...")
+    # Inject the capture prompt as the next user turn — same format for both providers
+    capture_messages = list(messages) + [{"role": "user", "content": FORCED_CAPTURE_PROMPT}]
+
+    if PROVIDER == "local":
+        in_tok, out_tok, turns, _, _ = _run_agent_openai(
+            system, TOOLS_CAPTURE, capture_messages,
+            workdir=None, max_turns=MAX_TURNS_CAPTURE, verbose=verbose, label="[capture] ",
+        )
+    else:
+        client = anthropic.Anthropic()
+        total_in = total_out = turns = 0
+        while turns < MAX_TURNS_CAPTURE:
+            response = client.messages.create(
+                model=MODEL, max_tokens=8192,
+                system=system, tools=TOOLS_CAPTURE, messages=capture_messages,
+            )
+            total_in += response.usage.input_tokens
+            total_out += response.usage.output_tokens
+            turns += 1
+
+            if verbose:
+                print(f"  [capture] turn {turns:02d}/{MAX_TURNS_CAPTURE} | stop={response.stop_reason} "
+                      f"| in={response.usage.input_tokens:,} out={response.usage.output_tokens:,}")
+
+            assistant_content = response.content
+            capture_messages.append({"role": "assistant", "content": assistant_content})
+
+            if response.stop_reason == "end_turn":
+                break
+
+            tool_results = []
+            submitted = False
+            for block in assistant_content:
+                if block.type != "tool_use":
+                    continue
+                if verbose:
+                    print(f"    → {block.name}({json.dumps(block.input)[:100]})")
+                result = handle_tool(block.name, block.input, workdir=None)
+                if block.name == "submit":
+                    submitted = True
+                if verbose:
+                    print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
+
+            if tool_results:
+                capture_messages.append({"role": "user", "content": tool_results})
+
+            if submitted:
+                break
+
+        in_tok, out_tok = total_in, total_out
+
+    print(f"  [capture] done — {_count_concepts()} total concepts in DB "
+          f"({turns} turns, {in_tok + out_tok:,} tokens)")
+    return in_tok, out_tok, turns
+
+
+def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
+    """
+    Rate the concepts used during this run — mirrors the lore:wrapup skill.
+
+    Reads session.json, resolves concept names, presents them to an agent that
+    calls rate_concept for each one, then clears the session file.
+    Returns (input_tokens, output_tokens, turns_used).
+    """
+    try:
+        session_ids: list[str] = json.loads(SESSION_FILE.read_text()) if SESSION_FILE.exists() else []
+    except (json.JSONDecodeError, OSError):
+        session_ids = []
+
+    if not session_ids:
+        print(f"  [wrapup] no concepts in session file — skipping.")
+        return 0, 0, 0
+
+    # Resolve concept names from DB for a readable prompt
+    concept_lines: list[str] = []
+    try:
+        conn = sqlite3.connect(str(LORE_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        for cid in session_ids:
+            row = conn.execute(
+                "SELECT name, type, avg_rating FROM concepts WHERE concept_id=?", (cid,)
+            ).fetchone()
+            if row:
+                concept_lines.append(
+                    f"  - [{row['type']}] {row['name']}  (current avg_rating: {row['avg_rating']:.1f})  id={cid}"
+                )
+            else:
+                concept_lines.append(f"  - (unresolved)  id={cid}")
+        conn.close()
+    except sqlite3.Error:
+        concept_lines = [f"  - id={cid}" for cid in session_ids]
+
+    concept_list = "\n".join(concept_lines)
+    wrapup_prompt = (
+        f"You have just completed Run {run_num} of the text2stl benchmark. "
+        f"The following concepts were used or captured during this run:\n\n"
+        f"{concept_list}\n\n"
+        "For each concept, reflect on whether it was useful in this session "
+        "and call `rate_concept` with:\n"
+        "  - outcome 5: directly solved a key problem\n"
+        "  - outcome 4: meaningfully helpful\n"
+        "  - outcome 3: somewhat relevant but not decisive\n"
+        "  - outcome 2: appeared in results but wasn't applied\n"
+        "  - outcome 1: irrelevant or misleading\n\n"
+        "Add hours_saved if you can honestly estimate it. "
+        "Call `submit` when all concepts have been rated."
+    )
+
+    print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — up to {MAX_TURNS_WRAPUP} turns...")
+    in_tok, out_tok, turns, _, _messages = run_agent(
+        system=build_system_capture(),
+        tools=TOOLS_WRAPUP,
+        first_message=wrapup_prompt,
+        workdir=None,
+        max_turns=MAX_TURNS_WRAPUP,
+        verbose=verbose,
+    )
+
+    # Clear session file — same final step as the real wrapup skill
+    SESSION_FILE.write_text("[]")
+    print(f"  [wrapup] done ({turns} turns, {in_tok + out_tok:,} tokens) — session cleared.")
+    return in_tok, out_tok, turns
+
+# ---------------------------------------------------------------------------
+# Test runner
+# ---------------------------------------------------------------------------
+
+def run_tests(workdir: Path) -> tuple[bool, str]:
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/test_text2stl_cli.py", "-v", "--tb=short"],
+        cwd=workdir, capture_output=True, text=True, timeout=300,
+    )
+    return result.returncode == 0, result.stdout + result.stderr
+
+# ---------------------------------------------------------------------------
+# Core step function — all 4 runs share this logic
+# ---------------------------------------------------------------------------
+
+def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TURNS) -> dict | None:
+    lore_active = run_num > 1
+
+    if run_num == 1:
+        _clear_db()
+
+    concepts_in_db = _count_concepts()
+
+    lore_label = f"Lore ON ({concepts_in_db} concepts)" if lore_active else "no Lore"
+    print(f"\n{'='*60}\n  Run {run_num}/4 — {lore_label}  |  {max_turns} turns  |  {MODEL}\n{'='*60}")
+
+    if dry_run:
+        print("[dry-run] skipping.")
+        return None
+
+    SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SESSION_FILE.write_text("[]")
+    concepts_before = concepts_in_db
+
+    system      = build_system_with_lore() if lore_active else build_system_no_lore()
+    tools       = TOOLS_WITH_LORE if lore_active else TOOLS_NO_LORE
+    task_prompt = TASK_PROMPT_WITH_LORE if lore_active else TASK_PROMPT_NO_LORE
+
+    workdir = Path(tempfile.mkdtemp(prefix=f"lore_stlgen_run{run_num}_"))
+    print(f"Working dir: {workdir}")
+    try:
+        (workdir / "tests").mkdir(exist_ok=True)
+        shutil.copy(TEST_FILE,    workdir / "tests" / "test_text2stl_cli.py")
+        shutil.copy(CONFTEST_FILE, workdir / "tests" / "conftest.py")
+
+        start = datetime.now()
+        in_tok, out_tok, turns, submitted, messages = run_agent(
+            system, tools, task_prompt, workdir, max_turns, verbose,
+        )
+        elapsed = (datetime.now() - start).total_seconds()
+
+        # Continue same session for concept extraction — agent has full history
+        c_in, c_out, c_turns = run_capture_phase(messages, system, verbose)
+        in_tok  += c_in
+        out_tok += c_out
+
+        print(f"\nMain loop {'✓ submitted' if submitted else '✗ hit limit'}. Running tests...")
+        passed, test_out = run_tests(workdir)
+
+        concepts_captured = _count_concepts() - concepts_before
+
+        # Wrapup: rate all concepts used this run, then clear session file
+        w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose)
+        in_tok  += w_in
+        out_tok += w_out
+
+        result = {
+            "run": run_num,
+            "lore_active": lore_active,
+            "concepts_available": concepts_in_db,
+            "concepts_captured": concepts_captured,
+            "turn_budget": max_turns,
+            "turns_main": turns,
+            "turns_capture": c_turns,
+            "turns_wrapup": w_turns,
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+            "total_tokens": in_tok + out_tok,
+            "elapsed": elapsed,
+            "task_submitted": submitted,
+            "tests_passed": passed,
+        }
+        _write_run_md(result, test_out)
+        _print_summary(result)
+        return result
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+# ---------------------------------------------------------------------------
+# Output helpers
+# ---------------------------------------------------------------------------
+
+def _count_concepts() -> int:
+    if not LORE_DB_PATH.exists():
+        return 0
+    try:
+        conn = sqlite3.connect(str(LORE_DB_PATH))
+        n = conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0]
+        conn.close()
+        return n
+    except sqlite3.Error:
+        return 0
+
+
+def _clear_db() -> None:
+    """Drop all concepts and ratings — called before Run 1 to start clean."""
+    _ensure_db()
+    conn = sqlite3.connect(str(LORE_DB_PATH))
+    conn.execute("DELETE FROM ratings")
+    conn.execute("DELETE FROM concepts")
+    conn.commit()
+    conn.close()
+    if SESSION_FILE.exists():
+        SESSION_FILE.write_text("[]")
+    print("  [reset] concept DB cleared — starting from 0 concepts.")
+
+
+def _write_run_md(r: dict, test_out: str) -> None:
+    RESULTS_DIR.mkdir(exist_ok=True)
+    run_n = r["run"]
+    lore = f"yes ({r['concepts_available']} concepts)" if r["lore_active"] else "no"
+    (RESULTS_DIR / f"run{run_n}.md").write_text(
+        f"# Benchmark — Run {run_n}/4\n\n"
+        f"| Field | Value |\n|-------|-------|\n"
+        f"| Date | {datetime.now().strftime('%Y-%m-%d %H:%M')} |\n"
+        f"| Model | {MODEL} |\n"
+        f"| Lore search active | {lore} |\n"
+        f"| Turn budget | {r['turn_budget']} |\n"
+        f"| Turns (main loop) | {r['turns_main']} |\n"
+        f"| Turns (capture) | {r['turns_capture']} |\n"
+        f"| Turns (wrapup) | {r['turns_wrapup']} |\n"
+        f"| Task submitted | {'yes' if r['task_submitted'] else 'no (hit limit)'} |\n"
+        f"| Input tokens | {r['input_tokens']:,} |\n"
+        f"| Output tokens | {r['output_tokens']:,} |\n"
+        f"| Total tokens | {r['total_tokens']:,} |\n"
+        f"| Concepts captured this run | {r['concepts_captured']} |\n"
+        f"| Elapsed | {r['elapsed']:.1f}s |\n"
+        f"| Tests passed | {'✅ yes (13/13)' if r['tests_passed'] else '❌ no'} |\n\n"
+        f"## Test output\n\n```\n{test_out[-3000:]}\n```\n",
+        encoding="utf-8",
+    )
+    print(f"  Results → {RESULTS_DIR / f'run{run_n}.md'}")
+
+
+def _print_summary(r: dict) -> None:
+    sub = "✓" if r["task_submitted"] else "✗"
+    tests = "PASS" if r["tests_passed"] else "FAIL"
+    print(
+        f"\nRun {r['run']}: turns={r['turns_main']}/{r['turn_budget']}  "
+        f"tokens={r['total_tokens']:,}  tests={tests}  "
+        f"submitted={sub}  concepts+={r['concepts_captured']}  "
+        f"elapsed={r['elapsed']:.1f}s"
+    )
+
+
+
+def _write_comparison(results: list[dict]) -> None:
+    RESULTS_DIR.mkdir(exist_ok=True)
+    header = (
+        "# Benchmark Comparison — 4 Runs, Same Task, Same Budget\n\n"
+        "*All runs: same hard task, 20-turn budget.\n"
+        "What changes: Lore content (more each run) and concept ratings.*\n\n"
+        "| Metric | Run 1 | Run 2 | Run 3 | Run 4 |\n"
+        "|--------|-------|-------|-------|-------|\n"
+    )
+
+    def cell(r: dict | None, key: str, fmt=str) -> str:
+        return fmt(r[key]) if r else "—"
+
+    def tok(r):
+        return f"{r['total_tokens']:,}" if r else "—"
+
+    by_run = {r["run"]: r for r in results}
+    rows = [
+        ("Lore concepts available",
+            *[str(by_run[i]["concepts_available"]) if i in by_run else "—" for i in range(1, 5)]),
+        ("Task submitted",
+            *[("✓" if by_run[i]["task_submitted"] else "✗") if i in by_run else "—" for i in range(1, 5)]),
+        ("Tests passed",
+            *[("✅" if by_run[i]["tests_passed"] else "❌") if i in by_run else "—" for i in range(1, 5)]),
+        ("Turns (main loop)",
+            *[str(by_run[i]["turns_main"]) if i in by_run else "—" for i in range(1, 5)]),
+        ("Total tokens",
+            *[f"{by_run[i]['total_tokens']:,}" if i in by_run else "—" for i in range(1, 5)]),
+        ("Concepts captured",
+            *[str(by_run[i]["concepts_captured"]) if i in by_run else "—" for i in range(1, 5)]),
+        ("Elapsed (s)",
+            *[f"{by_run[i]['elapsed']:.0f}" if i in by_run else "—" for i in range(1, 5)]),
+    ]
+
+    table = header
+    for label, *cells in rows:
+        table += f"| {label} | {' | '.join(cells)} |\n"
+    table += f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+
+    (RESULTS_DIR / "comparison.md").write_text(table, encoding="utf-8")
+    print(f"\nComparison → {RESULTS_DIR / 'comparison.md'}")
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Lore effectiveness benchmark — text2stl, 4 progressive runs",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--run", type=int, choices=[1, 2, 3, 4], metavar="{1,2,3,4}",
+                      help="Run a single numbered run")
+    mode.add_argument("--all", action="store_true",
+                      help="Run all 4 in sequence (pauses for wrapup reminders)")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--max-turns", type=int, default=MAX_TURNS, metavar="N",
+                        help=f"Turn budget for the main coding loop (default: {MAX_TURNS})")
+    args = parser.parse_args()
+
+    runs = [1, 2, 3, 4] if args.all else [args.run]
+    results: list[dict] = []
+
+    for run_num in runs:
+        res = step_run(run_num, args.verbose, args.dry_run, max_turns=args.max_turns)
+        if res:
+            results.append(res)
+
+    if len(results) >= 2:
+        _write_comparison(results)
+
+
+if __name__ == "__main__":
+    main()

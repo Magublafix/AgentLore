@@ -65,6 +65,152 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
+## Sprint 3 — 2026-06-13 → 2026-06-27
+**Goal:** Second Lore effectiveness benchmark — implement a 3D-printable text CLI (text2stl) with and without Lore, measuring token reduction on a geometry-heavy task.
+**Status:** in-progress
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-018 | Define text2stl CLI scope and test suite | test-suite-architect | done | — |
+| LORE-019 | Run 1 — no Lore, hard task, capture on discovery | general-purpose | planned | — |
+| LORE-020 | Run 2 — Lore ON, unrated concepts from Run 1 | general-purpose | planned | — |
+| LORE-021 | Run 3 — Lore ON, concepts rated after Run 1+2 wrapup | general-purpose | planned | — |
+| LORE-022 | Run 4 — Lore ON, more rated concepts | general-purpose | planned | — |
+
+### Notes
+- LORE-018 must complete before any run — all runs use the same 13-test suite.
+- 4-run progressive design: same hard task, same 20-turn budget, 4 times.
+- What changes each run: (a) Lore content grows, (b) concepts get rated via `lore:wrapup` between runs.
+- Tests: does Lore help at all? (R1→R2)  more knowledge help more? (R2→R3)  rating improve relevance? (R3→R4)
+- All runs use forced 15-turn capture phase after main loop — concepts captured even on failure.
+- Run 1 attempt on 2026-06-13 hit MAX_TURNS=50 without approach hint. Redesigned to 4×20-turn progressive structure.
+- DoD Gates 3 and 4 waived for benchmark stories (same as Sprint 2).
+
+---
+
+## [LORE-018] Define text2stl CLI scope and test suite
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** S
+**Agent:** test-suite-architect
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** reference a fixed CLI specification and runnable test suite before each benchmark run
+**So that** both runs target an identical definition of done and results are directly comparable
+
+**Acceptance Criteria:**
+- [x] `samples/stlgen/tests/test_text2stl_cli.py` committed — 13 tests across invocation, validation, STL validity, dimensions, character shapes
+- [x] Tests invoke CLI as `text2stl <string> -o <path>` via `subprocess.run`
+- [x] STL validity tests use `trimesh` (watertight, positive volume, no degenerate triangles)
+- [x] Character shape test uses mid-height cross-section IoU ≥ 0.25 vs PIL-rendered reference
+- [x] `samples/stlgen/README.md` documents CLI interface and test coverage
+- [x] `samples/stlgen/benchmarks/run.py` committed — same structure as radev benchmark runner
+
+**DoD:**
+- [x] AC above met — tokens recorded
+- [ ] Test suite passes against a reference implementation before Run 1 begins
+
+---
+
+## [LORE-019] Run 1 — no Lore, hard task, capture on discovery
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** L
+**Agent:** general-purpose
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl without Lore in 20 turns, capturing concepts as I work
+**So that** we establish a baseline and populate Lore for subsequent runs, even if the task fails
+
+**Acceptance Criteria:**
+- [ ] `python samples/stlgen/benchmarks/run.py --run 1` completes without error
+- [ ] Agent has no `search_concepts` tool; calls `submit_concept` incrementally during session
+- [ ] Forced 15-turn capture phase runs after main loop (win or lose)
+- [ ] `samples/stlgen/results/run1.md` written with turns, tokens, test result, concepts captured
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] `samples/stlgen/results/run1.md` committed
+- [ ] `lore:wrapup` run after this story to rate captured concepts before Run 2
+
+---
+
+## [LORE-020] Run 2 — Lore ON, unrated concepts from Run 1
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** L
+**Agent:** general-purpose
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl with unrated Lore concepts from Run 1, same 20-turn budget
+**So that** we measure whether Lore knowledge (unrated) converts a failing run into a passing one
+
+**Acceptance Criteria:**
+- [ ] `python samples/stlgen/benchmarks/run.py --run 2` completes without error
+- [ ] Agent searches Lore before writing any code
+- [ ] `samples/stlgen/results/run2.md` written
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] `samples/stlgen/results/run2.md` committed
+- [ ] `lore:wrapup` run after this story to rate concepts before Run 3
+
+---
+
+## [LORE-021] Run 3 — Lore ON, concepts rated after Runs 1+2 wrapup
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** L
+**Agent:** general-purpose
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl with rated Lore concepts, same 20-turn budget
+**So that** we measure whether concept ratings improve search relevance and task outcome
+
+**Acceptance Criteria:**
+- [ ] `python samples/stlgen/benchmarks/run.py --run 3` completes without error
+- [ ] Agent searches Lore before writing any code
+- [ ] `samples/stlgen/results/run3.md` written
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] `samples/stlgen/results/run3.md` committed
+- [ ] `lore:wrapup` run after this story before Run 4
+
+---
+
+## [LORE-022] Run 4 — Lore ON, all prior concepts rated
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** L
+**Agent:** general-purpose
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl with the fullest, most-rated Lore knowledge base
+**So that** we complete the 4-run comparison and write the final comparison table
+
+**Acceptance Criteria:**
+- [ ] `python samples/stlgen/benchmarks/run.py --run 4` completes without error
+- [ ] Agent searches Lore before writing any code
+- [ ] `samples/stlgen/results/run4.md` and `samples/stlgen/results/comparison.md` written
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] `samples/stlgen/results/run4.md` and `comparison.md` committed
+
+---
+
 ## [LORE-015] Define radev CLI scope and test suite
 
 **Phase:** Benchmark
