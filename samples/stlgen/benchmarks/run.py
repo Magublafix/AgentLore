@@ -458,7 +458,18 @@ def handle_submit_concept(inputs: dict) -> str:
     try:
         conn = sqlite3.connect(str(LORE_DB_PATH))
 
-        # Semantic dedup: compare against all stored embeddings
+        # Backfill embeddings for any concepts saved before semantic dedup was added
+        unembedded = conn.execute(
+            "SELECT concept_id, name, content FROM concepts WHERE embedding IS NULL"
+        ).fetchall()
+        if unembedded:
+            for eid, ename, econtent in unembedded:
+                evec = model.encode(f"{ename}. {econtent}").tolist()
+                eblob = _struct.pack(f"{len(evec)}f", *evec)
+                conn.execute("UPDATE concepts SET embedding = ? WHERE concept_id = ?", (eblob, eid))
+            conn.commit()
+
+        # Semantic dedup: compare against all stored embeddings (now always populated)
         existing = conn.execute(
             "SELECT concept_id, name, embedding FROM concepts WHERE embedding IS NOT NULL"
         ).fetchall()
@@ -570,11 +581,17 @@ def _update_session(concept_ids) -> None:
 # Tool dispatcher
 # ---------------------------------------------------------------------------
 
+_BLOCKED_EDITORS = re.compile(r"^\s*(vim?|nano|emacs|pico|gedit|code)\b")
+
+
 def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
     if name == "bash" and workdir:
+        cmd = inputs.get("command", "")
+        if _BLOCKED_EDITORS.match(cmd):
+            return "[error: interactive editors are not available — use write_file to create or modify files]"
         try:
             result = subprocess.run(
-                inputs["command"], shell=True, cwd=workdir,
+                cmd, shell=True, cwd=workdir,
                 capture_output=True, text=True, timeout=120,
             )
         except subprocess.TimeoutExpired:
