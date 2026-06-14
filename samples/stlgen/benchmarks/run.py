@@ -50,7 +50,7 @@ import anthropic
 # ---------------------------------------------------------------------------
 
 MODEL = "claude-sonnet-4-6"
-MAX_TURNS = 20          # same budget for every run
+MAX_TURNS = 50          # same budget for every run
 MAX_TURNS_CAPTURE = 15  # forced post-loop capture phase
 MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
 
@@ -125,6 +125,9 @@ Requirements:
 A test file is at tests/test_text2stl_cli.py.
 Note: the tests import `trimesh`, `numpy`, and `PIL`. Include them as
 dependencies in pyproject.toml so `pip install -e .` installs them.
+
+IMPORTANT: Do NOT modify or delete any file inside the tests/ directory.
+The tests are fixed — only modify your implementation files.
 
 Run with: pip install -e . && pytest tests/ -v
 """
@@ -893,42 +896,117 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
 
     concept_list = "\n".join(concept_lines)
 
-    if PROVIDER == "local":
-        # Local models need very explicit per-call instructions with exact JSON.
-        # List concepts as numbered items so the model can rate one per turn.
-        numbered = "\n".join(
-            f"{i+1}. id={cid}  {concept_lines[i].strip()}"
-            for i, cid in enumerate(session_ids)
-        )
-        wrapup_prompt = (
-            f"You completed Run {run_num} of the text2stl benchmark.\n\n"
-            f"Rate each concept below ONE AT A TIME using ONLY this JSON format:\n"
-            f'{{"name": "rate_concept", "arguments": {{"concept_id": "<id>", "outcome": <1-5>, "notes": "<why>"}}}}\n\n'
-            f"Outcome guide: 5=solved key problem, 4=very helpful, 3=somewhat useful, 2=barely used, 1=irrelevant\n\n"
-            f"Concepts to rate:\n{numbered}\n\n"
-            f"Rate concept 1 now. Output only the JSON, nothing else."
-        )
-    else:
-        wrapup_prompt = (
-            f"You have just completed Run {run_num} of the text2stl benchmark. "
-            f"The following concepts were used or captured during this run:\n\n"
-            f"{concept_list}\n\n"
-            "For each concept, reflect on whether it was useful in this session "
-            "and call `rate_concept` with:\n"
-            "  - outcome 5: directly solved a key problem\n"
-            "  - outcome 4: meaningfully helpful\n"
-            "  - outcome 3: somewhat relevant but not decisive\n"
-            "  - outcome 2: appeared in results but wasn't applied\n"
-            "  - outcome 1: irrelevant or misleading\n\n"
-            "Add hours_saved if you can honestly estimate it. "
-            "Call `submit` when all concepts have been rated."
-        )
-
     wrapup_system = build_system_capture()
     if PROVIDER == "local":
         wrapup_system = LOCAL_SYSTEM_PREFIX + wrapup_system
 
-    print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — up to {MAX_TURNS_WRAPUP} turns...")
+    if PROVIDER == "local":
+        # qwen2.5-coder stalls after rating one concept in a shared session.
+        # Fix: one focused API call per concept, no shared conversation state.
+        import openai as _openai
+        global _TOOLS_REGISTRY
+        client = _openai.OpenAI(base_url=LOCAL_BASE_URL, api_key="ollama")
+        oai_tools = _tools_to_openai(TOOLS_WRAPUP)
+        _TOOLS_REGISTRY = TOOLS_WRAPUP
+
+        print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — one call per concept...", flush=True)
+        total_in = total_out = total_turns = 0
+
+        for i, cid in enumerate(session_ids):
+            line = concept_lines[i].strip() if i < len(concept_lines) else f"id={cid}"
+            single_prompt = (
+                f"Rate this concept using ONLY this JSON format:\n"
+                f'{{"name": "rate_concept", "arguments": {{"concept_id": "{cid}", "outcome": <1-5>, "notes": "<why>"}}}}\n\n'
+                f"Concept: {line}\n\n"
+                f"Outcome guide: 5=solved key problem, 4=very helpful, 3=somewhat useful, "
+                f"2=barely used, 1=irrelevant\n"
+                f"Output only the JSON, nothing else."
+            )
+            messages: list[dict] = [
+                {"role": "system", "content": wrapup_system},
+                {"role": "user",   "content": single_prompt},
+            ]
+            rated = False
+            for attempt in range(5):
+                try:
+                    response = client.chat.completions.create(
+                        model=LOCAL_MODEL,
+                        max_tokens=LOCAL_MAX_TOKENS,
+                        tools=oai_tools,
+                        tool_choice="required",
+                        messages=messages,
+                    )
+                except Exception as exc:
+                    print(f"  [wrapup] concept {i+1} API error: {exc}", flush=True)
+                    break
+                usage = response.usage
+                total_in  += usage.prompt_tokens     if usage else 0
+                total_out += usage.completion_tokens if usage else 0
+                total_turns += 1
+
+                choice = response.choices[0]
+                msg = choice.message
+
+                # Promote JSON-in-text tool calls (qwen returns these instead of tool_calls)
+                tc_list = list(msg.tool_calls) if msg.tool_calls else []
+                if not tc_list and msg.content:
+                    promoted = _parse_tool_call_from_text(msg.content)
+                    if promoted:
+                        print(f"  [wrapup] [promoted text tool call: {promoted['function']['name']}]", flush=True)
+                        tc_list = [type("_TC", (), {
+                            "id": promoted["id"],
+                            "function": type("_F", (), {
+                                "name": promoted["function"]["name"],
+                                "arguments": promoted["function"]["arguments"],
+                            })(),
+                        })()]
+
+                if not tc_list:
+                    print(f"  [wrapup] concept {i+1} no tool call (attempt {attempt+1}) — retrying", flush=True)
+                    messages.append({"role": "assistant", "content": msg.content or ""})
+                    messages.append({"role": "user", "content": "Call rate_concept now. Output only JSON."})
+                    continue
+
+                for tc in tc_list:
+                    tc_name   = tc.function.name
+                    inputs = json.loads(tc.function.arguments)
+                    if verbose:
+                        print(f"    → {tc_name}({json.dumps(inputs)[:100]})", flush=True)
+                    result = handle_tool(tc_name, inputs, workdir=None)
+                    if verbose:
+                        print(f"    ← {str(result)[:120].replace(chr(10), ' ')}", flush=True)
+                    if tc_name == "rate_concept":
+                        rated = True
+
+                if rated:
+                    break
+                messages.append({"role": "assistant", "content": msg.content or ""})
+                messages.append({"role": "user", "content": f"Now call rate_concept for concept id={cid}."})
+
+            if not rated:
+                print(f"  [wrapup] concept {i+1} ({cid}) — skipped after 5 attempts", flush=True)
+
+        SESSION_FILE.write_text("[]")
+        print(f"  [wrapup] done ({total_turns} turns, {total_in + total_out:,} tokens) — session cleared.", flush=True)
+        return total_in, total_out, total_turns
+
+    # Cloud path: single session rates all concepts, ends with submit
+    wrapup_prompt = (
+        f"You have just completed Run {run_num} of the text2stl benchmark. "
+        f"The following concepts were used or captured during this run:\n\n"
+        f"{concept_list}\n\n"
+        "For each concept, reflect on whether it was useful in this session "
+        "and call `rate_concept` with:\n"
+        "  - outcome 5: directly solved a key problem\n"
+        "  - outcome 4: meaningfully helpful\n"
+        "  - outcome 3: somewhat relevant but not decisive\n"
+        "  - outcome 2: appeared in results but wasn't applied\n"
+        "  - outcome 1: irrelevant or misleading\n\n"
+        "Add hours_saved if you can honestly estimate it. "
+        "Call `submit` when all concepts have been rated."
+    )
+
+    print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — up to {MAX_TURNS_WRAPUP} turns...", flush=True)
     in_tok, out_tok, turns, _, _messages = run_agent(
         system=wrapup_system,
         tools=TOOLS_WRAPUP,
@@ -941,7 +1019,7 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
 
     # Clear session file — same final step as the real wrapup skill
     SESSION_FILE.write_text("[]")
-    print(f"  [wrapup] done ({turns} turns, {in_tok + out_tok:,} tokens) — session cleared.")
+    print(f"  [wrapup] done ({turns} turns, {in_tok + out_tok:,} tokens) — session cleared.", flush=True)
     return in_tok, out_tok, turns
 
 # ---------------------------------------------------------------------------

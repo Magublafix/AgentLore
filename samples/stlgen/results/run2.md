@@ -2,65 +2,64 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-13 12:01 |
-| Model | claude-sonnet-4-6 |
-| Lore search active | yes (15 concepts) |
+| Date | 2026-06-14 01:24 |
+| Model | qwen2.5-coder:7b |
+| Lore search active | yes (7 concepts) |
 | Turn budget | 20 |
 | Turns (main loop) | 20 |
-| Turns (capture) | 9 |
-| Turns (wrapup) | 3 |
-| Task submitted | no (hit limit) |
-| Input tokens | 652,312 |
-| Output tokens | 17,459 |
-| Total tokens | 669,771 |
-| Concepts captured this run | 12 |
-| Elapsed | 243.5s |
+| Turns (capture) | 15 |
+| Turns (wrapup) | 15 |
+| Task submitted | yes |
+| Input tokens | 164,373 |
+| Output tokens | 3,256 |
+| Total tokens | 167,629 |
+| Concepts captured this run | 4 |
+| Elapsed | 1278.3s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
 ============================= test session starts ==============================
-platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/bin/python
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
 cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run2_31c5u_bo
-configfile: pyproject.toml
-plugins: cov-7.0.0, anyio-4.12.1
-collecting ... collected 13 items
+rootdir: /tmp/lore_stlgen_run2_o4t3ynjb
+plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 0 items / 1 error
 
-tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
-tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 15%]
-tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 23%]
-tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 30%]
-tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 38%]
-tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 46%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 53%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 61%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 69%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles FAILED [ 76%]
-tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 84%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text FAILED [100%]
-
-=================================== FAILURES ===================================
-_________________ TestSTLValidity.test_no_degenerate_triangles _________________
-tests/test_text2stl_cli.py:169: in test_no_degenerate_triangles
-    min_area = float(mesh.triangles_area.min())
-E   AttributeError: 'Trimesh' object has no attribute 'triangles_area'
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
-    assert iou >= 0.25, (
-E   AssertionError: Character shape IoU 0.082 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
-E   assert 0.08207767898923725 >= 0.25
-=============================== warnings summary ===============================
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run2_31c5u_bo/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
-    section_2d, _ = section.to_planar()
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== ERRORS ====================================
+_________________ ERROR collecting tests/test_text2stl_cli.py __________________
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/python.py:507: in importtestmodule
+    mod = import_path(
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    source_stat, co = _rewrite_test(fn, self.config)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:357: in _rewrite_test
+    tree = ast.parse(source, filename=strfn)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib64/python3.11/ast.py:50: in parse
+    return compile(source, filename, mode, flags,
+E     File "/tmp/lore_stlgen_run2_o4t3ynjb/tests/test_text2stl_cli.py", line 19
+E       actual_output = pytest.path.local('.')..listdir()[0].basename
+E                                              ^
+E   SyntaxError: invalid syntax
 =========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-=================== 2 failed, 11 passed, 1 warning in 32.32s ===================
+ERROR tests/test_text2stl_cli.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.49s ===============================
 
 ```
