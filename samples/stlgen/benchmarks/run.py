@@ -150,6 +150,14 @@ capture-concept mechanics, rate_concept, etc.).
 When all 13 tests pass, call `submit`.
 """
 
+# Simplified version for local models — no skill docs, defers capture to after tests pass.
+_CAPTURE_SUFFIX_LOCAL = """
+Focus on getting the tests to pass first.
+Once all 13 tests pass, capture what you learned with submit_concept — which
+libraries worked, what failed and why, non-obvious packaging steps.
+Then call `submit`.
+"""
+
 _SEARCH_SUFFIX = """
 Before writing any code, use the `search_concepts` skill to search Lore for
 patterns relevant to 3D text generation, STL mesh construction, font libraries,
@@ -163,8 +171,15 @@ Do NOT capture concepts about the Lore system itself.
 When all 13 tests pass, call `submit`.
 """
 
-TASK_PROMPT_NO_LORE  = _TASK + _CAPTURE_SUFFIX
-TASK_PROMPT_WITH_LORE = _TASK + _SEARCH_SUFFIX
+# Simplified version for local models.
+_SEARCH_SUFFIX_LOCAL = """
+Before writing any code, call search_concepts once to find relevant patterns.
+Focus on implementation. Once all 13 tests pass, capture new insights with
+submit_concept, then call `submit`.
+"""
+
+TASK_PROMPT_NO_LORE   = _TASK + (_CAPTURE_SUFFIX_LOCAL if PROVIDER == "local" else _CAPTURE_SUFFIX)
+TASK_PROMPT_WITH_LORE = _TASK + (_SEARCH_SUFFIX_LOCAL  if PROVIDER == "local" else _SEARCH_SUFFIX)
 
 # Forced capture prompt — injected into the same conversation after the main loop
 FORCED_CAPTURE_PROMPT = """\
@@ -298,6 +313,12 @@ TOOLS_WRAPUP    = [TOOL_RATE_CONCEPT, TOOL_SUBMIT]
 # ---------------------------------------------------------------------------
 
 def build_system_no_lore() -> str:
+    if PROVIDER == "local":
+        return (
+            "You are an expert Python developer. Implement the CLI exactly as specified. "
+            "Use tools to write files and run shell commands. "
+            "Use submit_concept(name, type, content, when_to_use, tags) to save domain patterns you discover."
+        )
     capture_skill = _load_skill("capture-concept")
     return (
         "You are an expert Python developer. Implement the CLI exactly as specified. "
@@ -311,6 +332,13 @@ def build_system_no_lore() -> str:
 
 
 def build_system_with_lore() -> str:
+    if PROVIDER == "local":
+        return (
+            "You are an expert Python developer. Implement the CLI exactly as specified. "
+            "Use tools to write files and run shell commands. "
+            "Search Lore before writing any code. "
+            "Use submit_concept(name, type, content, when_to_use, tags) to save new domain patterns."
+        )
     search_skill  = _load_skill("search-concepts")
     capture_skill = _load_skill("capture-concept")
     return (
@@ -326,6 +354,13 @@ def build_system_with_lore() -> str:
 
 
 def build_system_capture() -> str:
+    if PROVIDER == "local":
+        return (
+            "You are a senior developer reflecting on a just-completed coding attempt. "
+            "Extract and record what you learned. "
+            "Use submit_concept(name, type, content, when_to_use, tags) to save insights. "
+            "Call submit when done."
+        )
     capture_skill = _load_skill("capture-concept")
     return (
         "You are a senior developer reflecting on a just-completed coding attempt. "
