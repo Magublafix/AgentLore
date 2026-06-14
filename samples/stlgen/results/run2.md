@@ -2,64 +2,73 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-14 01:24 |
+| Date | 2026-06-14 11:49 |
 | Model | qwen2.5-coder:7b |
 | Lore search active | yes (7 concepts) |
-| Turn budget | 20 |
-| Turns (main loop) | 20 |
+| Turn budget | 50 |
+| Turns (main loop) | 50 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 15 |
-| Task submitted | yes |
-| Input tokens | 164,373 |
-| Output tokens | 3,256 |
-| Total tokens | 167,629 |
-| Concepts captured this run | 4 |
-| Elapsed | 1278.3s |
+| Turns (wrapup) | 11 |
+| Task submitted | no (hit limit) |
+| Input tokens | 265,069 |
+| Output tokens | 4,767 |
+| Total tokens | 269,836 |
+| Concepts captured this run | 6 |
+| Elapsed | 4914.5s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-============================= test session starts ==============================
-platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
-cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run2_o4t3ynjb
-plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 0 items / 1 error
-
-==================================== ERRORS ====================================
-_________________ ERROR collecting tests/test_text2stl_cli.py __________________
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/python.py:507: in importtestmodule
-    mod = import_path(
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/pathlib.py:587: in import_path
-    importlib.import_module(module_name)
-/usr/lib64/python3.11/importlib/__init__.py:126: in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-<frozen importlib._bootstrap>:1204: in _gcd_import
-    ???
-<frozen importlib._bootstrap>:1176: in _find_and_load
-    ???
-<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
-    ???
-<frozen importlib._bootstrap>:690: in _load_unlocked
-    ???
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
-    source_stat, co = _rewrite_test(fn, self.config)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/_pytest/assertion/rewrite.py:357: in _rewrite_test
-    tree = ast.parse(source, filename=strfn)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/lib64/python3.11/ast.py:50: in parse
-    return compile(source, filename, mode, flags,
-E     File "/tmp/lore_stlgen_run2_o4t3ynjb/tests/test_text2stl_cli.py", line 19
-E       actual_output = pytest.path.local('.')..listdir()[0].basename
-E                                              ^
-E   SyntaxError: invalid syntax
+ck (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
+_______________ TestDimensions.test_width_scales_with_char_count _______________
+tests/test_text2stl_cli.py:184: in test_width_scales_with_char_count
+    text2stl("A", "-o", str(out1))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-59/test_width_scales_with_char_co0/a.stl exited 1
+E   stdout: 
+E   stderr: Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
+______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
+tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-59/test_cross_section_is_nonempty0/hello.stl exited 1
+E   stdout: 
+E   stderr: Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
+_____________ TestCharacterShapes.test_character_shapes_match_text _____________
+tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-59/test_character_shapes_match_te0/hello.stl exited 1
+E   stdout: 
+E   stderr: Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
 =========================== short test summary info ============================
-ERROR tests/test_text2stl_cli.py
-!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
-=============================== 1 error in 0.49s ===============================
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
+FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
+==================== 7 failed, 2 passed, 4 errors in 1.06s =====================
 
 ```
