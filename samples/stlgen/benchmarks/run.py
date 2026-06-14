@@ -51,7 +51,7 @@ import anthropic
 # ---------------------------------------------------------------------------
 
 MODEL = "claude-sonnet-4-6"
-MAX_TURNS = 50          # same budget for every run
+MAX_TURNS = 20          # same budget for every run
 MAX_TURNS_CAPTURE = 15  # forced post-loop capture phase
 MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
 
@@ -584,14 +584,6 @@ def _update_session(concept_ids) -> None:
 
 _BLOCKED_EDITORS = re.compile(r"^\s*(vim?|nano|emacs|pico|gedit|code)\b")
 
-# Max submit_concept calls allowed in the main implementation loop.
-# Concept capture is the job of the forced capture phase; the main loop
-# should stay focused on building. Cap prevents the model from abandoning
-# implementation in favour of submitting generic advice concepts.
-_MAIN_LOOP_CONCEPT_CAP = 3
-_main_loop_concepts_submitted = 0  # reset at start of each step_run
-
-
 def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
     if name == "bash" and workdir:
         cmd = inputs.get("command", "")
@@ -636,18 +628,6 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
         return handle_search_concepts(inputs)
 
     if name == "submit_concept":
-        global _main_loop_concepts_submitted
-        if workdir is not None:
-            if _main_loop_concepts_submitted >= _MAIN_LOOP_CONCEPT_CAP:
-                return json.dumps({
-                    "error": "concept_cap_reached",
-                    "message": (
-                        f"You have already submitted {_MAIN_LOOP_CONCEPT_CAP} concepts this run. "
-                        "Focus on the implementation — run tests and fix failures. "
-                        "More concepts can be captured in the dedicated capture phase."
-                    ),
-                })
-            _main_loop_concepts_submitted += 1
         return handle_submit_concept(inputs)
 
     if name == "rate_concept":
@@ -1162,9 +1142,6 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
     if dry_run:
         print("[dry-run] skipping.")
         return None
-
-    global _main_loop_concepts_submitted
-    _main_loop_concepts_submitted = 0
 
     SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.write_text("[]")
