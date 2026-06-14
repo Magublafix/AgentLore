@@ -415,6 +415,24 @@ def handle_search_concepts(inputs: dict) -> str:
 
 
 _VALID_CONCEPT_TYPES = {"project", "pattern", "tool", "testing", "architecture"}
+_SEMANTIC_DEDUP_THRESHOLD = 0.88  # cosine similarity above this → reject as duplicate
+_embed_model = None  # lazy-loaded sentence-transformers model
+
+
+def _get_embed_model():
+    global _embed_model
+    if _embed_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embed_model
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    import math
+    dot = sum(x * y for x, y in zip(a, b))
+    na  = math.sqrt(sum(x * x for x in a))
+    nb  = math.sqrt(sum(x * x for x in b))
+    return dot / (na * nb) if na and nb else 0.0
 
 
 def handle_submit_concept(inputs: dict) -> str:
@@ -429,18 +447,37 @@ def handle_submit_concept(inputs: dict) -> str:
     raw_type = inputs.get("type") or inputs.get("kind") or ""
     ctype = raw_type if raw_type in _VALID_CONCEPT_TYPES else "pattern"
 
+    # Embed name + content for semantic dedup
+    model = _get_embed_model()
+    vec: list[float] = model.encode(f"{name}. {content}").tolist()
+    import struct as _struct
+    embedding_blob = _struct.pack(f"{len(vec)}f", *vec)
+
     concept_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(LORE_DB_PATH))
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_name_lower ON concepts(LOWER(name))")
-        dup = conn.execute(
-            "SELECT concept_id FROM concepts WHERE LOWER(name) = LOWER(?) LIMIT 1", (name,)
-        ).fetchone()
-        if dup:
-            conn.close()
-            return json.dumps({"error": "duplicate", "existing_id": dup[0],
-                               "message": "a concept with this name already exists — try a different angle or skip"})
+
+        # Semantic dedup: compare against all stored embeddings
+        existing = conn.execute(
+            "SELECT concept_id, name, embedding FROM concepts WHERE embedding IS NOT NULL"
+        ).fetchall()
+        for eid, ename, eblob in existing:
+            evec = list(_struct.unpack(f"{len(eblob)//4}f", eblob))
+            sim = _cosine_similarity(vec, evec)
+            if sim >= _SEMANTIC_DEDUP_THRESHOLD:
+                conn.close()
+                return json.dumps({
+                    "error": "semantic_duplicate",
+                    "existing_id": eid,
+                    "existing_name": ename,
+                    "similarity": round(sim, 3),
+                    "message": (
+                        f"too similar to existing concept '{ename}' "
+                        f"(similarity={sim:.2f}) — skip or capture a meaningfully different angle"
+                    ),
+                })
+
         conn.execute(
             """
             INSERT INTO concepts (
@@ -456,7 +493,7 @@ def handle_submit_concept(inputs: dict) -> str:
                 inputs.get("dont_use_when", ""),
                 json.dumps(inputs.get("tags", [])),
                 inputs.get("source_url"), "benchmark",
-                0.0, 0, None, now, None,
+                0.0, 0, None, now, embedding_blob,
             ),
         )
         conn.commit()
