@@ -432,7 +432,7 @@ def handle_submit_concept(inputs: dict) -> str:
             (
                 concept_id,
                 inputs.get("name") or inputs.get("title") or "untitled",
-                inputs.get("type") or inputs.get("kind") or "snippet",
+                inputs.get("type") if inputs.get("type") in {"project","pattern","tool","testing","architecture"} else (inputs.get("kind") if inputs.get("kind") in {"project","pattern","tool","testing","architecture"} else "pattern"),
                 inputs.get("content") or inputs.get("body") or "",
                 inputs.get("language"), inputs.get("when_to_use", ""),
                 inputs.get("dont_use_when", ""),
