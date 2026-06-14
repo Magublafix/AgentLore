@@ -431,7 +431,9 @@ def handle_submit_concept(inputs: dict) -> str:
             """,
             (
                 concept_id,
-                inputs["name"], inputs["type"], inputs["content"],
+                inputs.get("name") or inputs.get("title") or "untitled",
+                inputs.get("type") or inputs.get("kind") or "snippet",
+                inputs.get("content") or inputs.get("body") or "",
                 inputs.get("language"), inputs.get("when_to_use", ""),
                 inputs.get("dont_use_when", ""),
                 json.dumps(inputs.get("tags", [])),
@@ -444,14 +446,19 @@ def handle_submit_concept(inputs: dict) -> str:
     except sqlite3.Error as exc:
         return json.dumps({"error": str(exc)})
     _update_session([concept_id])
-    return json.dumps({"concept_id": concept_id, "name": inputs["name"]})
+    return json.dumps({"concept_id": concept_id, "name": inputs.get("name") or inputs.get("title") or "untitled"})
 
 
 def handle_rate_concept(inputs: dict) -> str:
     """Insert a rating and recompute avg_rating on the concept — mirrors db.insert_rating."""
     _ensure_db()
-    concept_id = inputs["concept_id"]
-    outcome = int(inputs["outcome"])
+    concept_id = inputs.get("concept_id") or inputs.get("id")
+    if not concept_id:
+        return json.dumps({"error": "concept_id required"})
+    outcome_raw = inputs.get("outcome") or inputs.get("score") or inputs.get("rating")
+    if outcome_raw is None:
+        return json.dumps({"error": "outcome required (1-5)"})
+    outcome = int(outcome_raw)
     if not 1 <= outcome <= 5:
         return json.dumps({"error": "outcome must be 1-5"})
     hours_saved = inputs.get("hours_saved")
