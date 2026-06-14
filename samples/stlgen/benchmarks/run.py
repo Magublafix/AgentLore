@@ -414,8 +414,21 @@ def handle_search_concepts(inputs: dict) -> str:
     return json.dumps({"results": results})
 
 
+_VALID_CONCEPT_TYPES = {"project", "pattern", "tool", "testing", "architecture"}
+
+
 def handle_submit_concept(inputs: dict) -> str:
     _ensure_db()
+    name    = (inputs.get("name") or inputs.get("title") or "").strip()
+    content = (inputs.get("content") or inputs.get("body") or "").strip()
+    if not name:
+        return json.dumps({"error": "name is required — provide a short descriptive title"})
+    if not content or len(content) < 20:
+        return json.dumps({"error": "content is required — describe the concept in detail (at least 20 chars)"})
+
+    raw_type = inputs.get("type") or inputs.get("kind") or ""
+    ctype = raw_type if raw_type in _VALID_CONCEPT_TYPES else "pattern"
+
     concept_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     try:
@@ -430,10 +443,7 @@ def handle_submit_concept(inputs: dict) -> str:
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                concept_id,
-                inputs.get("name") or inputs.get("title") or "untitled",
-                inputs.get("type") if inputs.get("type") in {"project","pattern","tool","testing","architecture"} else (inputs.get("kind") if inputs.get("kind") in {"project","pattern","tool","testing","architecture"} else "pattern"),
-                inputs.get("content") or inputs.get("body") or "",
+                concept_id, name, ctype, content,
                 inputs.get("language"), inputs.get("when_to_use", ""),
                 inputs.get("dont_use_when", ""),
                 json.dumps(inputs.get("tags", [])),
@@ -446,7 +456,7 @@ def handle_submit_concept(inputs: dict) -> str:
     except sqlite3.Error as exc:
         return json.dumps({"error": str(exc)})
     _update_session([concept_id])
-    return json.dumps({"concept_id": concept_id, "name": inputs.get("name") or inputs.get("title") or "untitled"})
+    return json.dumps({"concept_id": concept_id, "name": name})
 
 
 def handle_rate_concept(inputs: dict) -> str:
@@ -683,7 +693,8 @@ def _run_agent_openai(
         if not msg.tool_calls and msg.content:
             promoted = _parse_tool_call_from_text(msg.content)
             if promoted:
-                print(f"  {label}[promoted text tool call: {promoted['function']['name']}]", flush=True)
+                args_preview = promoted["function"]["arguments"][:120].replace("\n", " ")
+                print(f"  {label}[promoted text tool call: {promoted['function']['name']}  args={args_preview}]", flush=True)
                 assistant_entry["tool_calls"] = [promoted]
                 # Patch msg so the tool-execution block below sees the call.
                 msg = type("_Msg", (), {
