@@ -535,6 +535,14 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
         return path.read_text(encoding="utf-8") if path.exists() else f"[not found: {inputs['path']}]"
 
     if name == "submit":
+        if workdir:
+            ok, test_out = run_tests(workdir)
+            if ok:
+                return "✓ all tests passed — session complete."
+            return (
+                "Tests are NOT passing yet — keep working on the implementation.\n\n"
+                + test_out[:3000]
+            )
         return "Phase complete."
 
     if name == "search_concepts":
@@ -706,7 +714,9 @@ def _run_agent_openai(
                 print(f"    → {name}({json.dumps(inputs)[:100]})")
             result = handle_tool(name, inputs, workdir)
             if name == "submit":
-                submitted = True
+                # Only mark submitted when tests actually passed (or in phases without a workdir)
+                if workdir is None or "✓ all tests passed" in result:
+                    submitted = True
             if verbose:
                 print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
             tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result})
@@ -775,7 +785,8 @@ def run_agent(
                 print(f"    → {block.name}({json.dumps(block.input)[:100]})")
             result = handle_tool(block.name, block.input, workdir)
             if block.name == "submit":
-                submitted = True
+                if workdir is None or "✓ all tests passed" in result:
+                    submitted = True
             if verbose:
                 print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
             tool_results.append({
@@ -1072,6 +1083,7 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
         start = datetime.now()
         in_tok, out_tok, turns, submitted, messages = run_agent(
             system, tools, task_prompt, workdir, max_turns, verbose,
+            stop_on_submit=True,
         )
         elapsed = (datetime.now() - start).total_seconds()
 
