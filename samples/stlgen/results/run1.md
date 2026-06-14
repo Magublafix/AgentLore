@@ -2,71 +2,25 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-13 11:53 |
-| Model | claude-sonnet-4-6 |
+| Date | 2026-06-13 17:47 |
+| Model | qwen2.5-coder:7b (Ollama) |
 | Lore search active | no |
 | Turn budget | 20 |
 | Turns (main loop) | 20 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 3 |
+| Turns (wrapup) | 15 |
 | Task submitted | no (hit limit) |
-| Input tokens | 483,139 |
-| Output tokens | 19,221 |
-| Total tokens | 502,360 |
-| Concepts captured this run | 15 |
-| Elapsed | 121.6s |
+| Input tokens | 172,593 |
+| Output tokens | 5,131 |
+| Total tokens | 177,724 |
+| Concepts captured this run | 7 |
+| Elapsed | 1088.8s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-stl
-    result = subprocess.run(
-/usr/lib64/python3.9/subprocess.py:505: in run
-    with Popen(*popenargs, **kwargs) as process:
-/usr/lib64/python3.9/subprocess.py:951: in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-/usr/lib64/python3.9/subprocess.py:1837: in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-E   FileNotFoundError: [Errno 2] No such file or directory: 'text2stl'
-______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
-tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:22: in text2stl
-    result = subprocess.run(
-/usr/lib64/python3.9/subprocess.py:505: in run
-    with Popen(*popenargs, **kwargs) as process:
-/usr/lib64/python3.9/subprocess.py:951: in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-/usr/lib64/python3.9/subprocess.py:1837: in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-E   FileNotFoundError: [Errno 2] No such file or directory: 'text2stl'
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:22: in text2stl
-    result = subprocess.run(
-/usr/lib64/python3.9/subprocess.py:505: in run
-    with Popen(*popenargs, **kwargs) as process:
-/usr/lib64/python3.9/subprocess.py:951: in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-/usr/lib64/python3.9/subprocess.py:1837: in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-E   FileNotFoundError: [Errno 2] No such file or directory: 'text2stl'
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - FileNot...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - FileNotF...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - FileNotF...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
-FAILED tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected
-FAILED tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected - F...
-FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-========================= 9 failed, 4 errors in 1.85s ==========================
+ERROR: /tmp/lore_stlgen_run1_7qyrggzh/pyproject.toml: Expected newline or end of document after a statement (at line 1, column 7)
+
 
 ```
