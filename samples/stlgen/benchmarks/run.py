@@ -429,18 +429,43 @@ def handle_submit_concept(inputs: dict) -> str:
     raw_type = inputs.get("type") or inputs.get("kind") or ""
     ctype = raw_type if raw_type in _VALID_CONCEPT_TYPES else "pattern"
 
+    import hashlib as _hashlib
+    content_hash = _hashlib.sha256(content.lower().encode()).hexdigest()
+
     concept_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(LORE_DB_PATH))
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_name_lower ON concepts(LOWER(name))")
+        # Add content_hash column if not present (schema migration)
+        existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(concepts)")}
+        if "content_hash" not in existing_cols:
+            conn.execute("ALTER TABLE concepts ADD COLUMN content_hash TEXT")
+            conn.commit()
+        # Tier 1: exact name dedup
+        dup = conn.execute(
+            "SELECT concept_id FROM concepts WHERE LOWER(name) = LOWER(?) LIMIT 1", (name,)
+        ).fetchone()
+        if dup:
+            conn.close()
+            return json.dumps({"error": "duplicate", "existing_id": dup[0],
+                               "message": "a concept with this name already exists — try a different angle or skip"})
+        # Tier 2: content hash dedup
+        dup2 = conn.execute(
+            "SELECT concept_id, name FROM concepts WHERE content_hash = ? LIMIT 1", (content_hash,)
+        ).fetchone()
+        if dup2:
+            conn.close()
+            return json.dumps({"error": "duplicate_content", "existing_id": dup2[0], "existing_name": dup2[1],
+                               "message": "identical content already exists — skip or use that concept"})
         conn.execute(
             """
             INSERT INTO concepts (
                 concept_id, name, type, content, language,
                 when_to_use, dont_use_when, tags,
                 source_url, author, avg_rating, usage_count,
-                time_saved_avg_hours, created_at, embedding
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                time_saved_avg_hours, created_at, embedding, content_hash
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 concept_id, name, ctype, content,
@@ -448,7 +473,7 @@ def handle_submit_concept(inputs: dict) -> str:
                 inputs.get("dont_use_when", ""),
                 json.dumps(inputs.get("tags", [])),
                 inputs.get("source_url"), "benchmark",
-                0.0, 0, None, now, None,
+                0.0, 0, None, now, None, content_hash,
             ),
         )
         conn.commit()
