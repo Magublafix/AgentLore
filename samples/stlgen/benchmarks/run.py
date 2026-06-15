@@ -58,13 +58,12 @@ MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
 # Provider — set LORE_LLM_PROVIDER=local to use Ollama / any OpenAI-compatible server.
 # See samples/stlgen/README.md §"Running with a local LLM" for setup instructions.
 PROVIDER       = os.environ.get("LORE_LLM_PROVIDER", "anthropic")   # "anthropic" | "local"
-LOCAL_BASE_URL = os.environ.get("LORE_LOCAL_BASE_URL", "http://localhost:11434/v1")
-LOCAL_MODEL    = os.environ.get("LORE_LOCAL_MODEL", "qwen2.5-coder:7b")
-LOCAL_MAX_TOKENS = 4096  # conservative ceiling for 7B models
+# For local runs, point the Anthropic SDK at Ollama's /v1/messages endpoint.
+LOCAL_BASE_URL = os.environ.get("LORE_LOCAL_BASE_URL", "http://localhost:11434")
+LOCAL_MODEL    = os.environ.get("LORE_LOCAL_MODEL", "qwen2.5-coder:32b")
+LOCAL_MAX_TOKENS = 8192
 
-# Prepended to the system prompt for local models.  Local models (especially
-# 7B) tend to write prose plans instead of calling tools.  This directive
-# forces immediate tool use in the output format Ollama actually returns.
+# Prepended to the system prompt for local models to encourage immediate tool use.
 LOCAL_SYSTEM_PREFIX = """\
 CRITICAL INSTRUCTIONS FOR THIS SESSION:
 - Do NOT write plans, explanations, or prose of any kind.
@@ -674,58 +673,51 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
 # Agent loops
 # ---------------------------------------------------------------------------
 
-def _tools_to_openai(tools: list[dict]) -> list[dict]:
-    """Convert Anthropic tool schema format to OpenAI function-calling format."""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "parameters": t["input_schema"],
-            },
-        }
-        for t in tools
-    ]
+_TOOLS_REGISTRY_NAMES: set[str] = set()
 
 
-def _parse_tool_call_from_text(content: str) -> dict | None:
-    """Some local models output tool calls as JSON text instead of structured
-    tool_calls.  Try to extract a single tool call from the content string.
-    Returns an OpenAI-style tool_call dict, or None if nothing parseable."""
-    import re, uuid as _uuid
-    # Strip markdown code fences if present
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.DOTALL).strip()
-    # Try direct JSON parse
-    try:
-        obj = json.loads(text)
-    except json.JSONDecodeError:
-        # Try to find the first {...} block
-        m = re.search(r'\{.*\}', text, re.DOTALL)
-        if not m:
-            return None
+def _parse_tool_from_text_blocks(blocks: list[dict]) -> dict | None:
+    """For local models: extract a tool call from text content blocks.
+
+    Ollama's Anthropic-compatible API accepts tool definitions but the model
+    often returns JSON in a text block instead of a structured tool_use block.
+    Returns an Anthropic-format tool_use dict, or None.
+    """
+    for block in blocks:
+        if block.get("type") != "text":
+            continue
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", (block.get("text") or "").strip(), flags=re.DOTALL).strip()
         try:
-            obj = json.loads(m.group())
+            obj = json.loads(text)
         except json.JSONDecodeError:
-            return None
-    if not isinstance(obj, dict):
-        return None
-    name = obj.get("name") or obj.get("function")
-    args = obj.get("arguments") or obj.get("parameters") or obj.get("args") or {}
-    valid_names = {t.get("name") or t.get("function", {}).get("name") for t in _TOOLS_REGISTRY}
-    if not name or name not in valid_names:
-        return None
-    return {
-        "id": f"call_{_uuid.uuid4().hex[:8]}",
-        "type": "function",
-        "function": {"name": name, "arguments": json.dumps(args) if isinstance(args, dict) else args},
-    }
+            m = re.search(r"\{.*\}", text, re.DOTALL)
+            if not m:
+                continue
+            try:
+                obj = json.loads(m.group())
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(obj, dict):
+            continue
+        name = obj.get("name") or obj.get("function")
+        args = obj.get("arguments") or obj.get("parameters") or obj.get("args") or {}
+        if not name or name not in _TOOLS_REGISTRY_NAMES:
+            continue
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        return {
+            "type": "tool_use",
+            "id": f"toolu_{uuid.uuid4().hex[:16]}",
+            "name": name,
+            "input": args,
+        }
+    return None
 
 
-_TOOLS_REGISTRY: list[dict] = []  # populated in _run_agent_openai
-
-
-def _run_agent_openai(
+def _run_agent_anthropic(
     system: str,
     tools: list[dict],
     messages: list[dict],
@@ -735,108 +727,98 @@ def _run_agent_openai(
     label: str = "",
     stop_on_submit: bool = False,
 ) -> tuple[int, int, int, bool, list[dict]]:
-    """OpenAI-compatible agent loop (Ollama / vLLM / llama.cpp).
+    """Unified Anthropic-SDK agent loop for both cloud (Claude) and local (Ollama).
 
-    `messages` is the existing conversation — pass [system_msg, first_user_msg]
-    for a fresh loop, or an extended list to continue a prior session.
-    Returns (input_tokens, output_tokens, turns_used, submitted, messages).
+    For local runs, uses Ollama's Anthropic-compatible /v1/messages endpoint and
+    applies text promotion when the model returns JSON in a text block instead of
+    a structured tool_use block.
     """
-    import openai as _openai
-    global _TOOLS_REGISTRY
-    client = _openai.OpenAI(base_url=LOCAL_BASE_URL, api_key="ollama")
-    oai_tools = _tools_to_openai(tools)
-    _TOOLS_REGISTRY = tools  # used by _parse_tool_call_from_text
+    global _TOOLS_REGISTRY_NAMES
+    _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
+
+    if PROVIDER == "local":
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama")
+        model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
+    else:
+        client = anthropic.Anthropic()
+        model, max_tok = MODEL, 8192
+
     total_in = total_out = turns = 0
     submitted = False
 
     while turns < max_turns:
         try:
-            response = client.chat.completions.create(
-                model=LOCAL_MODEL,
-                max_tokens=LOCAL_MAX_TOKENS,
-                tools=oai_tools,
-                tool_choice="required",
-                messages=messages,
+            response = client.messages.create(
+                model=model, max_tokens=max_tok,
+                system=system, tools=tools, messages=messages,
             )
         except Exception as exc:
             print(f"  {label}[API ERROR turn {turns+1}] {exc}", flush=True)
             break
-        usage = response.usage
-        total_in  += usage.prompt_tokens     if usage else 0
-        total_out += usage.completion_tokens if usage else 0
+
+        total_in  += response.usage.input_tokens
+        total_out += response.usage.output_tokens
         turns += 1
 
-        choice = response.choices[0]
-        print(f"  {label}turn {turns:02d}/{max_turns} | finish={choice.finish_reason} "
-              f"| in={usage.prompt_tokens if usage else '?'} "
-              f"out={usage.completion_tokens if usage else '?'}", flush=True)
+        print(
+            f"  {label}turn {turns:02d}/{max_turns} | finish={response.stop_reason} "
+            f"| in={response.usage.input_tokens} out={response.usage.output_tokens}",
+            flush=True,
+        )
 
-        msg = choice.message
-        # Store assistant turn as plain dict (openai objects aren't JSON-serialisable)
-        assistant_entry: dict = {"role": "assistant", "content": msg.content or ""}
-        if msg.tool_calls:
-            assistant_entry["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                }
-                for tc in msg.tool_calls
-            ]
-        messages.append(assistant_entry)
+        # Serialise content to plain dicts so messages stay JSON-serialisable
+        content_blocks: list[dict] = []
+        for b in response.content:
+            if b.type == "tool_use":
+                content_blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+            elif b.type == "text":
+                content_blocks.append({"type": "text", "text": b.text})
 
-        # Ollama / some local models output tool calls as JSON text rather than
-        # structured tool_calls.  Parse and promote them so the loop can proceed.
-        if not msg.tool_calls and msg.content:
-            promoted = _parse_tool_call_from_text(msg.content)
+        messages.append({"role": "assistant", "content": content_blocks})
+
+        # Text promotion: local model wrote JSON in a text block instead of tool_use
+        if PROVIDER == "local" and not any(b.get("type") == "tool_use" for b in content_blocks):
+            promoted = _parse_tool_from_text_blocks(content_blocks)
             if promoted:
-                args_preview = promoted["function"]["arguments"][:120].replace("\n", " ")
-                print(f"  {label}[promoted text tool call: {promoted['function']['name']}  args={args_preview}]", flush=True)
-                assistant_entry["tool_calls"] = [promoted]
-                # Patch msg so the tool-execution block below sees the call.
-                msg = type("_Msg", (), {
-                    "tool_calls": [type("_TC", (), {
-                        "id": promoted["id"],
-                        "function": type("_F", (), {
-                            "name": promoted["function"]["name"],
-                            "arguments": promoted["function"]["arguments"],
-                        })(),
-                    })()],
-                    "content": msg.content,
-                })()
-                # Replace the last assistant entry (already appended) with the patched one.
-                messages[-1] = assistant_entry
+                args_preview = json.dumps(promoted["input"])[:120].replace("\n", " ")
+                print(f"  {label}[promoted text tool call: {promoted['name']}  args={args_preview}]", flush=True)
+                messages[-1] = {"role": "assistant", "content": [promoted]}
+                content_blocks = [promoted]
+            else:
+                if turns >= max_turns:
+                    print(f"  {label}[no tool calls, turn limit reached — stopping]", flush=True)
+                    break
+                print(f"  {label}[no tool calls on turn {turns} — nudging]", flush=True)
+                messages.append({
+                    "role": "user",
+                    "content": "You must call one of the available tools now. Output only a JSON tool call.",
+                })
+                continue
 
-        if not msg.tool_calls:
-            if turns >= max_turns:
-                print(f"  {label}[no tool calls, turn limit reached — stopping]", flush=True)
-                break
-            print(f"  {label}[no tool calls on turn {turns} — nudging]", flush=True)
-            messages.append({
-                "role": "user",
-                "content": "You must call one of the available tools now. Do not write prose — call a tool.",
-            })
-            continue
-
-        if choice.finish_reason == "stop" and not msg.tool_calls:
+        if response.stop_reason == "end_turn" and PROVIDER != "local":
             break
 
+        # Execute tool calls
         tool_results = []
-        for tc in msg.tool_calls:
-            name   = tc.function.name
-            inputs = json.loads(tc.function.arguments)
+        for block in content_blocks:
+            if block.get("type") != "tool_use":
+                continue
+            name   = block["name"]
+            inputs = block.get("input", {})
+            bid    = block["id"]
             if verbose:
-                print(f"    → {name}({json.dumps(inputs)[:100]})")
+                print(f"    → {name}({json.dumps(inputs)[:100]})", flush=True)
             result = handle_tool(name, inputs, workdir)
             if name == "submit":
-                # Only mark submitted when tests actually passed (or in phases without a workdir)
                 if workdir is None or "✓ all tests passed" in result:
                     submitted = True
             if verbose:
-                print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
-            tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                print(f"    ← {str(result)[:120].replace(chr(10), ' ')}", flush=True)
+            tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": result})
 
-        messages.extend(tool_results)
+        if tool_results:
+            messages.append({"role": "user", "content": tool_results})
+
         if stop_on_submit and submitted:
             break
 
@@ -852,133 +834,24 @@ def run_agent(
     verbose: bool,
     stop_on_submit: bool = False,
 ) -> tuple[int, int, int, bool, list[dict]]:
-    """Returns (input_tokens, output_tokens, turns_used, submitted, messages).
-
-    The messages list is returned so a follow-on phase (capture, wrapup) can
-    continue the same conversation without losing context.
-    Messages are in provider-native format (Anthropic or OpenAI), consistent
-    with the PROVIDER constant so capture/wrapup phases can continue them.
-    """
-    if PROVIDER == "local":
-        seed: list[dict] = [
-            {"role": "system", "content": system},
-            {"role": "user",   "content": first_message},
-        ]
-        return _run_agent_openai(system, tools, seed, workdir, max_turns, verbose,
-                                 stop_on_submit=stop_on_submit)
-
-    # Anthropic path
-    client = anthropic.Anthropic()
+    """Returns (input_tokens, output_tokens, turns_used, submitted, messages)."""
     messages: list[dict] = [{"role": "user", "content": first_message}]
-    total_in = total_out = turns = 0
-    submitted = False
-
-    while turns < max_turns:
-        response = client.messages.create(
-            model=MODEL, max_tokens=8192,
-            system=system, tools=tools, messages=messages,
-        )
-        total_in += response.usage.input_tokens
-        total_out += response.usage.output_tokens
-        turns += 1
-
-        if verbose:
-            print(f"  turn {turns:02d}/{max_turns} | stop={response.stop_reason} "
-                  f"| in={response.usage.input_tokens:,} out={response.usage.output_tokens:,}")
-
-        assistant_content = response.content
-        messages.append({"role": "assistant", "content": assistant_content})
-
-        if response.stop_reason == "end_turn":
-            break
-
-        tool_results = []
-        for block in assistant_content:
-            if block.type != "tool_use":
-                continue
-            if verbose:
-                print(f"    → {block.name}({json.dumps(block.input)[:100]})")
-            result = handle_tool(block.name, block.input, workdir)
-            if block.name == "submit":
-                if workdir is None or "✓ all tests passed" in result:
-                    submitted = True
-            if verbose:
-                print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": result,
-            })
-
-        if tool_results:
-            messages.append({"role": "user", "content": tool_results})
-
-    return total_in, total_out, turns, submitted, messages
+    return _run_agent_anthropic(system, tools, messages, workdir, max_turns, verbose,
+                                stop_on_submit=stop_on_submit)
 
 
 def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple[int, int, int]:
-    """
-    Continue the same conversation for concept extraction — the agent has full
-    context of what it tried above, so no activity log or fresh agent needed.
-    Messages are provider-native (set by run_agent). Returns (in, out, turns).
+    """Continue the same conversation for concept extraction.
+
+    The agent has full context of what it tried above, so no fresh agent needed.
+    Returns (in_tokens, out_tokens, turns).
     """
     print(f"\n  [capture] continuing session for concept extraction — up to {MAX_TURNS_CAPTURE} turns...")
-    # Inject the capture prompt as the next user turn — same format for both providers
     capture_messages = list(messages) + [{"role": "user", "content": FORCED_CAPTURE_PROMPT}]
-
-    if PROVIDER == "local":
-        in_tok, out_tok, turns, _, _ = _run_agent_openai(
-            system, TOOLS_CAPTURE, capture_messages,
-            workdir=None, max_turns=MAX_TURNS_CAPTURE, verbose=verbose, label="[capture] ",
-        )
-    else:
-        client = anthropic.Anthropic()
-        total_in = total_out = turns = 0
-        while turns < MAX_TURNS_CAPTURE:
-            response = client.messages.create(
-                model=MODEL, max_tokens=8192,
-                system=system, tools=TOOLS_CAPTURE, messages=capture_messages,
-            )
-            total_in += response.usage.input_tokens
-            total_out += response.usage.output_tokens
-            turns += 1
-
-            if verbose:
-                print(f"  [capture] turn {turns:02d}/{MAX_TURNS_CAPTURE} | stop={response.stop_reason} "
-                      f"| in={response.usage.input_tokens:,} out={response.usage.output_tokens:,}")
-
-            assistant_content = response.content
-            capture_messages.append({"role": "assistant", "content": assistant_content})
-
-            if response.stop_reason == "end_turn":
-                break
-
-            tool_results = []
-            submitted = False
-            for block in assistant_content:
-                if block.type != "tool_use":
-                    continue
-                if verbose:
-                    print(f"    → {block.name}({json.dumps(block.input)[:100]})")
-                result = handle_tool(block.name, block.input, workdir=None)
-                if block.name == "submit":
-                    submitted = True
-                if verbose:
-                    print(f"    ← {str(result)[:120].replace(chr(10), ' ')}")
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result,
-                })
-
-            if tool_results:
-                capture_messages.append({"role": "user", "content": tool_results})
-
-            if submitted:
-                break
-
-        in_tok, out_tok = total_in, total_out
-
+    in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
+        system, TOOLS_CAPTURE, capture_messages,
+        workdir=None, max_turns=MAX_TURNS_CAPTURE, verbose=verbose, label="[capture] ",
+    )
     print(f"  [capture] done — {_count_concepts()} total concepts in DB "
           f"({turns} turns, {in_tok + out_tok:,} tokens)")
     return in_tok, out_tok, turns
@@ -1027,13 +900,10 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
         wrapup_system = LOCAL_SYSTEM_PREFIX + wrapup_system
 
     if PROVIDER == "local":
-        # qwen2.5-coder stalls after rating one concept in a shared session.
-        # Fix: one focused API call per concept, no shared conversation state.
-        import openai as _openai
-        global _TOOLS_REGISTRY
-        client = _openai.OpenAI(base_url=LOCAL_BASE_URL, api_key="ollama")
-        oai_tools = _tools_to_openai(TOOLS_WRAPUP)
-        _TOOLS_REGISTRY = TOOLS_WRAPUP
+        # One focused API call per concept — avoids stalling in a shared session.
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama")
+        global _TOOLS_REGISTRY_NAMES
+        _TOOLS_REGISTRY_NAMES = {t["name"] for t in TOOLS_WRAPUP}
 
         print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — one call per concept...", flush=True)
         total_in = total_out = total_turns = 0
@@ -1041,73 +911,61 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
         for i, cid in enumerate(session_ids):
             line = concept_lines[i].strip() if i < len(concept_lines) else f"id={cid}"
             single_prompt = (
-                f"Rate this concept using ONLY this JSON format:\n"
-                f'{{"name": "rate_concept", "arguments": {{"concept_id": "{cid}", "outcome": <1-5>, "notes": "<why>"}}}}\n\n'
+                f"Rate this concept using rate_concept.\n\n"
                 f"Concept: {line}\n\n"
                 f"Outcome guide: 5=solved key problem, 4=very helpful, 3=somewhat useful, "
-                f"2=barely used, 1=irrelevant\n"
-                f"Output only the JSON, nothing else."
+                f"2=barely used, 1=irrelevant"
             )
-            messages: list[dict] = [
-                {"role": "system", "content": wrapup_system},
-                {"role": "user",   "content": single_prompt},
-            ]
+            wrapup_msgs: list[dict] = [{"role": "user", "content": single_prompt}]
             rated = False
+
             for attempt in range(5):
                 try:
-                    response = client.chat.completions.create(
+                    response = client.messages.create(
                         model=LOCAL_MODEL,
                         max_tokens=LOCAL_MAX_TOKENS,
-                        tools=oai_tools,
-                        tool_choice="required",
-                        messages=messages,
+                        system=wrapup_system,
+                        tools=TOOLS_WRAPUP,
+                        messages=wrapup_msgs,
                     )
                 except Exception as exc:
                     print(f"  [wrapup] concept {i+1} API error: {exc}", flush=True)
                     break
-                usage = response.usage
-                total_in  += usage.prompt_tokens     if usage else 0
-                total_out += usage.completion_tokens if usage else 0
+
+                total_in  += response.usage.input_tokens
+                total_out += response.usage.output_tokens
                 total_turns += 1
 
-                choice = response.choices[0]
-                msg = choice.message
+                content_blocks: list[dict] = []
+                for b in response.content:
+                    if b.type == "tool_use":
+                        content_blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+                    elif b.type == "text":
+                        content_blocks.append({"type": "text", "text": b.text})
 
-                # Promote JSON-in-text tool calls (qwen returns these instead of tool_calls)
-                tc_list = list(msg.tool_calls) if msg.tool_calls else []
-                if not tc_list and msg.content:
-                    promoted = _parse_tool_call_from_text(msg.content)
+                # Text promotion for local models
+                if not any(b.get("type") == "tool_use" for b in content_blocks):
+                    promoted = _parse_tool_from_text_blocks(content_blocks)
                     if promoted:
-                        print(f"  [wrapup] [promoted text tool call: {promoted['function']['name']}]", flush=True)
-                        tc_list = [type("_TC", (), {
-                            "id": promoted["id"],
-                            "function": type("_F", (), {
-                                "name": promoted["function"]["name"],
-                                "arguments": promoted["function"]["arguments"],
-                            })(),
-                        })()]
+                        print(f"  [wrapup] [promoted text tool call: {promoted['name']}]", flush=True)
+                        content_blocks = [promoted]
 
-                if not tc_list:
+                tool_blocks = [b for b in content_blocks if b.get("type") == "tool_use"]
+                if not tool_blocks:
                     print(f"  [wrapup] concept {i+1} no tool call (attempt {attempt+1}) — retrying", flush=True)
-                    messages.append({"role": "assistant", "content": msg.content or ""})
-                    messages.append({"role": "user", "content": "Call rate_concept now. Output only JSON."})
+                    wrapup_msgs.append({"role": "assistant", "content": content_blocks})
+                    wrapup_msgs.append({"role": "user", "content": f"Call rate_concept for concept id={cid}."})
                     continue
 
-                for tc in tc_list:
-                    tc_name   = tc.function.name
-                    inputs = json.loads(tc.function.arguments)
+                for block in tool_blocks:
                     if verbose:
-                        print(f"    → {tc_name}({json.dumps(inputs)[:100]})", flush=True)
-                    result = handle_tool(tc_name, inputs, workdir=None)
+                        print(f"    → {block['name']}({json.dumps(block.get('input',{}))[:100]})", flush=True)
+                    result = handle_tool(block["name"], block.get("input", {}), workdir=None)
                     if verbose:
                         print(f"    ← {str(result)[:120].replace(chr(10), ' ')}", flush=True)
-                    if tc_name == "rate_concept":
+                    if block["name"] == "rate_concept":
                         rated = True
-
-                if rated:
-                    break
-                messages.append({"role": "assistant", "content": msg.content or ""})
-                messages.append({"role": "user", "content": f"Now call rate_concept for concept id={cid}."})
+                break
 
             if not rated:
                 print(f"  [wrapup] concept {i+1} ({cid}) — skipped after 5 attempts", flush=True)
@@ -1116,7 +974,7 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
         print(f"  [wrapup] done ({total_turns} turns, {total_in + total_out:,} tokens) — session cleared.", flush=True)
         return total_in, total_out, total_turns
 
-    # Cloud path: single session rates all concepts, ends with submit
+    # Cloud / unified path: single session rates all concepts, ends with submit
     wrapup_prompt = (
         f"You have just completed Run {run_num} of the text2stl benchmark. "
         f"The following concepts were used or captured during this run:\n\n"
