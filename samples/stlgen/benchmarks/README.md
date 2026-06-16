@@ -8,14 +8,14 @@ Build a `text2stl` CLI that converts a text string (≤15 chars) into a 3D-print
 
 ## Run structure
 
-| Run | Lore active | Purpose |
-|-----|-------------|---------|
-| 1   | ❌ no        | Baseline — model's raw capability without any Lore knowledge |
-| 2   | ✅ yes       | Treatment — model searches Lore before writing code |
-| 3   | ❌ no        | Second baseline — independent replication of run 1 |
-| 4   | ✅ yes       | Second treatment — Lore DB now has concepts from runs 1–3 too |
+| Run | Lore active | DB state at start | Purpose |
+|-----|-------------|-------------------|---------|
+| 1   | ❌ no        | seed concept only | Control — proves the model cannot solve the task without Lore |
+| 2   | ✅ yes       | seed concept only | Core test — does the seed concept rescue the model? |
+| 3   | ✅ yes       | seed + Run 1–2 concepts | Does accumulated knowledge (including failed-run noise) help further? |
+| 4   | ✅ yes       | seed + Run 1–3 concepts | Does more Lore context improve or regress? |
 
-Runs 1 and 3 are control; runs 2 and 4 are treatment. Comparing PASS/FAIL and token usage between pairs isolates the Lore effect.
+Run 1 is the single control. Runs 2–4 are treatment with progressively richer Lore context.
 
 ## How to run
 
