@@ -2,61 +2,60 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-15 02:50 |
-| Model | qwen2.5-coder:7b |
-| Lore search active | yes (30 concepts) |
+| Date | 2026-06-16 10:07 |
+| Model | qwen2.5-coder:32b |
+| Lore search active | yes (12 concepts) |
 | Turn budget | 20 |
 | Turns (main loop) | 20 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 6 |
+| Turns (wrapup) | 12 |
 | Task submitted | no (hit limit) |
-| Input tokens | 128,922 |
-| Output tokens | 5,136 |
-| Total tokens | 134,058 |
-| Concepts captured this run | 2 |
-| Elapsed | 1958.4s |
+| Input tokens | 374,576 |
+| Output tokens | 10,263 |
+| Total tokens | 384,839 |
+| Concepts captured this run | 7 |
+| Elapsed | 3131.0s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-ck (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
+il(
+E   Failed: text2stl ABCDEFGHIJKLMNO -o /tmp/pytest-of-magublafix/pytest-117/test_max_length0/max.stl exited 1
+E   stdout: 
+E   stderr: Error: 'numpy.ndarray' object has no attribute 'is_empty'
+_________________ TestInvocation.test_default_output_filename __________________
+/tmp/lore_stlgen_run4_uzqkyhfi/tests/test_text2stl_cli.py:117: in test_default_output_filename
+    text2stl("HI")
+/tmp/lore_stlgen_run4_uzqkyhfi/tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HI exited 1
+E   stdout: 
+E   stderr: Error: 'numpy.ndarray' object has no attribute 'is_empty'
 _______________ TestDimensions.test_width_scales_with_char_count _______________
 tests/test_text2stl_cli.py:184: in test_width_scales_with_char_count
     text2stl("A", "-o", str(out1))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-71/test_width_scales_with_char_co0/a.stl exited 1
+E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-117/test_width_scales_with_char_co0/a.stl exited 1
 E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
+E   stderr: Error: 'numpy.ndarray' object has no attribute 'is_empty'
 ______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
 tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
     text2stl("HELLO", "-o", str(out))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-71/test_cross_section_is_nonempty0/hello.stl exited 1
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-117/test_cross_section_is_nonempty0/hello.stl exited 1
 E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
+E   stderr: Error: 'numpy.ndarray' object has no attribute 'is_empty'
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
 tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
     text2stl("HELLO", "-o", str(out))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-71/test_character_shapes_match_te0/hello.stl exited 1
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-117/test_character_shapes_match_te0/hello.stl exited 1
 E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 5, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
+E   stderr: Error: 'numpy.ndarray' object has no attribute 'is_empty'
 =========================== short test summary info ============================
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
@@ -69,6 +68,6 @@ ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 2.31s =====================
+==================== 7 failed, 2 passed, 4 errors in 27.77s ====================
 
 ```

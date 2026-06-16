@@ -635,7 +635,10 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
             out += f"\n[stderr]\n{result.stderr}"
         if result.returncode != 0:
             out += f"\n[exit {result.returncode}]"
-        return out.strip() or "(no output)"
+        out = out.strip() or "(no output)"
+        if len(out) > 4000:
+            out = out[:2000] + f"\n... [truncated {len(out)-4000} chars] ...\n" + out[-2000:]
+        return out
 
     if name == "write_file" and workdir:
         path = workdir / inputs["path"]
@@ -676,6 +679,56 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
 _TOOLS_REGISTRY_NAMES: set[str] = set()
 
 
+def _extract_first_json_object(text: str) -> str | None:
+    """Return the first balanced {...} substring.
+
+    When the model emits multiple tool calls as separate JSON objects in one
+    text block, the greedy r"\{.*\}" regex grabs all of them and produces
+    invalid JSON. This walks characters to find the end of the first balanced
+    object instead.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape_next = False
+    for i, ch in enumerate(text[start:], start):
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\" and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
+def _try_parse_obj(candidate: str) -> dict | None:
+    """JSON parse with re-escape fallback for literal control chars in string values."""
+    try:
+        obj = json.loads(candidate)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    try:
+        escaped = candidate.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+        obj = json.loads(escaped)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+
 def _parse_tool_from_text_blocks(blocks: list[dict]) -> dict | None:
     """For local models: extract a tool call from text content blocks.
 
@@ -686,19 +739,21 @@ def _parse_tool_from_text_blocks(blocks: list[dict]) -> dict | None:
     for block in blocks:
         if block.get("type") != "text":
             continue
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", (block.get("text") or "").strip(), flags=re.DOTALL).strip()
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError:
-            m = re.search(r"\{.*\}", text, re.DOTALL)
-            if not m:
-                continue
-            try:
-                obj = json.loads(m.group())
-            except json.JSONDecodeError:
-                continue
-        if not isinstance(obj, dict):
+        text = re.sub(
+            r"^```(?:json)?\s*|\s*```$",
+            "",
+            (block.get("text") or "").strip(),
+            flags=re.DOTALL,
+        ).strip()
+
+        obj = _try_parse_obj(text)
+        if obj is None:
+            first = _extract_first_json_object(text)
+            if first:
+                obj = _try_parse_obj(first)
+        if obj is None:
             continue
+
         name = obj.get("name") or obj.get("function")
         args = obj.get("arguments") or obj.get("parameters") or obj.get("args") or {}
         if not name or name not in _TOOLS_REGISTRY_NAMES:
@@ -737,7 +792,7 @@ def _run_agent_anthropic(
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
     if PROVIDER == "local":
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=300.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=600.0)
         model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
     else:
         client = anthropic.Anthropic()
@@ -768,11 +823,16 @@ def _run_agent_anthropic(
 
         # Serialise content to plain dicts so messages stay JSON-serialisable
         content_blocks: list[dict] = []
-        for b in response.content:
+        for b in (response.content or []):
             if b.type == "tool_use":
                 content_blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
             elif b.type == "text":
                 content_blocks.append({"type": "text", "text": b.text})
+
+        if not content_blocks:
+            print(f"  {label}[empty response on turn {turns} — retrying]", flush=True)
+            messages.append({"role": "user", "content": "You must call one of the available tools now. Output only a JSON tool call."})
+            continue
 
         messages.append({"role": "assistant", "content": content_blocks})
 
@@ -788,7 +848,9 @@ def _run_agent_anthropic(
                 if turns >= max_turns:
                     print(f"  {label}[no tool calls, turn limit reached — stopping]", flush=True)
                     break
-                print(f"  {label}[no tool calls on turn {turns} — nudging]", flush=True)
+                # Log the first 300 chars of what the model said so we can diagnose parse failures
+                raw_text = " ".join(b.get("text","") for b in content_blocks if b.get("type")=="text")
+                print(f"  {label}[no tool calls on turn {turns} — model said: {raw_text[:300].replace(chr(10),' ')}]", flush=True)
                 messages.append({
                     "role": "user",
                     "content": "You must call one of the available tools now. Output only a JSON tool call.",
@@ -901,7 +963,7 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
 
     if PROVIDER == "local":
         # One focused API call per concept — avoids stalling in a shared session.
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=300.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=600.0)
         global _TOOLS_REGISTRY_NAMES
         _TOOLS_REGISTRY_NAMES = {t["name"] for t in TOOLS_WRAPUP}
 
