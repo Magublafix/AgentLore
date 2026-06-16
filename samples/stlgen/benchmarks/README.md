@@ -1,0 +1,85 @@
+# stlgen benchmark
+
+Measures whether Lore helps a local LLM complete a coding task it cannot reliably solve on its own.
+
+## Task
+
+Build a `text2stl` CLI that converts a text string (≤15 chars) into a 3D-printable STL file with raised letters. The implementation must pass 13 pytest tests covering invocation, geometry, and mesh validity.
+
+## Run structure
+
+| Run | Lore active | Purpose |
+|-----|-------------|---------|
+| 1   | ❌ no        | Baseline — model's raw capability without any Lore knowledge |
+| 2   | ✅ yes       | Treatment — model searches Lore before writing code |
+| 3   | ❌ no        | Second baseline — independent replication of run 1 |
+| 4   | ✅ yes       | Second treatment — Lore DB now has concepts from runs 1–3 too |
+
+Runs 1 and 3 are control; runs 2 and 4 are treatment. Comparing PASS/FAIL and token usage between pairs isolates the Lore effect.
+
+## How to run
+
+```bash
+# Cloud Claude (anthropic provider)
+python benchmarks/run.py --run 1
+
+# Local model via Ollama Anthropic-compatible API
+LORE_LLM_PROVIDER=local \
+LORE_LOCAL_BASE_URL=http://192.168.1.38:11434 \
+LORE_LOCAL_MODEL=qwen2.5-coder:32b \
+python benchmarks/run.py --run 1
+```
+
+Run all four sequentially:
+
+```bash
+for i in 1 2 3 4; do python benchmarks/run.py --run $i; done
+```
+
+## Seeding rationale
+
+The benchmark includes hand-authored seed concepts in `seed_concepts/`. These are injected into the Lore DB immediately after the Run 1 reset, before any model runs.
+
+**Why we seed:**
+
+All local models tested (qwen2.5-coder:7b, qwen2.5-coder:32b, deepseek-r1:32b) consistently failed to complete the task due to a specific knowledge gap: they hallucinate non-existent trimesh geometry APIs (`trimesh.contour`, `trimesh.triangulation`, `trimesh.creation.text()` etc.). The real pipeline uses `skimage.measure.find_contours()` + `trimesh.creation.extrude_polygon()`, which is sparsely represented in training data.
+
+This is a training-data gap, not a reasoning failure. The models understand *what* to do (render text → extract contours → extrude → export STL) but confabulate the *how*.
+
+Without seeding, all 4 runs produce FAIL because:
+- Run 1 fails (model doesn't know the right API)
+- Run 2 searches Lore but finds nothing useful (DB only has wrong concepts from Run 1)
+- Runs 3 and 4 repeat the same failure
+
+This defeats the purpose of the benchmark: we cannot measure whether Lore *helps* if Lore never has the right answer.
+
+**What seeding tests:**
+
+With a correct seed concept in the DB, the Lore-ON runs (2 and 4) retrieve it on turn 1 via `search_concepts`. If the model uses the retrieved API correctly, tests pass — demonstrating that Lore-sourced knowledge can rescue a model from a pure knowledge gap. The Lore-OFF runs (1 and 3) still lack the information and are expected to fail, giving a clean FAIL vs PASS comparison.
+
+This is the core Lore hypothesis in its purest form: *one agent captures working knowledge; a future agent uses it to succeed where it would otherwise fail.*
+
+**What seeding does NOT test:**
+
+- Whether the model would organically capture the right approach (it wouldn't — it never succeeds)
+- Whether the Lore graph is self-populating from model runs alone
+- General Lore utility beyond this specific knowledge gap
+
+## Seed concepts
+
+| File | Concept | Purpose |
+|------|---------|---------|
+| `seed_concepts/trimesh_pil_text_to_stl.md` | PIL + scikit-image + trimesh text-to-STL pipeline | Provides the correct library API path the model needs |
+
+## Results
+
+Results are written to `results/run{N}.md` after each run.
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LORE_LLM_PROVIDER` | `anthropic` | `anthropic` or `local` |
+| `LORE_LOCAL_BASE_URL` | `http://localhost:11434` | Ollama base URL (no `/v1`) |
+| `LORE_LOCAL_MODEL` | `qwen2.5-coder:32b` | Model name for local runs |
+| `LORE_DB_PATH` | `~/.lore/lore.db` | Path to Lore SQLite DB |

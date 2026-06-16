@@ -739,10 +739,15 @@ def _parse_tool_from_text_blocks(blocks: list[dict]) -> dict | None:
     for block in blocks:
         if block.get("type") != "text":
             continue
+        raw = (block.get("text") or "").strip()
+        # deepseek-r1 wraps reasoning in <think>...</think> — strip paired blocks
+        # then also any stray orphan closing tag the model sometimes emits first
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
+        raw = re.sub(r"</think>", "", raw).strip()
         text = re.sub(
             r"^```(?:json)?\s*|\s*```$",
             "",
-            (block.get("text") or "").strip(),
+            raw,
             flags=re.DOTALL,
         ).strip()
 
@@ -1088,6 +1093,7 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
 
     if run_num == 1:
         _clear_db()
+        _seed_concepts()
 
     concepts_in_db = _count_concepts()
 
@@ -1186,6 +1192,53 @@ def _clear_db() -> None:
     if SESSION_FILE.exists():
         SESSION_FILE.write_text("[]")
     print("  [reset] concept DB cleared — starting from 0 concepts.")
+
+
+def _seed_concepts() -> None:
+    """Inject hand-authored seed concepts from seed_concepts/ into the DB.
+
+    Seed concepts are markdown files with YAML frontmatter providing name, type,
+    when_to_use, and tags.  The file body below the frontmatter becomes content.
+    They survive the DB reset and are available from Run 1 onward so that the
+    Lore-ON runs (2 and 4) can find correct library knowledge even when no prior
+    run has captured it organically.
+
+    See README.md §Seeding rationale for why this is done.
+    """
+    seed_dir = Path(__file__).parent / "seed_concepts"
+    if not seed_dir.exists():
+        return
+    seeded = 0
+    for md_file in sorted(seed_dir.glob("*.md")):
+        raw = md_file.read_text(encoding="utf-8")
+        # Parse YAML frontmatter between --- markers
+        fm: dict = {}
+        body = raw
+        if raw.startswith("---"):
+            parts = raw.split("---", 2)
+            if len(parts) >= 3:
+                import re as _re
+                for line in parts[1].splitlines():
+                    m = _re.match(r"^(\w[\w_-]*):\s*(.+)$", line.strip())
+                    if m:
+                        fm[m.group(1)] = m.group(2).strip()
+                body = parts[2].strip()
+        inputs = {
+            "name":        fm.get("name", md_file.stem),
+            "type":        fm.get("type", "library"),
+            "content":     body,
+            "when_to_use": fm.get("when_to_use", ""),
+            "tags":        fm.get("tags", "").split(","),
+        }
+        result = handle_submit_concept(inputs)
+        parsed = json.loads(result) if result.startswith("{") else {}
+        if "error" in parsed:
+            print(f"  [seed] {md_file.name}: skipped — {parsed['error']}", flush=True)
+        else:
+            print(f"  [seed] {md_file.name}: concept #{parsed.get('id','?')} inserted", flush=True)
+            seeded += 1
+    if seeded:
+        print(f"  [seed] {seeded} concept(s) seeded into DB.", flush=True)
 
 
 def _write_run_md(r: dict, test_out: str) -> None:
