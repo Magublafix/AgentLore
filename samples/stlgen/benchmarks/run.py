@@ -302,8 +302,24 @@ TOOL_RATE_CONCEPT = {
     },
 }
 
-TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT]
-TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT]
+TOOL_WEB_SEARCH = {
+    "name": "web_search",
+    "description": (
+        "Search the web for documentation, API examples, and solutions. "
+        "Returns up to 5 results with title, URL, and a short snippet. "
+        "Use this when you need to look up library APIs or find working code examples."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query"},
+        },
+        "required": ["query"],
+    },
+}
+
+TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
+TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
 TOOLS_CAPTURE   = [TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT]
 TOOLS_WRAPUP    = [TOOL_RATE_CONCEPT, TOOL_SUBMIT]
 
@@ -316,6 +332,7 @@ def build_system_no_lore() -> str:
         return (
             "You are an expert Python developer. Implement the CLI exactly as specified. "
             "Use tools to write files and run shell commands. "
+            "Use web_search to look up library APIs and examples when you are unsure. "
             "Use submit_concept(name, type, content, when_to_use, tags) to save domain patterns you discover."
         )
     capture_skill = _load_skill("capture-concept")
@@ -336,6 +353,7 @@ def build_system_with_lore() -> str:
             "You are an expert Python developer. Implement the CLI exactly as specified. "
             "Use tools to write files and run shell commands. "
             "Search Lore before writing any code. "
+            "Use web_search to look up library APIs and examples when Lore doesn't have what you need. "
             "Use submit_concept(name, type, content, when_to_use, tags) to save new domain patterns."
         )
     search_skill  = _load_skill("search-concepts")
@@ -601,6 +619,27 @@ def handle_rate_concept(inputs: dict) -> str:
     return json.dumps({"rated": concept_id, "outcome": outcome, "avg_rating": agg["avg_o"] or 0.0})
 
 
+def handle_web_search(inputs: dict) -> str:
+    query = inputs.get("query", "").strip()
+    if not query:
+        return json.dumps({"error": "query is required"})
+    try:
+        from ddgs import DDGS
+        results = list(DDGS().text(query, max_results=5))
+    except Exception as exc:
+        return json.dumps({"error": f"search failed: {exc}"})
+    if not results:
+        return json.dumps({"results": [], "message": "No results found"})
+    out = []
+    for r in results:
+        out.append({
+            "title": r.get("title", ""),
+            "url": r.get("href", ""),
+            "snippet": (r.get("body") or "")[:400],
+        })
+    return json.dumps({"results": out})
+
+
 def _update_session(concept_ids) -> None:
     try:
         SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -669,6 +708,9 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
 
     if name == "rate_concept":
         return handle_rate_concept(inputs)
+
+    if name == "web_search":
+        return handle_web_search(inputs)
 
     return f"[error: unknown tool {name!r}]"
 
@@ -1263,6 +1305,7 @@ def _write_run_md(r: dict, test_out: str) -> None:
         f"| Date | {datetime.now().strftime('%Y-%m-%d %H:%M')} |\n"
         f"| Model | {LOCAL_MODEL if PROVIDER == 'local' else MODEL} |\n"
         f"| Lore search active | {lore} |\n"
+        f"| Web search active | yes |\n"
         f"| Turn budget | {r['turn_budget']} |\n"
         f"| Turns (main loop) | {r['turns_main']} |\n"
         f"| Turns (capture) | {r['turns_capture']} |\n"
