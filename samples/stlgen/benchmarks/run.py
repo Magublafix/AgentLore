@@ -1110,7 +1110,7 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
     concepts_in_db = _count_concepts()
 
     lore_label = f"Lore ON ({concepts_in_db} concepts)" if lore_active else "no Lore"
-    print(f"\n{'='*60}\n  Run {run_num}/4 — {lore_label}  |  {max_turns} turns  |  {MODEL}\n{'='*60}")
+    print(f"\n{'='*60}\n  Run {run_num} — {lore_label}  |  {max_turns} turns  |  {MODEL}\n{'='*60}")
 
     if dry_run:
         print("[dry-run] skipping.")
@@ -1258,7 +1258,7 @@ def _write_run_md(r: dict, test_out: str) -> None:
     run_n = r["run"]
     lore = f"yes ({r['concepts_available']} concepts)" if r["lore_active"] else "no"
     (RESULTS_DIR / f"run{run_n}.md").write_text(
-        f"# Benchmark — Run {run_n}/4\n\n"
+        f"# Benchmark — Run {run_n}\n\n"
         f"| Field | Value |\n|-------|-------|\n"
         f"| Date | {datetime.now().strftime('%Y-%m-%d %H:%M')} |\n"
         f"| Model | {LOCAL_MODEL if PROVIDER == 'local' else MODEL} |\n"
@@ -1345,7 +1345,7 @@ def main() -> None:
         epilog=__doc__,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--run", type=int, choices=[1, 2, 3, 4], metavar="{1,2,3,4}",
+    mode.add_argument("--run", type=int, choices=[1, 2, 3, 4, 5], metavar="{1,2,3,4,5}",
                       help="Run a single numbered run")
     mode.add_argument("--all", action="store_true",
                       help="Run all 4 in sequence (pauses for wrapup reminders)")

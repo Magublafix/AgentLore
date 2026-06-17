@@ -38,6 +38,7 @@ trimesh, Pillow, scikit-image, shapely, numpy
 - `trimesh.triangulation` — does not exist
 - `trimesh.creation.text()` — does not exist
 - `trimesh.creation.from_contours()` — does not exist
+- `trimesh.voxel.marching_cubes()` — does not exist in trimesh; use the skimage + extrude_polygon pipeline instead
 - `numpy.ndarray.is_empty` — does NOT exist. `contour` from `find_contours` is a numpy array. You must convert it to `Polygon(contour[:, ::-1])` first, then call `poly.is_empty` or `poly.is_valid` on the Shapely Polygon object.
 
 ## Critical rendering parameters (must use these values)
