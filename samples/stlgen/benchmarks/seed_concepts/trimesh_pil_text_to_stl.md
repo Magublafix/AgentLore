@@ -38,7 +38,33 @@ trimesh, Pillow, scikit-image, shapely, numpy
 - `trimesh.triangulation` — does not exist
 - `trimesh.creation.text()` — does not exist
 - `trimesh.creation.from_contours()` — does not exist
-- `numpy.ndarray.is_empty` — does not exist; use `polygon.is_empty` on a Shapely object
+- `numpy.ndarray.is_empty` — does NOT exist. `contour` from `find_contours` is a numpy array. You must convert it to `Polygon(contour[:, ::-1])` first, then call `poly.is_empty` or `poly.is_valid` on the Shapely Polygon object.
+
+## Critical rendering parameters (must use these values)
+
+- `font_size = 72` — DO NOT use smaller values; the rendered bitmap must be large enough for `find_contours` to detect pixel-level outlines
+- `img_width = max(len(text) * font_size, 64)` — wide enough for all characters
+- `img_height = font_size * 2` — tall enough for descenders
+- `poly.area < 50` — minimum area filter to skip noise contours
+
+## CLI wiring (argparse, not Click)
+
+Use `argparse` for the CLI entry point — it avoids Click-specific decorator traps:
+
+```python
+def main():
+    import argparse, sys
+    parser = argparse.ArgumentParser()
+    parser.add_argument("text")
+    parser.add_argument("-o", "--output", default="output.stl")
+    args = parser.parse_args()
+    if not args.text or len(args.text) > 15:
+        print("Error: text must be 1–15 characters", file=sys.stderr)
+        sys.exit(1)
+    text_to_mesh(args.text).export(args.output)
+```
+
+Do NOT use Click unless you are confident with `@click.command()` + `@click.argument()` decorators.
 
 ## Complete minimal implementation
 

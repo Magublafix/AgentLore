@@ -75,6 +75,25 @@ This is the core Lore hypothesis in its purest form: *one agent captures working
 
 Results are written to `results/run{N}.md` after each run.
 
+### Sprint 3 run — qwen2.5-coder:32b (seeded benchmark)
+
+| Run | Lore | Tests | Error type | Tokens | Time |
+|-----|------|-------|------------|--------|------|
+| 1 | ❌ | 0/13 pass | `text2stl` CLI not installed | 246K | 33 min |
+| 2 | ✅ | 2/13 pass | "No contours found for text" | 153K | 101 min |
+| 3 | ✅ | 2/13 pass | `main()` missing CLI arg wiring (Click bug) | 136K | 93 min |
+| 4 | ✅ | 2/13 pass | `numpy.ndarray has no attribute 'is_empty'` | 385K | 52 min |
+
+**Observations:**
+
+- **Run 1 (no Lore)**: Model hallucinated entirely wrong APIs, never produced a working CLI entry point at all — 0 tests pass.
+- **Runs 2–4 (Lore ON)**: Model immediately searched Lore and adopted the correct library pipeline (PIL + skimage + trimesh.creation.extrude_polygon). Validation tests now pass (2/13). Error type shifted from "wrong API family" to "small mistakes in pipeline details."
+- **Run 2**: Correct pipeline, but rendering parameters too small → no pixel contours detected. Model didn't follow the seed concept's `font_size=72` recommendation closely enough.
+- **Run 3**: Correct pipeline, but used Click without `@click.argument()` decorators — function signature bug rather than geometry bug.
+- **Run 4**: Correct pipeline, but called `.is_empty` on a numpy contour array instead of on the Shapely Polygon — the exact hallucination the seed concept warned against. Model read the warning but did not follow the complete minimal implementation closely enough.
+
+**Conclusion:** Lore measurably shifted the model's behavior — from hallucinated APIs and 0 passing tests (Run 1) to correct library choices and 2 passing tests (Runs 2–4). The remaining failures are downstream implementation details, not the core API knowledge gap. A more complete seed concept (explicit rendering parameters, complete argparse/click wiring, stronger `.is_empty` guard) would likely close the gap further.
+
 ## Environment variables
 
 | Variable | Default | Description |

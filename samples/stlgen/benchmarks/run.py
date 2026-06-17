@@ -853,9 +853,21 @@ def _run_agent_anthropic(
                 if turns >= max_turns:
                     print(f"  {label}[no tool calls, turn limit reached — stopping]", flush=True)
                     break
-                # Log the first 300 chars of what the model said so we can diagnose parse failures
+                # Log what the model said + attempt parse error for diagnosis
                 raw_text = " ".join(b.get("text","") for b in content_blocks if b.get("type")=="text")
-                print(f"  {label}[no tool calls on turn {turns} — model said: {raw_text[:300].replace(chr(10),' ')}]", flush=True)
+                preview = raw_text[:1500].replace(chr(10), " ")
+                print(f"  {label}[no tool calls on turn {turns} — model said: {preview}]", flush=True)
+                # Show why parsing failed
+                _diag = re.sub(r"<think>.*?</think>|</think>", "", raw_text, flags=re.DOTALL).strip()
+                _diag = re.sub(r"^```(?:json)?\s*|\s*```$", "", _diag, flags=re.DOTALL).strip()
+                first_obj = _extract_first_json_object(_diag)
+                if first_obj:
+                    try:
+                        json.loads(first_obj)
+                    except json.JSONDecodeError as _e:
+                        print(f"  {label}[parse error: {_e} | first 200 chars of obj: {first_obj[:200].replace(chr(10),' ')}]", flush=True)
+                else:
+                    print(f"  {label}[parse error: no balanced {{...}} found in text]", flush=True)
                 messages.append({
                     "role": "user",
                     "content": "You must call one of the available tools now. Output only a JSON tool call.",
