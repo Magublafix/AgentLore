@@ -166,7 +166,7 @@ class TestSTLValidity:
 
     def test_no_degenerate_triangles(self, hello_stl):
         mesh = _load_mesh(hello_stl)
-        min_area = float(mesh.triangles_area.min())
+        min_area = float(mesh.area_faces.min())
         assert min_area > 0, (
             f"Mesh contains degenerate (zero-area) triangles — "
             f"min triangle area: {min_area}"
