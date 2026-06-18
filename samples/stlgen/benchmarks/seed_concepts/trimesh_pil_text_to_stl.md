@@ -10,8 +10,10 @@ Complete verified pipeline for converting a text string into a 3D-printable STL 
 ## Dependencies
 
 ```
-trimesh, Pillow, scikit-image, shapely, numpy
+trimesh, Pillow, scikit-image, shapely, numpy, rtree
 ```
+
+`rtree` is required for `trimesh` cross-section and rasterization operations (`mesh.section()`, `path.rasterize()`). Without it, `No module named 'rtree'` is raised at runtime even though trimesh installs without error.
 
 ## The correct approach
 
@@ -39,6 +41,7 @@ trimesh, Pillow, scikit-image, shapely, numpy
 - `trimesh.creation.text()` — does not exist
 - `trimesh.creation.from_contours()` — does not exist
 - `trimesh.voxel.marching_cubes()` — does not exist in trimesh; use the skimage + extrude_polygon pipeline instead
+- `mesh.triangles_area` — does NOT exist; use `mesh.area_faces` (returns per-face areas as a numpy array)
 - `numpy.ndarray.is_empty` — does NOT exist. `contour` from `find_contours` is a numpy array. You must convert it to `Polygon(contour[:, ::-1])` first, then call `poly.is_empty` or `poly.is_valid` on the Shapely Polygon object.
 
 ## Critical rendering parameters (must use these values)
@@ -124,6 +127,16 @@ if __name__ == "__main__":
 ## pyproject.toml entry point
 
 ```toml
+[project]
+dependencies = [
+    "trimesh",
+    "Pillow",
+    "scikit-image",
+    "shapely",
+    "numpy",
+    "rtree",
+]
+
 [project.scripts]
 text2stl = "text2stl.cli:main"
 ```
