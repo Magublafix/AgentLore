@@ -847,7 +847,7 @@ def _run_agent_anthropic(
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
     if PROVIDER == "local":
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=600.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=1200.0)
         model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
     else:
         client = anthropic.Anthropic()
@@ -1030,7 +1030,7 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
 
     if PROVIDER == "local":
         # One focused API call per concept — avoids stalling in a shared session.
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=600.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=1200.0)
         global _TOOLS_REGISTRY_NAMES
         _TOOLS_REGISTRY_NAMES = {t["name"] for t in TOOLS_WRAPUP}
 
