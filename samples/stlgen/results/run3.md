@@ -1,61 +1,63 @@
-# Benchmark — Run 3/4
+# Benchmark — Run 3
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-17 04:17 |
+| Date | 2026-06-18 01:27 |
 | Model | qwen2.5-coder:32b |
-| Lore search active | yes (8 concepts) |
+| Lore search active | yes (2 concepts) |
+| Web search active | yes |
 | Turn budget | 20 |
 | Turns (main loop) | 20 |
-| Turns (capture) | 0 |
-| Turns (wrapup) | 5 |
+| Turns (capture) | 15 |
+| Turns (wrapup) | 6 |
 | Task submitted | no (hit limit) |
-| Input tokens | 129,553 |
-| Output tokens | 6,702 |
-| Total tokens | 136,255 |
-| Concepts captured this run | 0 |
-| Elapsed | 5603.0s |
+| Input tokens | 190,662 |
+| Output tokens | 5,187 |
+| Total tokens | 195,849 |
+| Concepts captured this run | 4 |
+| Elapsed | 1596.0s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-l", line 6, in <module>
-E       sys.exit(main())
-E   TypeError: main() missing 2 required positional arguments: 'text' and 'output'
+(most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
 _______________ TestDimensions.test_width_scales_with_char_count _______________
 tests/test_text2stl_cli.py:184: in test_width_scales_with_char_count
     text2stl("A", "-o", str(out1))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-142/test_width_scales_with_char_co0/a.stl exited 1
+E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-165/test_width_scales_with_char_co0/a.stl exited 1
 E   stdout: 
 E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 6, in <module>
-E       sys.exit(main())
-E   TypeError: main() missing 2 required positional arguments: 'text' and 'output'
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
 ______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
 tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
     text2stl("HELLO", "-o", str(out))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-142/test_cross_section_is_nonempty0/hello.stl exited 1
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-165/test_cross_section_is_nonempty0/hello.stl exited 1
 E   stdout: 
 E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 6, in <module>
-E       sys.exit(main())
-E   TypeError: main() missing 2 required positional arguments: 'text' and 'output'
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
 tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
     text2stl("HELLO", "-o", str(out))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-142/test_character_shapes_match_te0/hello.stl exited 1
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-165/test_character_shapes_match_te0/hello.stl exited 1
 E   stdout: 
 E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 6, in <module>
-E       sys.exit(main())
-E   TypeError: main() missing 2 required positional arguments: 'text' and 'output'
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.cli import main
+E   ModuleNotFoundError: No module named 'text2stl'
 =========================== short test summary info ============================
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
@@ -68,6 +70,6 @@ ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 35.04s ====================
+==================== 7 failed, 2 passed, 4 errors in 2.42s =====================
 
 ```

@@ -757,17 +757,25 @@ def _extract_first_json_object(text: str) -> str | None:
 
 
 def _try_parse_obj(candidate: str) -> dict | None:
-    """JSON parse with re-escape fallback for literal control chars in string values."""
+    """JSON parse with fallbacks for malformed model output."""
+    import ast as _ast
     try:
         obj = json.loads(candidate)
         return obj if isinstance(obj, dict) else None
     except json.JSONDecodeError:
         pass
+    # Fallback 1: re-escape literal control chars (model emits raw \n in strings)
     try:
         escaped = candidate.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
         obj = json.loads(escaped)
         return obj if isinstance(obj, dict) else None
     except json.JSONDecodeError:
+        pass
+    # Fallback 2: ast.literal_eval handles single-quoted strings that contain double quotes
+    try:
+        obj = _ast.literal_eval(candidate)
+        return obj if isinstance(obj, dict) else None
+    except (ValueError, SyntaxError):
         return None
 
 

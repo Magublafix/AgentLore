@@ -1,75 +1,71 @@
-# Benchmark — Run 2/4
+# Benchmark — Run 2
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-17 01:47 |
+| Date | 2026-06-17 17:28 |
 | Model | qwen2.5-coder:32b |
-| Lore search active | yes (8 concepts) |
+| Lore search active | yes (1 concepts) |
+| Web search active | yes |
 | Turn budget | 20 |
 | Turns (main loop) | 20 |
 | Turns (capture) | 0 |
-| Turns (wrapup) | 5 |
+| Turns (wrapup) | 2 |
 | Task submitted | no (hit limit) |
-| Input tokens | 147,512 |
-| Output tokens | 5,375 |
-| Total tokens | 152,887 |
-| Concepts captured this run | 0 |
-| Elapsed | 6056.2s |
+| Input tokens | 167,484 |
+| Output tokens | 5,160 |
+| Total tokens | 172,644 |
+| Concepts captured this run | 1 |
+| Elapsed | 7067.4s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl ABCDEFGHIJKLMNO -o /tmp/pytest-of-magublafix/pytest-135/test_max_length0/max.stl exited 1
-E   stdout: 
-E   stderr: Error: No contours found for the text.
-_________________ TestInvocation.test_default_output_filename __________________
-/tmp/lore_stlgen_run2_t546k0um/tests/test_text2stl_cli.py:117: in test_default_output_filename
-    text2stl("HI")
-/tmp/lore_stlgen_run2_t546k0um/tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HI exited 1
-E   stdout: 
-E   stderr: Error: No contours found for the text.
-_______________ TestDimensions.test_width_scales_with_char_count _______________
-tests/test_text2stl_cli.py:184: in test_width_scales_with_char_count
-    text2stl("A", "-o", str(out1))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-135/test_width_scales_with_char_co0/a.stl exited 1
-E   stdout: 
-E   stderr: Error: No contours found for the text.
-______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
-tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-135/test_cross_section_is_nonempty0/hello.stl exited 1
-E   stdout: 
-E   stderr: Error: No contours found for the text.
+triangles_area.min())
+                     ^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'Trimesh' object has no attribute 'triangles_area'
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-135/test_character_shapes_match_te0/hello.stl exited 1
-E   stdout: 
-E   stderr: Error: No contours found for the text.
+tests/test_text2stl_cli.py:221: in test_character_shapes_match_text
+    stl_img = _stl_cross_section_bitmap(out)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_text2stl_cli.py:58: in _stl_cross_section_bitmap
+    img = section_2d.rasterize(pitch=pitch)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/path.py:1116: in rasterize
+    image = raster.rasterize(
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/raster.py:85: in rasterize
+    roots = path.root
+            ^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/caching.py:139: in get_cached
+    value = function(*args, **kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/path.py:1549: in root
+    populate = self.enclosure_directed  # NOQA
+               ^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/caching.py:139: in get_cached
+    value = function(*args, **kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/path.py:1577: in enclosure_directed
+    root, enclosure = polygons.enclosure_tree(self.polygons_closed)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/polygons.py:81: in enclosure_tree
+    tree = Index(zip(bounds.keys(), bounds.values(), [None] * len(bounds)))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/exceptions.py:40: in __call__
+    self.__getattribute__("exception")
+    ^^^^^^^^^^^^^^^^^^^^^
+/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/exceptions.py:35: in __getattribute__
+    raise exc_type(*exc_args)
+E   ModuleNotFoundError: No module named 'rtree'
+=============================== warnings summary ===============================
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
+  /tmp/lore_stlgen_run2_1vjezlj6/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+    section_2d, _ = section.to_planar()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
-FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
+FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
 FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 27.01s ====================
+=================== 2 failed, 11 passed, 1 warning in 48.69s ===================
 
 ```
