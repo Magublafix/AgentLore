@@ -972,11 +972,15 @@ def run_agent(
 def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple[int, int, int]:
     """Continue the same conversation for concept extraction.
 
-    The agent has full context of what it tried above, so no fresh agent needed.
+    Keeps only the last CAPTURE_HISTORY_TURNS message pairs to avoid exceeding
+    the local model's context window (qwen2.5-coder:32b defaults to 32K tokens).
     Returns (in_tokens, out_tokens, turns).
     """
-    print(f"\n  [capture] continuing session for concept extraction — up to {MAX_TURNS_CAPTURE} turns...")
-    capture_messages = list(messages) + [{"role": "user", "content": FORCED_CAPTURE_PROMPT}]
+    CAPTURE_HISTORY_TURNS = 4  # keep last N user/assistant pairs (~8 messages)
+    tail = messages[-(CAPTURE_HISTORY_TURNS * 2):] if len(messages) > CAPTURE_HISTORY_TURNS * 2 else list(messages)
+    print(f"\n  [capture] concept extraction — up to {MAX_TURNS_CAPTURE} turns "
+          f"(using last {len(tail)} messages of {len(messages)} to stay within context window)...")
+    capture_messages = tail + [{"role": "user", "content": FORCED_CAPTURE_PROMPT}]
     in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
         system, TOOLS_CAPTURE, capture_messages,
         workdir=None, max_turns=MAX_TURNS_CAPTURE, verbose=verbose, label="[capture] ",
