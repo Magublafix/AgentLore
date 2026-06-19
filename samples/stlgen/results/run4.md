@@ -2,70 +2,70 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-18 04:17 |
+| Date | 2026-06-19 09:39 |
 | Model | qwen2.5-coder:32b |
-| Lore search active | yes (6 concepts) |
+| Lore search active | yes (17 concepts) |
 | Web search active | yes |
 | Turn budget | 20 |
-| Turns (main loop) | 12 |
-| Turns (capture) | 0 |
-| Turns (wrapup) | 6 |
+| Turns (main loop) | 20 |
+| Turns (capture) | 15 |
+| Turns (wrapup) | 15 |
 | Task submitted | no (hit limit) |
-| Input tokens | 83,496 |
-| Output tokens | 4,292 |
-| Total tokens | 87,788 |
-| Concepts captured this run | 1 |
-| Elapsed | 5670.2s |
+| Input tokens | 202,709 |
+| Output tokens | 10,568 |
+| Total tokens | 213,277 |
+| Concepts captured this run | 10 |
+| Elapsed | 6945.8s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-triangles_area.min())
-                     ^^^^^^^^^^^^^^^^^^^
-E   AttributeError: 'Trimesh' object has no attribute 'triangles_area'
+___________
+tests/test_text2stl_cli.py:184: in test_width_scales_with_char_count
+    text2stl("A", "-o", str(out1))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-217/test_width_scales_with_char_co0/a.stl exited 1
+E   stdout: 
+E   stderr: Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.__main__ import cli_entry
+E   ImportError: cannot import name 'cli_entry' from 'text2stl.__main__' (/tmp/lore_stlgen_run4_a7fouubd/text2stl/__main__.py)
+______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
+tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-217/test_cross_section_is_nonempty0/hello.stl exited 1
+E   stdout: 
+E   stderr: Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.__main__ import cli_entry
+E   ImportError: cannot import name 'cli_entry' from 'text2stl.__main__' (/tmp/lore_stlgen_run4_a7fouubd/text2stl/__main__.py)
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:221: in test_character_shapes_match_text
-    stl_img = _stl_cross_section_bitmap(out)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-tests/test_text2stl_cli.py:58: in _stl_cross_section_bitmap
-    img = section_2d.rasterize(pitch=pitch)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/path.py:1116: in rasterize
-    image = raster.rasterize(
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/raster.py:85: in rasterize
-    roots = path.root
-            ^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/caching.py:139: in get_cached
-    value = function(*args, **kwargs)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/path.py:1549: in root
-    populate = self.enclosure_directed  # NOQA
-               ^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/caching.py:139: in get_cached
-    value = function(*args, **kwargs)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/path.py:1577: in enclosure_directed
-    root, enclosure = polygons.enclosure_tree(self.polygons_closed)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/path/polygons.py:81: in enclosure_tree
-    tree = Index(zip(bounds.keys(), bounds.values(), [None] * len(bounds)))
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/exceptions.py:40: in __call__
-    self.__getattribute__("exception")
-    ^^^^^^^^^^^^^^^^^^^^^
-/home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/exceptions.py:35: in __getattribute__
-    raise exc_type(*exc_args)
-E   ModuleNotFoundError: No module named 'rtree'
-=============================== warnings summary ===============================
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run4_9gdp_b02/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
-    section_2d, _ = section.to_planar()
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-217/test_character_shapes_match_te0/hello.stl exited 1
+E   stdout: 
+E   stderr: Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
+E       from text2stl.__main__ import cli_entry
+E   ImportError: cannot import name 'cli_entry' from 'text2stl.__main__' (/tmp/lore_stlgen_run4_a7fouubd/text2stl/__main__.py)
 =========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
+FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
 FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-=================== 2 failed, 11 passed, 1 warning in 23.55s ===================
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
+==================== 7 failed, 2 passed, 4 errors in 20.59s ====================
 
 ```
