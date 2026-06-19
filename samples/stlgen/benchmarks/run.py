@@ -318,7 +318,7 @@ TOOL_WEB_SEARCH = {
     },
 }
 
-TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
+TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_WEB_SEARCH]
 TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
 TOOLS_CAPTURE   = [TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT]
 TOOLS_WRAPUP    = [TOOL_RATE_CONCEPT, TOOL_SUBMIT]
@@ -1194,10 +1194,13 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
         )
         elapsed = (datetime.now() - start).total_seconds()
 
-        # Continue same session for concept extraction — agent has full history
-        c_in, c_out, c_turns = run_capture_phase(messages, system, verbose)
-        in_tok  += c_in
-        out_tok += c_out
+        # Run 1 is a pure baseline — no capture, no wrapup, no concept writing
+        if lore_active:
+            c_in, c_out, c_turns = run_capture_phase(messages, system, verbose)
+            in_tok  += c_in
+            out_tok += c_out
+        else:
+            c_in = c_out = c_turns = 0
 
         print(f"\nMain loop {'✓ submitted' if submitted else '✗ hit limit'}. Running tests...")
         passed, test_out = run_tests(workdir)
@@ -1205,9 +1208,12 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
         concepts_captured = _count_concepts() - concepts_before
 
         # Wrapup: rate all concepts used this run, then clear session file
-        w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose)
-        in_tok  += w_in
-        out_tok += w_out
+        if lore_active:
+            w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose)
+            in_tok  += w_in
+            out_tok += w_out
+        else:
+            w_in = w_out = w_turns = 0
 
         result = {
             "run": run_num,
