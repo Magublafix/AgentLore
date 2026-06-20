@@ -2,59 +2,54 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-19 14:50 |
+| Date | 2026-06-20 06:38 |
 | Model | qwen2.5-coder:32b |
 | Lore search active | yes (1 concepts) |
 | Web search active | yes |
-| Turn budget | 20 |
-| Turns (main loop) | 20 |
+| Turn budget | 30 |
+| Turns (main loop) | 30 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 14 |
+| Turns (wrapup) | 12 |
 | Task submitted | no (hit limit) |
-| Input tokens | 229,922 |
-| Output tokens | 10,074 |
-| Total tokens | 239,996 |
-| Concepts captured this run | 13 |
-| Elapsed | 3093.8s |
+| Input tokens | 418,918 |
+| Output tokens | 9,766 |
+| Total tokens | 428,684 |
+| Concepts captured this run | 11 |
+| Elapsed | 4941.1s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-i.py)
-_______________ TestDimensions.test_width_scales_with_char_count _______________
-tests/test_text2stl_cli.py:184: in test_width_scales_with_char_count
-    text2stl("A", "-o", str(out1))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-227/test_width_scales_with_char_co0/a.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ImportError: cannot import name 'main' from 'text2stl.cli' (/tmp/lore_stlgen_run2_r_sv7ki1/text2stl/cli.py)
-______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
-tests/test_text2stl_cli.py:202: in test_cross_section_is_nonempty
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-227/test_cross_section_is_nonempty0/hello.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ImportError: cannot import name 'main' from 'text2stl.cli' (/tmp/lore_stlgen_run2_r_sv7ki1/text2stl/cli.py)
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:219: in test_character_shapes_match_text
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-227/test_character_shapes_match_te0/hello.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ImportError: cannot import name 'main' from 'text2stl.cli' (/tmp/lore_stlgen_run2_r_sv7ki1/text2stl/cli.py)
+ating polygon: No available triangulation engine!
+E   try running `pip install mapbox-earcut manifold3d`or `triangle`, `mapbox_earcut`, then explicitly pass:
+E   `triangulate_polygon(*args, engine="triangle")`
+E   to use the non-FSF-approved-license triangle engine
+E   Error triangulating polygon: No available triangulation engine!
+E   try running `pip install mapbox-earcut manifold3d`or `triangle`, `mapbox_earcut`, then explicitly pass:
+E   `triangulate_polygon(*args, engine="triangle")`
+E   to use the non-FSF-approved-license triangle engine
+E   Error triangulating polygon: No available triangulation engine!
+E   try running `pip install mapbox-earcut manifold3d`or `triangle`, `mapbox_earcut`, then explicitly pass:
+E   `triangulate_polygon(*args, engine="triangle")`
+E   to use the non-FSF-approved-license triangle engine
+E   Error triangulating polygon: No available triangulation engine!
+E   try running `pip install mapbox-earcut manifold3d`or `triangle`, `mapbox_earcut`, then explicitly pass:
+E   `triangulate_polygon(*args, engine="triangle")`
+E   to use the non-FSF-approved-license triangle engine
+E   Error triangulating polygon: No available triangulation engine!
+E   try running `pip install mapbox-earcut manifold3d`or `triangle`, `mapbox_earcut`, then explicitly pass:
+E   `triangulate_polygon(*args, engine="triangle")`
+E   to use the non-FSF-approved-license triangle engine
+E   Error triangulating polygon: No available triangulation engine!
+E   Traceback (most recent call last):
+E     File "/home/magublafix/.local/bin/text2stl", line 6, in <module>
+E       sys.exit(main())
+E     File "/tmp/lore_stlgen_run2_gn3yf8v1/text2stl/cli.py", line 50, in main
+E       mesh = text_to_mesh(args.text)
+E     File "/tmp/lore_stlgen_run2_gn3yf8v1/text2stl/cli.py", line 38, in text_to_mesh
+E       raise ValueError(f"No renderable glyphs found for {text!r}")
+E   ValueError: No renderable glyphs found for 'HELLO'
 =========================== short test summary info ============================
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
@@ -67,6 +62,6 @@ ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 20.08s ====================
+==================== 7 failed, 2 passed, 4 errors in 24.40s ====================
 
 ```
