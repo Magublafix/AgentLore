@@ -51,7 +51,7 @@ import anthropic
 # ---------------------------------------------------------------------------
 
 MODEL = "claude-sonnet-4-6"
-MAX_TURNS = 20          # same budget for every run
+MAX_TURNS = 30          # same budget for every run
 MAX_TURNS_CAPTURE = 15  # forced post-loop capture phase
 MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
 
