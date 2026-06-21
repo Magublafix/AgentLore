@@ -22,7 +22,7 @@ Extract 1–3 search terms from the current task context. Prefer specific techni
 search_concepts(problem="<your terms>", limit=5)
 ```
 
-Optional filters: `type` (project|pattern|tool|testing|architecture), `language`.
+Optional filters: `type` (project|pattern|tool|testing|architecture), `language`. Omit `type` unless you are certain which category the concept you need falls under — a wrong guess filters out every match, including ones that would otherwise be found. When in doubt, search without it.
 
 If the MCP server is unreachable or returns an error, skip silently and continue with the task. Do not surface MCP errors to the user unless they are directly investigating Lore connectivity.
 

@@ -66,13 +66,17 @@ LOCAL_MAX_TOKENS = 8192
 # Prepended to the system prompt for local models to encourage immediate tool use.
 LOCAL_SYSTEM_PREFIX = """\
 CRITICAL INSTRUCTIONS FOR THIS SESSION:
-- Do NOT write plans, explanations, or prose of any kind.
-- Call a tool on EVERY response by outputting a single JSON object and NOTHING else.
-- Format: {"name": "<tool>", "arguments": {<args>}}
+- Before acting, write 1-3 short sentences of reasoning: what the last tool
+  result actually told you, and what it implies you should do next. Use this
+  to catch mistakes — e.g. an error message that points at a different file
+  or line than the one you were about to edit.
+- After your reasoning, call exactly ONE tool by outputting a single JSON
+  object: {"name": "<tool>", "arguments": {<args>}}
 - Examples:
     {"name": "bash", "arguments": {"command": "mkdir -p src && ls"}}
     {"name": "write_file", "arguments": {"path": "src/foo.py", "content": "..."}}
-- Start immediately with your first tool call. No preamble.
+- Never emit more than one JSON object in a response — pick one action.
+- End your response with the JSON object — nothing after it.
 
 """
 
