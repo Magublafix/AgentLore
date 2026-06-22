@@ -2,21 +2,21 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-21 23:05 |
+| Date | 2026-06-22 09:53 |
 | Model | qwen2.5-coder:32b |
-| Lore search active | yes (8 concepts) |
+| Lore search active | yes (6 concepts) |
 | Web search active | yes |
 | Turn budget | 30 |
-| Turns (main loop) | 30 |
+| Turns (main loop) | 10 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 12 |
-| Task submitted | no (hit limit) |
-| Input tokens | 521,339 |
-| Output tokens | 15,883 |
-| Total tokens | 537,222 |
-| Concepts captured this run | 7 |
-| Elapsed | 10837.1s |
-| Tests passed | ❌ no |
+| Turns (wrapup) | 10 |
+| Task submitted | yes |
+| Input tokens | 124,349 |
+| Output tokens | 7,440 |
+| Total tokens | 131,789 |
+| Concepts captured this run | 9 |
+| Elapsed | 1416.7s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
@@ -24,7 +24,7 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
 cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run3_9nhazbe2
+rootdir: /tmp/lore_stlgen_run3_s3blpaja
 configfile: pyproject.toml
 plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -42,22 +42,14 @@ tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSE
 tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 76%]
 tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 84%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text FAILED [100%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [100%]
 
-=================================== FAILURES ===================================
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
-    assert iou >= 0.25, (
-E   AssertionError: Character shape IoU 0.093 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
-E   assert 0.0929855961817097 >= 0.25
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run3_9nhazbe2/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run3_s3blpaja/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-=================== 1 failed, 12 passed, 1 warning in 18.50s ===================
+======================== 13 passed, 1 warning in 15.40s ========================
 
 ```
