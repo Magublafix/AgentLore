@@ -94,6 +94,69 @@ Results are written to `results/run{N}.md` after each run.
 
 **Conclusion:** Lore measurably shifted the model's behavior — from hallucinated APIs and 0 passing tests (Run 1) to correct library choices and 2 passing tests (Runs 2–4). The remaining failures are downstream implementation details, not the core API knowledge gap. A more complete seed concept (explicit rendering parameters, complete argparse/click wiring, stronger `.is_empty` guard) would likely close the gap further.
 
+### Reasoning-prefix-harness run — qwen2.5-coder:32b, 30-turn budget
+
+Two harness changes preceded this sequence: `search-concepts/SKILL.md` now
+states the `type` filter is optional (a wrong guess previously zeroed out
+results silently), and `LOCAL_SYSTEM_PREFIX` now permits 1–3 sentences of
+reasoning before each tool call instead of forbidding all prose.
+
+| Run | Lore | Tests | Result | Tokens |
+|-----|------|-------|--------|--------|
+| 1 | ❌ | 2/13 pass | `AttributeError: 'Trimesh' object has no attribute 'extrude'` — hallucinated API | 280K |
+| 2 | ✅ (1 concept) | 2/13 pass | Correct pipeline, but overshot `font_size` (72→192) chasing an unrelated bug → "No renderable glyphs found" | 270K |
+| 3 | ✅ (8 concepts) | **12/13 pass** | Correct, nearly-complete implementation — only failure was the IoU test (see below) | 537K |
+| 4 | ✅ (15 concepts) | **12/13 pass** | Same outcome as Run 3, reached in 18 turns / 275K tokens instead of 30 turns / 537K — richer rated context made the model more efficient at reaching the same result, but didn't close the remaining gap | 275K |
+
+A new failure mode appeared in this run series: on roughly 1 in 6 turns, the
+model wrote an unfinished code block in a markdown fence instead of ending
+its response with a tool call, costing a wasted turn each time (the existing
+retry path recovers it on the next turn). All four main loops also ended on
+an Ollama API timeout rather than the 30-turn ceiling — a local-inference
+characteristic, not a benchmark design issue.
+
+### IoU test scale-normalization fix
+
+Runs 3 and 4 both stalled on `test_character_shapes_match_text`, which
+asserts the STL's mid-height cross-section has IoU ≥ 0.25 against a
+PIL-rendered reference of the same text. Both runs measured IoU = 0.093.
+
+Regenerating the implementation and rendering the actual cross-section
+showed the text was correctly formed, legible, and in the right order — the
+test was failing for a reason that had nothing to do with the model's
+geometry. `_stl_cross_section_bitmap` rasterizes a mesh's cross-section
+using a pitch derived from the section's own bounding box, so the STL side
+of the comparison always fills its 400×100 frame edge-to-edge (blank canvas
+in the model's 2D rendering produces no geometry, so it can never appear as
+margin in the 3D bounding box — there is no way for the model to fix this
+from its own implementation). The reference bitmap, however, rendered text
+centered with its natural padding inside the same frame, at a different
+effective scale. Two correctly-shaped letters at different scales overlap
+almost nowhere, which is why IoU bottomed out near zero regardless of
+geometry quality.
+
+**Fix:** crop the reference bitmap to its own tight glyph bounding box
+before scaling to the frame (`tests/test_text2stl_cli.py`,
+`_text_reference_bitmap`), matching the tight-bbox convention the STL side
+already uses by construction.
+
+**Validation:** using the exact same implementation that scored
+IoU = 0.093 against the old reference function, the corrected reference
+function alone raised it to **0.514** — well above the 0.25 threshold.
+Reinstalling that implementation and running the full suite against the
+fixed test file passed all 13/13 tests, with zero changes to the
+implementation. This means **Run 3 and Run 4's "1 failed" results were a
+test-harness artifact**, not a shortcoming of the model or of Lore — the
+underlying implementation was already correct.
+
+Two alternative fixes were considered and rejected:
+- *Lower the IoU threshold* — papers over the scale mismatch without fixing
+  the actual comparison; would leave the test permanently miscalibrated.
+- *Add a margin requirement to the task prompt* — tested and confirmed
+  ineffective: blank canvas around rendered glyphs produces no mesh
+  geometry, so it cannot survive into the STL's bounding box no matter what
+  margin convention the model follows.
+
 ## Environment variables
 
 | Variable | Default | Description |

@@ -60,11 +60,23 @@ def _stl_cross_section_bitmap(stl_path, size=(400, 100)):
 
 
 def _text_reference_bitmap(text, size=(400, 100)):
-    """Render text into a normalized PIL bitmap that fills the image width."""
+    """Render text, then crop tightly to glyph bounds before scaling to `size`.
+
+    `_stl_cross_section_bitmap` rasterizes a mesh cross-section using a pitch
+    derived from the section's own (geometry-tight) bounding box, so the STL
+    side of the comparison always fills the frame edge-to-edge with no
+    incidental padding. If this reference were left at its natural centered
+    size within `size`, the two images would be at different effective
+    scales and IoU would penalize correctly-shaped text just for being
+    smaller-with-padding rather than malformed. Cropping to the tight glyph
+    bbox here matches that convention on both sides. See benchmarks/README.md
+    "IoU test scale-normalization fix" for the empirical before/after.
+    """
     from PIL import Image, ImageDraw, ImageFont
-    img = Image.new("L", size, 0)
+    canvas = (size[0] * 4, size[1] * 4)
+    img = Image.new("L", canvas, 0)
     draw = ImageDraw.Draw(img)
-    font_size = int(size[1] * 0.75)
+    font_size = int(canvas[1] * 0.75)
     font = None
     for font_path in [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -80,10 +92,13 @@ def _text_reference_bitmap(text, size=(400, 100)):
         font = ImageFont.load_default()
     bbox = draw.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = max(0, (size[0] - tw) // 2)
-    y = max(0, (size[1] - th) // 2)
+    x = max(0, (canvas[0] - tw) // 2)
+    y = max(0, (canvas[1] - th) // 2)
     draw.text((x, y), text, fill=255, font=font)
-    return img
+    tight = img.getbbox()
+    if tight is None:
+        return img.resize(size, Image.LANCZOS)
+    return img.crop(tight).resize(size, Image.LANCZOS)
 
 
 def _iou(a: np.ndarray, b: np.ndarray) -> float:
