@@ -2,62 +2,75 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-22 02:34 |
+| Date | 2026-06-23 07:30 |
 | Model | qwen2.5-coder:32b |
-| Lore search active | yes (15 concepts) |
+| Lore search active | yes (9 concepts) |
 | Web search active | yes |
 | Turn budget | 30 |
 | Turns (main loop) | 18 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 9 |
+| Turns (wrapup) | 10 |
 | Task submitted | no (hit limit) |
-| Input tokens | 263,211 |
-| Output tokens | 12,171 |
-| Total tokens | 275,382 |
-| Concepts captured this run | 4 |
-| Elapsed | 10411.8s |
+| Input tokens | 237,475 |
+| Output tokens | 11,528 |
+| Total tokens | 249,003 |
+| Concepts captured this run | 5 |
+| Elapsed | 8586.1s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-============================= test session starts ==============================
-platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
-cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run4_7web274_
-configfile: pyproject.toml
-plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 13 items
-
-tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
-tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 15%]
-tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 23%]
-tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 30%]
-tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 38%]
-tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 46%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 53%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 61%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 69%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 76%]
-tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 84%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text FAILED [100%]
-
-=================================== FAILURES ===================================
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl ABCDEFGHIJKLMNO -o /tmp/pytest-of-magublafix/pytest-372/test_max_length0/max.stl exited 1
+E   stdout: 
+E   stderr: matrix not a valid transformation matrix
+_________________ TestInvocation.test_default_output_filename __________________
+/tmp/lore_stlgen_run4_0dz0kpyo/tests/test_text2stl_cli.py:132: in test_default_output_filename
+    text2stl("HI")
+/tmp/lore_stlgen_run4_0dz0kpyo/tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HI exited 1
+E   stdout: 
+E   stderr: matrix not a valid transformation matrix
+_______________ TestDimensions.test_width_scales_with_char_count _______________
+tests/test_text2stl_cli.py:199: in test_width_scales_with_char_count
+    text2stl("A", "-o", str(out1))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-372/test_width_scales_with_char_co0/a.stl exited 1
+E   stdout: 
+E   stderr: matrix not a valid transformation matrix
+______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
+tests/test_text2stl_cli.py:217: in test_cross_section_is_nonempty
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-372/test_cross_section_is_nonempty0/hello.stl exited 1
+E   stdout: 
+E   stderr: matrix not a valid transformation matrix
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
 tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
-    assert iou >= 0.25, (
-E   AssertionError: Character shape IoU 0.093 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
-E   assert 0.0929855961817097 >= 0.25
-=============================== warnings summary ===============================
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run4_7web274_/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
-    section_2d, _ = section.to_planar()
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-372/test_character_shapes_match_te0/hello.stl exited 1
+E   stdout: 
+E   stderr: matrix not a valid transformation matrix
 =========================== short test summary info ============================
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
+FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
 FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-=================== 1 failed, 12 passed, 1 warning in 27.70s ===================
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
+ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
+==================== 7 failed, 2 passed, 4 errors in 30.46s ====================
 
 ```
