@@ -157,6 +157,60 @@ Two alternative fixes were considered and rejected:
   geometry, so it cannot survive into the STL's bounding box no matter what
   margin convention the model follows.
 
+### Post-IoU-fix run — seeded sequence
+
+Same harness as above, re-run from a fresh DB after the IoU fix landed.
+
+| Run | Lore | Tests | Result | Tokens |
+|-----|------|-------|--------|--------|
+| 1 | ❌ | 2/13 pass | `module 'trimesh' has no attribute 'contour'` — hallucinated API | 287K |
+| 2 | ✅ (1 concept) | 0/13 pass | Invalid `pyproject.toml` (`[project.dependencies]` as a bare table instead of a `dependencies = [...]` array) — `pip install -e .` failed outright, worse than the no-Lore floor | 379K |
+| 3 | ✅ (6 concepts) | **13/13 pass** | First-ever full pass in the benchmark's history. Model called `submit` on turn 10 and got back "all tests passed" directly — 10 turns, 132K tokens, by far the most efficient successful run | 132K |
+| 4 | ✅ (15 concepts) | 2/13 pass | `AttributeError: module 'numpy' has no attribute 'product'` — environment artifact, not a model/Lore regression (see below) | 249K |
+
+**Run 4's failure was traced to environment drift, not the model.** The
+crash happens inside trimesh's own `mass_properties` calculation
+(`np.product`, removed in NumPy 2.0) and reproduces on *any* mesh,
+including `trimesh.creation.box()` with zero custom code:
+`numpy==2.0.2` was present alongside an ancient cached `trimesh==3.9.10`.
+Run 3 — immediately prior, same session, no explicit version-changing
+installs in its log — passed its own volume-dependent test cleanly, so the
+combination must have drifted in between. All benchmark runs share one
+global, unpinned `pip install -e .` user-site install
+(`~/.local/lib/pythonX.Y/site-packages`) across ephemeral run directories;
+a later run declaring a slightly different dependency set can let pip's
+resolver silently bump a shared package like `numpy` without ever
+touching an already-"satisfied" package like the stale `trimesh`,
+breaking it. **Open item:** isolate each run's install (per-run venv) or
+pin dependency floors/ceilings in the test fixtures to prevent this class
+of cross-run contamination.
+
+### No-seed control experiment
+
+To isolate what the hand-authored seed concept actually contributes, the
+seed was stripped from the DB immediately after Run 1's automatic
+reset+seed (the seed file stays in `seed_concepts/` — only the DB row was
+deleted). Runs 2–4 therefore started from concepts the model captured
+*organically* from its own web searches and mistakes, with no
+hand-authored boost at any point.
+
+| Run | Lore | Tests | Result |
+|-----|------|-------|--------|
+| 1 | ❌ | 3/13 pass | Own glyph pipeline, "No vertices generated for character" — broadcast shape error in triangulation |
+| 2 | ✅ (0 concepts) | 2/13 pass | `search_concepts` found nothing (confirmed "Lore ON (0 concepts)" in the run banner). `FT_Exception: unknown file format` — broken font file path |
+| 3 | ✅ (5 concepts) | 2/13 pass | Spent ~15 of 30 turns web-searching for a working trimesh text API that doesn't exist as a single function, before pivoting late to `matplotlib.font_manager`. Final implementation called `FontProperties.get_path()` — which doesn't exist — and crashed. The run's own capture phase recorded a concept titled "Avoid_FontProperties_get_path" warning against exactly this mistake, but too late to apply within the same session |
+| 4 | ✅ (9 concepts) | 2/13 pass | Abandoned the font-glyph approach entirely for a new voxel-grid method, re-introducing the deprecated `draw.textsize()` API from an unrelated earlier run, then hit a new failure: "matrix not a valid transformation matrix" |
+
+**Conclusion:** across all 4 runs, accumulating 9 organically-captured
+concepts never moved the result past the same 2/13 floor that Run 1 (no
+Lore at all) also hit. This is a sharp contrast with the seeded sequence,
+which reached 13/13 by Run 3. A single well-targeted seed concept handing
+over the *exact* working pipeline was worth more than a larger pile of
+self-discovered, less-targeted knowledge — the organic concepts were real
+and accurate (e.g. the FontProperties warning) but arrived too
+late, were ranked low enough not to consistently surface, or described
+problems without the complete fix.
+
 ## Environment variables
 
 | Variable | Default | Description |
