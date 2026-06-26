@@ -56,11 +56,15 @@ N. <concept_id> (unresolved)
 
 Do not prompt the user for ratings. You assess and submit each rating yourself based on your recollection of the session.
 
+Rate each concept on its **own merits** — how useful *this concept* was, independent of whether the overall task succeeded or failed. A concept can be rated 5 on a failed run if it was genuinely the right guidance; it can be rated 0 on a passing run if the approach it recommended was abandoned.
+
 For each concept, reflect:
-- Did this concept directly inform a decision or save a lookup? → `outcome` 4–5
-- Did it appear in search results but wasn't directly applied? → `outcome` 2–3
-- Was it irrelevant or misleading? → `outcome` 1
-- If you genuinely cannot recall using the concept, default to `outcome` 3
+- Did it directly enable a correct solution or save significant lookup time? → `outcome` 4–5
+- Did it influence the approach taken but with limited or uncertain impact? → `outcome` 2–3
+- Was it retrieved but not meaningfully used? → `outcome` 1
+- Did it actively mislead — pointing toward a broken approach that consumed effort? → `outcome` 0
+
+**Use run outcome as a signal, not a ceiling.** If the task failed, scrutinize whether this concept contributed to the failing approach. If it did, rate it 0–1. If the task succeeded but this concept was irrelevant, rate it 0–1 anyway.
 
 Estimate `hours_saved` honestly — omit if zero or uncertain.
 
@@ -69,7 +73,7 @@ Then call:
 ```
 rate_concept(
   concept_id="<id>",
-  outcome=<1-5>,
+  outcome=<0-5>,
   hours_saved=<float>   ← omit if zero or uncertain
 )
 ```

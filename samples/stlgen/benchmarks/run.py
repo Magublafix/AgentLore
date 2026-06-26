@@ -51,7 +51,7 @@ import anthropic
 # ---------------------------------------------------------------------------
 
 MODEL = "claude-sonnet-4-6"
-MAX_TURNS = 50          # same budget for every run
+MAX_TURNS = 40          # same budget for every run
 MAX_TURNS_CAPTURE = 15  # forced post-loop capture phase
 MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
 
@@ -70,6 +70,12 @@ CRITICAL INSTRUCTIONS FOR THIS SESSION:
   result actually told you, and what it implies you should do next. Use this
   to catch mistakes — e.g. an error message that points at a different file
   or line than the one you were about to edit.
+- Before using any library function you are not 100% certain exists, verify it
+  first: bash -c "python -c 'import <lib>; print(dir(<lib>.<module>))'"
+  Do NOT assume an API exists — check it.
+- If a tool call or test fails, do NOT rewrite the same code again. Read the
+  exact error, identify the specific line that caused it, then change your
+  approach entirely if needed.
 - After your reasoning, call exactly ONE tool by outputting a single JSON
   object: {"name": "<tool>", "arguments": {<args>}}
 - Examples:
@@ -684,14 +690,29 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
         return out
 
     if name == "write_file" and workdir:
-        path = workdir / inputs["path"]
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(inputs["content"], encoding="utf-8")
-        return f"Written {inputs['path']} ({len(inputs['content'])} chars)"
+        raw = inputs.get("path") or inputs.get("file_path") or inputs.get("filename")
+        if not raw:
+            return "[error] write_file requires a 'path' argument"
+        p = Path(raw)
+        if p.is_absolute():
+            return f"[error] absolute paths not allowed: {raw}. Use a relative path under the working directory."
+        path = workdir / raw
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(inputs["content"], encoding="utf-8")
+        except PermissionError as e:
+            return f"[error] permission denied writing {raw}: {e}"
+        return f"Written {raw} ({len(inputs['content'])} chars)"
 
     if name == "read_file" and workdir:
-        path = workdir / inputs["path"]
-        return path.read_text(encoding="utf-8") if path.exists() else f"[not found: {inputs['path']}]"
+        raw = inputs.get("path") or inputs.get("file_path") or inputs.get("filename")
+        if not raw:
+            return "[error] read_file requires a 'path' argument"
+        p = Path(raw)
+        if p.is_absolute():
+            return f"[error] absolute paths not allowed: {raw}. Use a relative path under the working directory."
+        path = workdir / raw
+        return path.read_text(encoding="utf-8") if path.exists() else f"[not found: {raw}]"
 
     if name == "submit":
         if workdir:
@@ -726,38 +747,56 @@ _TOOLS_REGISTRY_NAMES: set[str] = set()
 
 
 def _extract_first_json_object(text: str) -> str | None:
-    """Return the first balanced {...} substring.
+    """Return the first balanced {...} whose first key is double-quoted (JSON).
 
-    When the model emits multiple tool calls as separate JSON objects in one
-    text block, the greedy r"\{.*\}" regex grabs all of them and produces
-    invalid JSON. This walks characters to find the end of the first balanced
-    object instead.
+    Skips TOML inline tables ({name = ...}) and Python dicts ({'key': ...}) by
+    requiring the first non-whitespace character after { to be a double quote.
+    Falls back to the first plain { if no double-quoted variant is found.
     """
-    start = text.find("{")
-    if start == -1:
+    def _extract_from(start: int) -> str | None:
+        depth = 0
+        in_string = False
+        escape_next = False
+        for i, ch in enumerate(text[start:], start):
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == "\\" and in_string:
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
         return None
-    depth = 0
-    in_string = False
-    escape_next = False
-    for i, ch in enumerate(text[start:], start):
-        if escape_next:
-            escape_next = False
-            continue
-        if ch == "\\" and in_string:
-            escape_next = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    return None
+
+    first_plain = -1
+    pos = 0
+    while pos < len(text):
+        brace_pos = text.find("{", pos)
+        if brace_pos == -1:
+            break
+        if first_plain == -1:
+            first_plain = brace_pos
+        # Skip if first non-whitespace after { is not " (not a JSON object)
+        after = brace_pos + 1
+        while after < len(text) and text[after] in " \t\n\r":
+            after += 1
+        if after < len(text) and text[after] == '"':
+            result = _extract_from(brace_pos)
+            if result is not None:
+                return result
+        pos = brace_pos + 1
+
+    # Fallback: extract from first {
+    return _extract_from(first_plain) if first_plain != -1 else None
 
 
 def _try_parse_obj(candidate: str) -> dict | None:
@@ -874,23 +913,43 @@ def _run_agent_anthropic(
         total_out += response.usage.output_tokens
         turns += 1
 
+        tool_names = [b.name for b in (response.content or []) if getattr(b, "type", None) == "tool_use"]
+        tools_str = f" | tools={','.join(tool_names)}" if tool_names else ""
         print(
             f"  {label}turn {turns:02d}/{max_turns} | finish={response.stop_reason} "
-            f"| in={response.usage.input_tokens} out={response.usage.output_tokens}",
+            f"| in={response.usage.input_tokens} out={response.usage.output_tokens}{tools_str}",
             flush=True,
         )
 
-        # Serialise content to plain dicts so messages stay JSON-serialisable
+        # Serialise content to plain dicts so messages stay JSON-serialisable.
+        # Also harvest any thinking/CoT content for use in think→act retries.
         content_blocks: list[dict] = []
+        _thinking_text: str = ""
         for b in (response.content or []):
             if b.type == "tool_use":
                 content_blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
             elif b.type == "text":
                 content_blocks.append({"type": "text", "text": b.text})
+                # Capture thinking embedded as <think>…</think> when that's all the block contains
+                _tm = re.search(r"<think>(.*?)</think>", b.text, re.DOTALL)
+                if _tm and not b.text.replace(_tm.group(0), "").strip():
+                    _thinking_text = _tm.group(1).strip()
+            elif getattr(b, "type", None) == "thinking" and getattr(b, "thinking", None):
+                _thinking_text = b.thinking
 
         if not content_blocks:
-            print(f"  {label}[empty response on turn {turns} — retrying]", flush=True)
-            messages.append({"role": "user", "content": "You must call one of the available tools now. Output only a JSON tool call."})
+            if _thinking_text:
+                # think→act: feed the reasoning conclusion back as the retry prompt
+                conclusion = _thinking_text[-1500:].strip()
+                retry_content = (
+                    f"Your reasoning concluded:\n{conclusion}\n\n"
+                    "Now output exactly one tool call to act on that reasoning."
+                )
+                print(f"  {label}[thinking→act retry on turn {turns}]", flush=True)
+            else:
+                retry_content = "You must call one of the available tools now. Output only a JSON tool call."
+                print(f"  {label}[empty response on turn {turns} — retrying]", flush=True)
+            messages.append({"role": "user", "content": retry_content})
             continue
 
         messages.append({"role": "assistant", "content": content_blocks})
@@ -941,7 +1000,10 @@ def _run_agent_anthropic(
             bid    = block["id"]
             if verbose:
                 print(f"    → {name}({json.dumps(inputs)[:100]})", flush=True)
-            result = handle_tool(name, inputs, workdir)
+            try:
+                result = handle_tool(name, inputs, workdir)
+            except Exception as _tool_err:
+                result = f"[tool error] {_tool_err}"
             if name == "submit":
                 if workdir is None or "✓ all tests passed" in result:
                     submitted = True
@@ -980,7 +1042,7 @@ def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple
     the local model's context window (qwen2.5-coder:32b defaults to 32K tokens).
     Returns (in_tokens, out_tokens, turns).
     """
-    CAPTURE_HISTORY_TURNS = 4  # keep last N user/assistant pairs (~8 messages)
+    CAPTURE_HISTORY_TURNS = 15  # keep last N user/assistant pairs (~30 messages); 64K ctx fits this
     tail = messages[-(CAPTURE_HISTORY_TURNS * 2):] if len(messages) > CAPTURE_HISTORY_TURNS * 2 else list(messages)
     print(f"\n  [capture] concept extraction — up to {MAX_TURNS_CAPTURE} turns "
           f"(using last {len(tail)} messages of {len(messages)} to stay within context window)...")
@@ -994,7 +1056,7 @@ def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple
     return in_tok, out_tok, turns
 
 
-def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
+def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) -> tuple[int, int, int]:
     """
     Rate the concepts used during this run — mirrors the lore:wrapup skill.
 
@@ -1047,11 +1109,21 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
 
         for i, cid in enumerate(session_ids):
             line = concept_lines[i].strip() if i < len(concept_lines) else f"id={cid}"
+            outcome_ctx = (
+                "The task PASSED all tests this run."
+                if tests_passed else
+                "The task FAILED this run — tests did not pass."
+            )
             single_prompt = (
                 f"Rate this concept using rate_concept.\n\n"
                 f"Concept: {line}\n\n"
-                f"Outcome guide: 5=solved key problem, 4=very helpful, 3=somewhat useful, "
-                f"2=barely used, 1=irrelevant"
+                f"Run outcome: {outcome_ctx}\n\n"
+                f"Rating guide (0-5): Rate on this concept's own merits, not the overall outcome. "
+                f"0=actively misled (wrong approach, consumed effort), 1=irrelevant, "
+                f"2=partially relevant but limited impact, 3=somewhat useful, "
+                f"4=very helpful, 5=directly enabled the solution. "
+                f"If the task failed, scrutinize whether this concept contributed to the failing approach — "
+                f"if it did, rate 0-1 regardless of how authoritative it seemed."
             )
             wrapup_msgs: list[dict] = [{"role": "user", "content": single_prompt}]
             rated = False
@@ -1148,11 +1220,15 @@ def run_wrapup_phase(run_num: int, verbose: bool) -> tuple[int, int, int]:
 # ---------------------------------------------------------------------------
 
 def run_tests(workdir: Path) -> tuple[bool, str]:
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/test_text2stl_cli.py", "-v", "--tb=short"],
-        cwd=workdir, capture_output=True, text=True, timeout=300,
-    )
-    return result.returncode == 0, result.stdout + result.stderr
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "tests/test_text2stl_cli.py", "-v", "--tb=short", "--timeout=60"],
+            cwd=workdir, capture_output=True, text=True, timeout=600,
+        )
+        return result.returncode == 0, result.stdout + result.stderr
+    except subprocess.TimeoutExpired as e:
+        out = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        return False, f"[test suite timed out after 600s]\n{out}"
 
 # ---------------------------------------------------------------------------
 # Core step function — all 4 runs share this logic
@@ -1209,7 +1285,7 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
         concepts_captured = _count_concepts() - concepts_before
 
         # Wrapup: rate all concepts used this run, then clear session file
-        w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose)
+        w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose, tests_passed=passed)
         in_tok  += w_in
         out_tok += w_out
 
@@ -1262,6 +1338,18 @@ def _clear_db() -> None:
     if SESSION_FILE.exists():
         SESSION_FILE.write_text("[]")
     print("  [reset] concept DB cleared — starting from 0 concepts.")
+
+    # Wipe Qdrant collection so orphaned vectors don't survive across runs.
+    import urllib.request
+    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
+    qdrant_port = os.environ.get("QDRANT_PORT", "6333")
+    url = f"http://{qdrant_host}:{qdrant_port}/collections/concepts"
+    try:
+        req = urllib.request.Request(url, method="DELETE")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(f"  [reset] Qdrant collection deleted (status {resp.status}) — will recreate on first index.")
+    except Exception as e:
+        print(f"  [reset] Qdrant delete skipped: {e}")
 
 
 def _seed_concepts() -> None:
@@ -1353,36 +1441,34 @@ def _print_summary(r: dict) -> None:
 
 def _write_comparison(results: list[dict]) -> None:
     RESULTS_DIR.mkdir(exist_ok=True)
+    n = max(r["run"] for r in results)
+    run_cols = " | ".join(f"Run {i}" for i in range(1, n + 1))
+    sep_cols  = " | ".join("-------" for _ in range(1, n + 1))
     header = (
-        "# Benchmark Comparison — 4 Runs, Same Task, Same Budget\n\n"
-        "*All runs: same hard task, 20-turn budget.\n"
+        f"# Benchmark Comparison — {n} Runs, Same Task, Same Budget\n\n"
+        f"*All runs: same hard task, {MAX_TURNS}-turn budget.\n"
         "What changes: Lore content (more each run) and concept ratings.*\n\n"
-        "| Metric | Run 1 | Run 2 | Run 3 | Run 4 |\n"
-        "|--------|-------|-------|-------|-------|\n"
+        f"| Metric | {run_cols} |\n"
+        f"|--------|{sep_cols}|\n"
     )
 
-    def cell(r: dict | None, key: str, fmt=str) -> str:
-        return fmt(r[key]) if r else "—"
-
-    def tok(r):
-        return f"{r['total_tokens']:,}" if r else "—"
-
     by_run = {r["run"]: r for r in results}
+    run_range = range(1, n + 1)
     rows = [
         ("Lore concepts available",
-            *[str(by_run[i]["concepts_available"]) if i in by_run else "—" for i in range(1, 5)]),
+            *[str(by_run[i]["concepts_available"]) if i in by_run else "—" for i in run_range]),
         ("Task submitted",
-            *[("✓" if by_run[i]["task_submitted"] else "✗") if i in by_run else "—" for i in range(1, 5)]),
+            *[("✓" if by_run[i]["task_submitted"] else "✗") if i in by_run else "—" for i in run_range]),
         ("Tests passed",
-            *[("✅" if by_run[i]["tests_passed"] else "❌") if i in by_run else "—" for i in range(1, 5)]),
+            *[("✅" if by_run[i]["tests_passed"] else "❌") if i in by_run else "—" for i in run_range]),
         ("Turns (main loop)",
-            *[str(by_run[i]["turns_main"]) if i in by_run else "—" for i in range(1, 5)]),
+            *[str(by_run[i]["turns_main"]) if i in by_run else "—" for i in run_range]),
         ("Total tokens",
-            *[f"{by_run[i]['total_tokens']:,}" if i in by_run else "—" for i in range(1, 5)]),
+            *[f"{by_run[i]['total_tokens']:,}" if i in by_run else "—" for i in run_range]),
         ("Concepts captured",
-            *[str(by_run[i]["concepts_captured"]) if i in by_run else "—" for i in range(1, 5)]),
+            *[str(by_run[i]["concepts_captured"]) if i in by_run else "—" for i in run_range]),
         ("Elapsed (s)",
-            *[f"{by_run[i]['elapsed']:.0f}" if i in by_run else "—" for i in range(1, 5)]),
+            *[f"{by_run[i]['elapsed']:.0f}" if i in by_run else "—" for i in run_range]),
     ]
 
     table = header
@@ -1404,17 +1490,17 @@ def main() -> None:
         epilog=__doc__,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--run", type=int, choices=[1, 2, 3, 4, 5], metavar="{1,2,3,4,5}",
+    mode.add_argument("--run", type=int, choices=list(range(1, 11)), metavar="{1..10}",
                       help="Run a single numbered run")
     mode.add_argument("--all", action="store_true",
-                      help="Run all 4 in sequence (pauses for wrapup reminders)")
+                      help="Run all 10 in sequence")
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-turns", type=int, default=MAX_TURNS, metavar="N",
                         help=f"Turn budget for the main coding loop (default: {MAX_TURNS})")
     args = parser.parse_args()
 
-    runs = [1, 2, 3, 4] if args.all else [args.run]
+    runs = list(range(1, 11)) if args.all else [args.run]
     results: list[dict] = []
 
     for run_num in runs:

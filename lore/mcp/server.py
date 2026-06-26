@@ -115,7 +115,8 @@ def search_concepts(
     problem: str,
     type: Optional[str] = None,
     language: Optional[str] = None,
-    limit: int = 5,
+    limit: int = 3,
+    min_rating: float = 2.0,
     session_id: Optional[str] = None,
 ) -> dict:
     """Search for concepts semantically similar to a problem description.
@@ -129,7 +130,11 @@ def search_concepts(
         type: Optional filter by concept type.  One of: ``project``,
             ``pattern``, ``tool``, ``testing``, ``architecture``.
         language: Optional filter by programming language (e.g. ``"python"``).
-        limit: Maximum number of results to return.  Default 5.
+        limit: Maximum number of results to return.  Default 3.
+        min_rating: Exclude concepts whose ``avg_rating`` is below this
+            threshold.  Unrated concepts (``avg_rating`` is ``None``) are also
+            excluded when ``min_rating > 0``.  Set to ``0`` to disable
+            filtering.  Default 2.0.
         session_id: Optional session identifier.  When provided, usage is
             logged in the backend for analytics.
 
@@ -139,7 +144,7 @@ def search_concepts(
         ``content``, ``avg_rating``, ``usage_count``, ``time_saved_avg_hours``,
         and ``links`` (list of linked concept summaries).
     """
-    payload: dict = {"problem": problem, "limit": limit}
+    payload: dict = {"problem": problem, "limit": limit, "min_rating": min_rating}
     if type is not None:
         payload["type"] = type
     if language is not None:

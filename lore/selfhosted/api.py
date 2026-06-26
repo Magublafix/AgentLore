@@ -165,7 +165,8 @@ class SearchRequest(BaseModel):
     problem: str
     type: Optional[str] = None
     language: Optional[str] = None
-    limit: int = 5
+    limit: int = 3
+    min_rating: float = 2.0
 
 
 class LinkRequest(BaseModel):
@@ -541,6 +542,7 @@ def _register_routes(app: FastAPI) -> None:
             type_filter=body.type,
             language_filter=body.language,
             limit=body.limit,
+            min_rating=body.min_rating,
             collection_name=COLLECTION_NAME,
         )
 

@@ -97,18 +97,19 @@ def search_concepts(
     problem: str,
     type_filter: Optional[str] = None,
     language_filter: Optional[str] = None,
-    limit: int = 5,
+    limit: int = 3,
+    min_rating: float = 2.0,
     collection_name: str = "concepts",
 ) -> list[Concept]:
     """Find concepts semantically similar to a natural-language problem description.
 
     Embeds ``problem``, queries Qdrant for the nearest vectors, fetches full
     :class:`~lore.mcp.models.Concept` records from SQLite, then applies
-    ``type_filter`` and ``language_filter`` in-memory.
+    ``type_filter``, ``language_filter``, and ``min_rating`` in-memory.
 
     The in-memory filter is applied *after* fetching from SQLite rather than
     using Qdrant payload filters.  This keeps the Qdrant query simple and
-    avoids filter-induced result count shortfalls (e.g. requesting limit=5 but
+    avoids filter-induced result count shortfalls (e.g. requesting limit=3 but
     only 2 pass the filter in Qdrant).  For small collections this is perfectly
     efficient; a future optimisation could push filters into Qdrant with a
     higher initial limit.
@@ -124,7 +125,11 @@ def search_concepts(
             matches this string exactly (e.g. ``"python"``).  Concepts with
             ``language=None`` are excluded when a filter is active.
         limit: Maximum number of results to return after filtering.  Defaults
-            to 5.
+            to 3.
+        min_rating: Exclude concepts whose ``avg_rating`` is below this value.
+            Concepts with no ratings (``avg_rating`` is ``None``) are also
+            excluded when ``min_rating > 0``.  Set to ``0`` to disable rating
+            filtering entirely.  Defaults to 2.0.
         collection_name: Qdrant collection name.  Defaults to ``"concepts"``.
 
     Returns:
@@ -135,7 +140,7 @@ def search_concepts(
     query_vector: list[float] = model.embed(problem)
 
     # Fetch more candidates than needed to absorb filter attrition.
-    fetch_limit = limit * 4 if (type_filter or language_filter) else limit
+    fetch_limit = limit * 4 if (type_filter or language_filter or min_rating > 0) else limit
     concept_ids: list[str] = search_vectors(
         qdrant_client, collection_name, query_vector, limit=fetch_limit
     )
@@ -150,5 +155,7 @@ def search_concepts(
         concepts = [c for c in concepts if c.type == type_filter]
     if language_filter is not None:
         concepts = [c for c in concepts if c.language == language_filter]
+    if min_rating > 0:
+        concepts = [c for c in concepts if c.avg_rating is not None and c.avg_rating >= min_rating]
 
     return concepts[:limit]
