@@ -1,7 +1,7 @@
 """Embedding indexer — bridges the embedding model to SQLite and Qdrant.
 
-This module is used by the FastAPI service (LORE-003) and the seed loader
-(LORE-006).  It assumes that concepts are already persisted in SQLite before
+This module is used by the FastAPI service.  It assumes that concepts are
+already persisted in SQLite before
 :func:`index_concept` is called; the caller is responsible for the insert.
 
 Dual-write contract:

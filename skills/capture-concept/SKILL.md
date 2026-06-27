@@ -71,7 +71,11 @@ If the MCP server is unreachable or returns an error:
 
 ### 5. Update the session file
 
-On successful submission, append the returned concept ID to `~/.lore/session.json`:
+On successful submission, append the returned `concept_id` to `~/.lore/session.json`.
+
+If the response contains `existing_concept_id` (semantic duplicate — the concept was too similar to an existing one), append that ID instead. The existing concept is equivalent and should still be rated at wrapup.
+
+Rules:
 - Create the file as `[]` if missing.
 - No duplicate IDs.
 - Reset to `[]` if the file is corrupted (not valid JSON).

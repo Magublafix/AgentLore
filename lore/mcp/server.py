@@ -277,6 +277,10 @@ def submit_concept(
 
     with _client() as client:
         response = client.post("/v1/concepts", json=payload)
+        if response.status_code == 409:
+            # Semantic duplicate — return structured response so callers can
+            # track the existing_concept_id for rating.
+            return response.json()
         if response.status_code == 422:
             data = response.json()
             raise ValueError(

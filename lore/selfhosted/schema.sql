@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS concepts (
     usage_count          INTEGER DEFAULT 0,
     time_saved_avg_hours REAL,
     created_at           TEXT,
-    embedding            BLOB                -- sqlite-vec float32 vector (when_to_use + name)
+    embedding            BLOB                -- raw float32 BLOB (when_to_use + name); vector queries go through Qdrant
 );
 
 CREATE TABLE IF NOT EXISTS links (
