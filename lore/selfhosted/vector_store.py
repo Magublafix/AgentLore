@@ -130,10 +130,16 @@ def search_vectors(
         be shorter than ``limit`` if the collection has fewer vectors.
     """
     # qdrant-client ≥1.7 replaced .search() with .query_points()
-    response = client.query_points(
-        collection_name=collection_name,
-        query=query_vector,
-        limit=limit,
-        with_payload=True,
-    )
+    try:
+        response = client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=limit,
+            with_payload=True,
+        )
+    except Exception as exc:
+        # Collection doesn't exist yet — return empty rather than 500.
+        if "doesn't exist" in str(exc) or "Not found" in str(exc):
+            return []
+        raise
     return [hit.payload["concept_id"] for hit in response.points if hit.payload]

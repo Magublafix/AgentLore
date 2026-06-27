@@ -61,6 +61,8 @@ PROVIDER       = os.environ.get("LORE_LLM_PROVIDER", "anthropic")   # "anthropic
 # For local runs, point the Anthropic SDK at Ollama's /v1/messages endpoint.
 LOCAL_BASE_URL = os.environ.get("LORE_LOCAL_BASE_URL", "http://localhost:11434")
 LOCAL_MODEL    = os.environ.get("LORE_LOCAL_MODEL", "qwen2.5-coder:32b")
+# Selfhosted Lore API — all concept operations go through here.
+LORE_API_URL   = os.environ.get("LORE_API_URL", "http://localhost:8765")
 LOCAL_MAX_TOKENS = 8192
 
 # Prepended to the system prompt for local models to encourage immediate tool use.
@@ -424,209 +426,77 @@ def _ensure_db() -> None:
     conn.close()
 
 
-def handle_search_concepts(inputs: dict) -> str:
-    _ensure_db()
-    problem = inputs["problem"]
-    limit = inputs.get("limit", 5)
-    type_filter = inputs.get("type")
-    language_filter = inputs.get("language")
-
-    terms = problem.split()[:8]
-    clauses = " OR ".join(["name LIKE ? OR content LIKE ? OR tags LIKE ?"] * len(terms))
-    params: list = []
-    for t in terms:
-        like = f"%{t}%"
-        params.extend([like, like, like])
-
-    extra = ""
-    if type_filter:
-        extra += " AND type = ?"
-        params.append(type_filter)
-    if language_filter:
-        extra += " AND (language = ? OR language IS NULL)"
-        params.append(language_filter)
-    params.append(limit)
-
+def _lore_api(method: str, path: str, **kwargs) -> dict:
+    """Call the selfhosted Lore API and return parsed JSON. Raises on HTTP errors."""
+    import urllib.request as _ur
+    url = f"{LORE_API_URL}{path}"
+    data = json.dumps(kwargs["json"]).encode() if "json" in kwargs else None
+    req = _ur.Request(url, data=data, method=method,
+                      headers={"Content-Type": "application/json"} if data else {})
     try:
-        conn = sqlite3.connect(str(LORE_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            f"SELECT * FROM concepts WHERE ({clauses}){extra} "
-            f"ORDER BY avg_rating DESC, usage_count DESC LIMIT ?",
-            params,
-        ).fetchall()
-        conn.close()
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc), "results": []})
+        with _ur.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except Exception as exc:
+        return {"error": str(exc)}
 
-    results = [
-        {
-            "concept_id": r["concept_id"],
-            "name": r["name"],
-            "type": r["type"],
-            "content": r["content"],
-            "when_to_use": r["when_to_use"] or "",
-            "dont_use_when": r["dont_use_when"] or "",
-            "avg_rating": r["avg_rating"] or 0.0,
-            "usage_count": r["usage_count"] or 0,
-            "links": [],
-        }
-        for r in rows
-    ]
-    _update_session(r["concept_id"] for r in rows)
-    return json.dumps({"results": results})
+
+def handle_search_concepts(inputs: dict) -> str:
+    payload: dict = {"problem": inputs["problem"]}
+    if inputs.get("limit"):
+        payload["limit"] = inputs["limit"]
+    if inputs.get("type"):
+        payload["type"] = inputs["type"]
+    if inputs.get("language"):
+        payload["language"] = inputs["language"]
+    result = _lore_api("POST", "/v1/concepts/search", json=payload)
+    if "error" not in result:
+        _update_session(r["concept_id"] for r in result.get("results", []))
+    return json.dumps(result)
 
 
 _VALID_CONCEPT_TYPES = {"project", "pattern", "tool", "testing", "architecture"}
-_SEMANTIC_DEDUP_THRESHOLD = 0.88  # cosine similarity above this → reject as duplicate
-_embed_model = None  # lazy-loaded sentence-transformers model
-
-
-def _get_embed_model():
-    global _embed_model
-    if _embed_model is None:
-        from sentence_transformers import SentenceTransformer
-        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embed_model
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    import math
-    dot = sum(x * y for x, y in zip(a, b))
-    na  = math.sqrt(sum(x * x for x in a))
-    nb  = math.sqrt(sum(x * x for x in b))
-    return dot / (na * nb) if na and nb else 0.0
 
 
 def handle_submit_concept(inputs: dict) -> str:
-    _ensure_db()
     name    = (inputs.get("name") or inputs.get("title") or "").strip()
     content = (inputs.get("content") or inputs.get("body") or "").strip()
     if not name:
         return json.dumps({"error": "name is required — provide a short descriptive title"})
     if not content or len(content) < 20:
         return json.dumps({"error": "content is required — describe the concept in detail (at least 20 chars)"})
-
     raw_type = inputs.get("type") or inputs.get("kind") or ""
     ctype = raw_type if raw_type in _VALID_CONCEPT_TYPES else "pattern"
-
-    # Embed name + content for semantic dedup
-    model = _get_embed_model()
-    vec: list[float] = model.encode(f"{name}. {content}").tolist()
-    import struct as _struct
-    embedding_blob = _struct.pack(f"{len(vec)}f", *vec)
-
-    concept_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    try:
-        conn = sqlite3.connect(str(LORE_DB_PATH))
-
-        # Backfill embeddings for any concepts saved before semantic dedup was added
-        unembedded = conn.execute(
-            "SELECT concept_id, name, content FROM concepts WHERE embedding IS NULL"
-        ).fetchall()
-        if unembedded:
-            for eid, ename, econtent in unembedded:
-                evec = model.encode(f"{ename}. {econtent}").tolist()
-                eblob = _struct.pack(f"{len(evec)}f", *evec)
-                conn.execute("UPDATE concepts SET embedding = ? WHERE concept_id = ?", (eblob, eid))
-            conn.commit()
-
-        # Semantic dedup: compare against all stored embeddings (now always populated)
-        existing = conn.execute(
-            "SELECT concept_id, name, embedding FROM concepts WHERE embedding IS NOT NULL"
-        ).fetchall()
-        for eid, ename, eblob in existing:
-            evec = list(_struct.unpack(f"{len(eblob)//4}f", eblob))
-            sim = _cosine_similarity(vec, evec)
-            if sim >= _SEMANTIC_DEDUP_THRESHOLD:
-                conn.close()
-                return json.dumps({
-                    "error": "semantic_duplicate",
-                    "existing_id": eid,
-                    "existing_name": ename,
-                    "similarity": round(sim, 3),
-                    "message": (
-                        f"too similar to existing concept '{ename}' "
-                        f"(similarity={sim:.2f}) — skip or capture a meaningfully different angle"
-                    ),
-                })
-
-        conn.execute(
-            """
-            INSERT INTO concepts (
-                concept_id, name, type, content, language,
-                when_to_use, dont_use_when, tags,
-                source_url, author, avg_rating, usage_count,
-                time_saved_avg_hours, created_at, embedding
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                concept_id, name, ctype, content,
-                inputs.get("language"), inputs.get("when_to_use", ""),
-                inputs.get("dont_use_when", ""),
-                json.dumps(inputs.get("tags", [])),
-                inputs.get("source_url"), "benchmark",
-                0.0, 0, None, now, embedding_blob,
-            ),
-        )
-        conn.commit()
-        conn.close()
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc)})
-    _update_session([concept_id])
-    return json.dumps({"concept_id": concept_id, "name": name})
+    payload = {
+        "name": name,
+        "type": ctype,
+        "content": content,
+        "when_to_use": inputs.get("when_to_use", ""),
+        "dont_use_when": inputs.get("dont_use_when"),
+        "language": inputs.get("language"),
+        "tags": inputs.get("tags", []),
+        "author": "benchmark",
+    }
+    result = _lore_api("POST", "/v1/concepts", json=payload)
+    if "concept_id" in result:
+        _update_session([result["concept_id"]])
+    return json.dumps(result)
 
 
 def handle_rate_concept(inputs: dict) -> str:
-    """Insert a rating and recompute avg_rating on the concept — mirrors db.insert_rating."""
-    _ensure_db()
     concept_id = inputs.get("concept_id") or inputs.get("id")
     if not concept_id:
         return json.dumps({"error": "concept_id required"})
     outcome_raw = inputs.get("outcome") or inputs.get("score") or inputs.get("rating")
     if outcome_raw is None:
-        return json.dumps({"error": "outcome required (1-5)"})
+        return json.dumps({"error": "outcome required (0-5)"})
     outcome = int(outcome_raw)
-    if not 1 <= outcome <= 5:
-        return json.dumps({"error": "outcome must be 1-5"})
-    hours_saved = inputs.get("hours_saved")
-    notes = inputs.get("notes")
-    now = datetime.now(timezone.utc).isoformat()
-    rating_id = str(uuid.uuid4())
-    session_id = f"benchmark-run"
-
-    try:
-        conn = sqlite3.connect(str(LORE_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        # Verify concept exists
-        if not conn.execute("SELECT 1 FROM concepts WHERE concept_id=?", (concept_id,)).fetchone():
-            conn.close()
-            return json.dumps({"error": f"concept {concept_id} not found"})
-        conn.execute(
-            "INSERT INTO ratings (rating_id,concept_id,session_id,outcome,hours_saved,notes,rated_at) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (rating_id, concept_id, session_id, outcome, hours_saved, notes, now),
-        )
-        # Recompute aggregates
-        agg = conn.execute(
-            "SELECT AVG(CAST(outcome AS REAL)) AS avg_o, AVG(hours_saved) AS avg_h "
-            "FROM ratings WHERE concept_id=?",
-            (concept_id,),
-        ).fetchone()
-        usage_row = conn.execute(
-            "SELECT usage_count FROM concepts WHERE concept_id=?", (concept_id,)
-        ).fetchone()
-        usage_count = usage_row["usage_count"] if usage_row else 0
-        conn.execute(
-            "UPDATE concepts SET avg_rating=?, usage_count=?, time_saved_avg_hours=? WHERE concept_id=?",
-            (agg["avg_o"] or 0.0, usage_count, agg["avg_h"], concept_id),
-        )
-        conn.commit()
-        conn.close()
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc)})
-    return json.dumps({"rated": concept_id, "outcome": outcome, "avg_rating": agg["avg_o"] or 0.0})
+    payload: dict = {"outcome": outcome, "session_id": "benchmark-run"}
+    if inputs.get("hours_saved") is not None:
+        payload["hours_saved"] = inputs["hours_saved"]
+    if inputs.get("notes"):
+        payload["notes"] = inputs["notes"]
+    result = _lore_api("POST", f"/v1/concepts/{concept_id}/rate", json=payload)
+    return json.dumps(result)
 
 
 def handle_web_search(inputs: dict) -> str:
@@ -1316,40 +1186,18 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
 # ---------------------------------------------------------------------------
 
 def _count_concepts() -> int:
-    if not LORE_DB_PATH.exists():
-        return 0
-    try:
-        conn = sqlite3.connect(str(LORE_DB_PATH))
-        n = conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0]
-        conn.close()
-        return n
-    except sqlite3.Error:
-        return 0
+    result = _lore_api("GET", "/v1/metrics")
+    return result.get("concept_count", 0)
 
 
 def _clear_db() -> None:
-    """Drop all concepts and ratings — called before Run 1 to start clean."""
-    _ensure_db()
-    conn = sqlite3.connect(str(LORE_DB_PATH))
-    conn.execute("DELETE FROM ratings")
-    conn.execute("DELETE FROM concepts")
-    conn.commit()
-    conn.close()
+    """Drop all concepts, ratings, and Qdrant vectors via the selfhosted API."""
+    result = _lore_api("DELETE", "/v1/admin/reset")
     if SESSION_FILE.exists():
         SESSION_FILE.write_text("[]")
-    print("  [reset] concept DB cleared — starting from 0 concepts.")
-
-    # Wipe Qdrant collection so orphaned vectors don't survive across runs.
-    import urllib.request
-    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-    qdrant_port = os.environ.get("QDRANT_PORT", "6333")
-    url = f"http://{qdrant_host}:{qdrant_port}/collections/concepts"
-    try:
-        req = urllib.request.Request(url, method="DELETE")
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            print(f"  [reset] Qdrant collection deleted (status {resp.status}) — will recreate on first index.")
-    except Exception as e:
-        print(f"  [reset] Qdrant delete skipped: {e}")
+    deleted = result.get("concepts_deleted", "?")
+    print(f"  [reset] concept DB cleared — {deleted} concepts removed.")
+    print("  [reset] Qdrant collection wiped — will recreate on first index.")
 
 
 def _seed_concepts() -> None:

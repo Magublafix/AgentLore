@@ -387,6 +387,55 @@ def _register_routes(app: FastAPI) -> None:
 
         return {"status": "ok", "qdrant": qdrant_ok, "db": db_ok}
 
+    @app.get("/v1/metrics")
+    async def metrics(request: Request):
+        """Return aggregate knowledge-base statistics.
+
+        Returns:
+            JSON with ``concept_count``, ``rating_count``, and
+            ``avg_rating`` (float or null when no ratings exist).
+        """
+        conn: sqlite3.Connection = request.app.state.db
+        concept_count = conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0]
+        row = conn.execute(
+            "SELECT COUNT(*), AVG(CAST(outcome AS REAL)) FROM ratings"
+        ).fetchone()
+        rating_count = row[0]
+        avg_rating = round(row[1], 3) if row[1] is not None else None
+        return {
+            "concept_count": concept_count,
+            "rating_count": rating_count,
+            "avg_rating": avg_rating,
+        }
+
+    @app.delete("/v1/admin/reset", status_code=200)
+    async def admin_reset(request: Request):
+        """Wipe all concepts and ratings from SQLite and delete the Qdrant collection.
+
+        Intended for benchmark resets only — destructive and irreversible.
+
+        Returns:
+            JSON with ``concepts_deleted`` and ``ratings_deleted`` counts.
+        """
+        conn: sqlite3.Connection = request.app.state.db
+        qdrant_client: QdrantClient = request.app.state.qdrant
+
+        ratings_deleted = conn.execute("SELECT COUNT(*) FROM ratings").fetchone()[0]
+        concepts_deleted = conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0]
+        conn.execute("DELETE FROM ratings")
+        conn.execute("DELETE FROM concepts")
+        conn.commit()
+
+        try:
+            qdrant_client.delete_collection(COLLECTION_NAME)
+        except Exception:  # noqa: BLE001
+            pass  # collection may not exist yet — that's fine
+
+        return {
+            "concepts_deleted": concepts_deleted,
+            "ratings_deleted": ratings_deleted,
+        }
+
     @app.post("/v1/concepts", status_code=201)
     async def submit_concept(body: ConceptSubmitRequest, request: Request):
         """Submit a new concept to the knowledge graph.
