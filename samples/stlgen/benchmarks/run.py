@@ -1,31 +1,24 @@
 #!/usr/bin/env python3
 """
-Lore effectiveness benchmark — text2stl CLI (4-run progressive design).
+Lore effectiveness benchmark — text2stl CLI (10-run progressive design).
 
-Same hard task, same 20-turn budget, run four times.  What changes each time
+Same hard task, same 40-turn budget, run ten times.  What changes each time
 is what Lore contains and whether concepts have been rated.
 
-  Run 1 — no Lore search available; captures concepts as it works.
-           Forced 15-turn capture phase after main loop (win or lose).
-  Run 2 — Lore search active; uses unrated concepts from Run 1.
-           Captures new patterns it finds.
-  Run 3 — Lore search active; concepts from Runs 1+2, rated by wrapup
-           phase that ran automatically after Run 2.
-  Run 4 — Lore search active; all prior concepts, more rated.
+  Run 1  — no Lore search; captures concepts after the main loop.
+  Run 2+ — Lore search active; concepts accumulate and get rated each run.
 
 Progression tests:
-  - Does Lore help at all?            (Run 1 baseline → Run 2)
-  - Does more accumulated knowledge help? (Run 2 → Run 3)
-  - Does concept rating improve relevance? (Run 3 → Run 4)
+  - Does Lore help at all?                  (Run 1 baseline → Run 2)
+  - Does accumulated knowledge compound?    (Run 2 → Run 5+)
+  - Does concept rating improve relevance?  (unrated early → rated later)
 
-The task is deliberately hard (no approach hint) so early runs may fail
-while later runs may succeed — that qualitative jump is the clearest signal.
+All concept operations go through the selfhosted Lore API (LORE_API_URL,
+default http://localhost:8765).  No direct SQLite access.
 
 Usage:
-  python benchmarks/run.py --run 1        # baseline
-  python benchmarks/run.py --run 2        # after Run 1 + wrapup
-  python benchmarks/run.py --run 3        # after Run 2 + wrapup
-  python benchmarks/run.py --run 4        # after Run 3 + wrapup
+  python benchmarks/run.py --all             # all 10 runs in sequence
+  python benchmarks/run.py --run 1           # single run
   python benchmarks/run.py --dry-run --run 1
 """
 
@@ -36,7 +29,6 @@ import json
 import os
 import re
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -88,7 +80,6 @@ CRITICAL INSTRUCTIONS FOR THIS SESSION:
 
 """
 
-LORE_DB_PATH = Path(os.environ.get("LORE_DB_PATH", "~/.lore/lore.db")).expanduser()
 SESSION_FILE = Path(os.environ.get("LORE_SESSION_FILE", "~/.lore/session.json")).expanduser()
 
 REPO_ROOT = Path(__file__).parents[3]
@@ -113,7 +104,7 @@ def _load_skill(name: str) -> str:
     return text
 
 # ---------------------------------------------------------------------------
-# Task prompt (same for all 4 runs — only Lore availability changes)
+# Task prompt (same for all runs — only Lore availability changes)
 # ---------------------------------------------------------------------------
 
 _TASK = """\
@@ -401,34 +392,13 @@ def build_system_capture() -> str:
     )
 
 # ---------------------------------------------------------------------------
-# Lore DB helpers
+# Lore API helpers
 # ---------------------------------------------------------------------------
-
-def _ensure_db() -> None:
-    if LORE_DB_PATH.exists():
-        return
-    LORE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    schema_path = REPO_ROOT / "lore" / "selfhosted" / "schema.sql"
-    conn = sqlite3.connect(str(LORE_DB_PATH))
-    if schema_path.exists():
-        conn.executescript(schema_path.read_text())
-    else:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS concepts (
-                concept_id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
-                content TEXT NOT NULL, language TEXT, when_to_use TEXT,
-                dont_use_when TEXT, tags TEXT, source_url TEXT, author TEXT,
-                avg_rating REAL DEFAULT 0, usage_count INTEGER DEFAULT 0,
-                time_saved_avg_hours REAL, created_at TEXT, embedding BLOB
-            );
-        """)
-    conn.commit()
-    conn.close()
-
 
 def _lore_api(method: str, path: str, **kwargs) -> dict:
     """Call the selfhosted Lore API and return parsed JSON. Raises on HTTP errors."""
     import urllib.request as _ur
+    import urllib.error as _ue
     url = f"{LORE_API_URL}{path}"
     data = json.dumps(kwargs["json"]).encode() if "json" in kwargs else None
     req = _ur.Request(url, data=data, method=method,
@@ -436,6 +406,15 @@ def _lore_api(method: str, path: str, **kwargs) -> dict:
     try:
         with _ur.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
+    except _ue.HTTPError as exc:
+        # Parse the response body — 503 responses include concept_id so callers
+        # can still track the concept even when Qdrant indexing fails.
+        try:
+            body = json.loads(exc.read())
+        except Exception:
+            body = {}
+        body.setdefault("error", str(exc))
+        return body
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -479,6 +458,9 @@ def handle_submit_concept(inputs: dict) -> str:
     result = _lore_api("POST", "/v1/concepts", json=payload)
     if "concept_id" in result:
         _update_session([result["concept_id"]])
+    elif result.get("error") == "semantic_duplicate" and "existing_concept_id" in result:
+        # Dedup: track the existing concept so wrapup can rate it.
+        _update_session([result["existing_concept_id"]])
     return json.dumps(result)
 
 
@@ -943,24 +925,17 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
         print(f"  [wrapup] no concepts in session file — skipping.")
         return 0, 0, 0
 
-    # Resolve concept names from DB for a readable prompt
+    # Resolve concept names via API for a readable wrapup prompt.
     concept_lines: list[str] = []
-    try:
-        conn = sqlite3.connect(str(LORE_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        for cid in session_ids:
-            row = conn.execute(
-                "SELECT name, type, avg_rating FROM concepts WHERE concept_id=?", (cid,)
-            ).fetchone()
-            if row:
-                concept_lines.append(
-                    f"  - [{row['type']}] {row['name']}  (current avg_rating: {row['avg_rating']:.1f})  id={cid}"
-                )
-            else:
-                concept_lines.append(f"  - (unresolved)  id={cid}")
-        conn.close()
-    except sqlite3.Error:
-        concept_lines = [f"  - id={cid}" for cid in session_ids]
+    for cid in session_ids:
+        result = _lore_api("GET", f"/v1/concepts/{cid}")
+        if "concept_id" in result:
+            avg = result.get("avg_rating") or 0.0
+            concept_lines.append(
+                f"  - [{result['type']}] {result['name']}  (current avg_rating: {avg:.1f})  id={cid}"
+            )
+        else:
+            concept_lines.append(f"  - (unresolved)  id={cid}")
 
     concept_list = "\n".join(concept_lines)
 
@@ -1101,7 +1076,7 @@ def run_tests(workdir: Path) -> tuple[bool, str]:
         return False, f"[test suite timed out after 600s]\n{out}"
 
 # ---------------------------------------------------------------------------
-# Core step function — all 4 runs share this logic
+# Core step function — all runs share this logic
 # ---------------------------------------------------------------------------
 
 def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TURNS) -> dict | None:
@@ -1203,13 +1178,9 @@ def _clear_db() -> None:
 def _seed_concepts() -> None:
     """Inject hand-authored seed concepts from seed_concepts/ into the DB.
 
-    Seed concepts are markdown files with YAML frontmatter providing name, type,
-    when_to_use, and tags.  The file body below the frontmatter becomes content.
-    They survive the DB reset and are available from Run 1 onward so that the
-    Lore-ON runs (2 and 4) can find correct library knowledge even when no prior
-    run has captured it organically.
-
-    See README.md §Seeding rationale for why this is done.
+    Not called in the current benchmark design — seeding was removed so that
+    Lore bootstraps purely from concepts captured organically in earlier runs.
+    Kept for ad-hoc debugging (call manually before step_run if needed).
     """
     seed_dir = Path(__file__).parent / "seed_concepts"
     if not seed_dir.exists():

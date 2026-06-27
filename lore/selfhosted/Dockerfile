@@ -1,31 +1,20 @@
-# syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
 # Lore self-hosted backend image
 # ---------------------------------------------------------------------------
-# Multi-stage build keeps the final layer lean:
-#   builder  — installs dependencies into a venv, then pre-downloads the
-#              sentence-transformers model so the runtime image needs no
-#              network access at startup.
-#   runtime  — copies the venv + cached model; nothing else.
+# Multi-stage build:
+#   builder  — installs Python dependencies.
+#   runtime  — copies the installed packages and source; nothing else.
 #
-# The model (~90 MB weights, all-MiniLM-L6-v2) is stored at /app/.cache so that:
-#   - The cache lives in a path we own (not /root/.cache).
-#   - The non-root `lore` user can read it at runtime without chmod hacks.
-# TRANSFORMERS_OFFLINE=1 + HF_DATASETS_OFFLINE=1 are set in the runtime ENV so
-# that huggingface_hub does not attempt any HEAD requests before loading the
-# locally cached model (newer huggingface_hub versions do this by default).
+# The embedding model (all-MiniLM-L6-v2, ~90 MB) is NOT baked into the image.
+# entrypoint.sh downloads it on first container start and caches it in the
+# lore-model-cache Docker volume.  Subsequent starts skip the download and
+# switch to TRANSFORMERS_OFFLINE=1 automatically.
 # ---------------------------------------------------------------------------
 
-# Pin the patch version for reproducible builds.
 FROM python:3.11-slim AS builder
 
-# Silence pip warnings and bytecode noise during the build step.
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    # Redirect the HuggingFace / Transformers cache to a predictable location
-    # inside the image so we control ownership and path.
-    HF_HOME=/app/.cache \
-    TRANSFORMERS_CACHE=/app/.cache
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
@@ -54,27 +43,18 @@ COPY lore/ lore/
 # Reinstall in-place so the package metadata points at the copied source.
 RUN pip install --no-cache-dir --no-deps .
 
-# Pre-download the embedding model into the cache directory.
-# This bakes the model (~90 MB) into the image so the container can serve
-# embed requests immediately without network access at runtime.
-RUN mkdir -p /app/.cache && \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-
 # ---------------------------------------------------------------------------
 # Runtime stage — minimal, non-root
 # ---------------------------------------------------------------------------
 FROM python:3.11-slim AS runtime
 
+# HF cache path is fixed so the entrypoint sentinel check is reliable.
+# TRANSFORMERS_OFFLINE is NOT set here — entrypoint.sh sets it after the
+# model is confirmed present, allowing first-start download to succeed.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/app/.cache \
     TRANSFORMERS_CACHE=/app/.cache \
-    # Force HuggingFace / sentence-transformers into fully offline mode.
-    # Without these, newer versions of huggingface_hub attempt a HEAD request
-    # to check for model updates even when the weights are already cached.
-    TRANSFORMERS_OFFLINE=1 \
-    HF_DATASETS_OFFLINE=1 \
-    # Default DB path; override at container runtime via -e LORE_DB_PATH=...
     LORE_DB_PATH=/data/lore.db
 
 # Create a non-root user (uid 1000) before copying files so chown is cheap.
@@ -83,23 +63,25 @@ RUN groupadd --gid 1000 lore && \
 
 WORKDIR /app
 
-# Copy the installed packages and cached model from the builder stage.
+# Copy installed packages and source from the builder stage.
 COPY --from=builder --chown=lore:lore /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder --chown=lore:lore /usr/local/bin/uvicorn /usr/local/bin/uvicorn
-COPY --from=builder --chown=lore:lore /app/.cache /app/.cache
 COPY --from=builder --chown=lore:lore /app/lore /app/lore
 
-# /data is where the SQLite database lives at runtime (mounted as a volume).
-RUN mkdir -p /data && chown lore:lore /data
+# Entrypoint script — downloads model on first start, then execs uvicorn.
+COPY --chown=lore:lore lore/selfhosted/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# /data — SQLite database (mounted as a volume).
+# /app/.cache — HuggingFace model cache (mounted as a volume).
+RUN mkdir -p /data /app/.cache && chown lore:lore /data /app/.cache
 
 USER lore
 
 EXPOSE 8765
 
-# Liveness/readiness probe: the /v1/health endpoint is always available
-# even when Qdrant is unreachable.
-HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
+# start_period=60s allows time for first-run model download (~90 MB).
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/v1/health')" || exit 1
 
-# Use exec form so signals (SIGTERM) reach uvicorn directly — clean shutdown.
-ENTRYPOINT ["uvicorn", "lore.selfhosted.api:app", "--host", "0.0.0.0", "--port", "8765"]
+ENTRYPOINT ["/app/entrypoint.sh"]

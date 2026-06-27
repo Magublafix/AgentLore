@@ -96,6 +96,7 @@ def upsert_concept_vector(
         concept_id: The Lore concept UUID string.
         vector: Float list of length 384 (all-MiniLM-L6-v2 output).
     """
+    init_qdrant_collection(client, collection_name)
     point_id = _concept_id_to_point_id(concept_id)
     client.upsert(
         collection_name=collection_name,
@@ -143,3 +144,40 @@ def search_vectors(
             return []
         raise
     return [hit.payload["concept_id"] for hit in response.points if hit.payload]
+
+
+def find_near_duplicate(
+    client: QdrantClient,
+    collection_name: str,
+    query_vector: list[float],
+    threshold: float = 0.88,
+) -> tuple[str, float] | None:
+    """Return (concept_id, score) of the nearest existing concept if similarity
+    exceeds ``threshold``, or ``None`` if no near-duplicate exists.
+
+    Args:
+        client: An active :class:`QdrantClient` instance.
+        collection_name: The collection to search.
+        query_vector: Float list of length 384.
+        threshold: Cosine similarity threshold above which a concept is
+            considered a duplicate.  Defaults to 0.88.
+
+    Returns:
+        ``(concept_id, score)`` tuple or ``None``.
+    """
+    try:
+        response = client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=1,
+            with_payload=True,
+            score_threshold=threshold,
+        )
+    except Exception as exc:
+        if "doesn't exist" in str(exc) or "Not found" in str(exc):
+            return None
+        raise
+    if response.points:
+        hit = response.points[0]
+        return hit.payload["concept_id"], hit.score
+    return None

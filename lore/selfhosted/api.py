@@ -66,7 +66,7 @@ from lore.selfhosted.db import (
     log_session_usage,
 )
 from lore.selfhosted.indexer import index_concept, search_concepts
-from lore.selfhosted.vector_store import init_qdrant_collection
+from lore.selfhosted.vector_store import find_near_duplicate, init_qdrant_collection
 
 logger = logging.getLogger(__name__)
 
@@ -442,11 +442,13 @@ def _register_routes(app: FastAPI) -> None:
 
         Steps:
         1. Run content scan — HTTP 422 if any blocked patterns are found.
-        2. Insert concept into SQLite.
-        3. Index concept into Qdrant via the embedding pipeline.
+        2. Semantic dedup — embed the candidate and query Qdrant; HTTP 409
+           with ``existing_concept_id`` if similarity ≥ 0.88.
+        3. Insert concept into SQLite.
+        4. Index concept into Qdrant via the embedding pipeline.
            If Qdrant is unreachable, return HTTP 503 with the concept_id so
            the caller can re-index later (see module docstring for known gap).
-        4. Insert any inline links; invalid ``rel`` values are skipped with a
+        5. Insert any inline links; invalid ``rel`` values are skipped with a
            warning.
 
         Args:
@@ -455,6 +457,7 @@ def _register_routes(app: FastAPI) -> None:
 
         Returns:
             HTTP 201 ``{"concept_id": "...", "name": "..."}``.
+            HTTP 409 ``{"error": "semantic_duplicate", "existing_concept_id": "...", "similarity": float}``.
         """
         # Content scan before any DB write.
         scan_fields = {
@@ -467,6 +470,25 @@ def _register_routes(app: FastAPI) -> None:
             return JSONResponse(
                 status_code=422,
                 content={"error": "Content blocked by scanner", "matches": matches},
+            )
+
+        conn: sqlite3.Connection = request.app.state.db
+        qdrant_client: QdrantClient = request.app.state.qdrant
+        model: EmbeddingModel = request.app.state.model
+
+        # Semantic dedup: embed the candidate and check against existing vectors.
+        embed_text = (body.when_to_use or "") + " " + body.name
+        candidate_vector: list[float] = model.embed(embed_text)
+        dup = find_near_duplicate(qdrant_client, COLLECTION_NAME, candidate_vector)
+        if dup is not None:
+            dup_id, dup_score = dup
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "semantic_duplicate",
+                    "existing_concept_id": dup_id,
+                    "similarity": round(dup_score, 4),
+                },
             )
 
         concept_id = str(uuid.uuid4())
@@ -482,10 +504,6 @@ def _register_routes(app: FastAPI) -> None:
             source_url=body.source_url,
             author=body.author,
         )
-
-        conn: sqlite3.Connection = request.app.state.db
-        qdrant_client: QdrantClient = request.app.state.qdrant
-        model: EmbeddingModel = request.app.state.model
 
         insert_concept(conn, concept)
 

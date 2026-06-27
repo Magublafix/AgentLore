@@ -10,12 +10,11 @@ Build a `text2stl` CLI that converts a text string (≤15 chars) into a 3D-print
 
 | Run | Lore active | DB state at start | Purpose |
 |-----|-------------|-------------------|---------|
-| 1   | ❌ no        | seed concept only | Control — proves the model cannot solve the task without Lore |
-| 2   | ✅ yes       | seed concept only | Core test — does the seed concept rescue the model? |
-| 3   | ✅ yes       | seed + Run 1–2 concepts | Does accumulated knowledge (including failed-run noise) help further? |
-| 4   | ✅ yes       | seed + Run 1–3 concepts | Does more Lore context improve or regress? |
+| 1   | ❌ no        | empty (reset on start) | Control — baseline without Lore |
+| 2   | ✅ yes       | Run 1 concepts | Lore ON with concepts captured in Run 1 |
+| 3–10 | ✅ yes      | accumulates each prior run | Does accumulated organic knowledge improve results? |
 
-Run 1 is the single control. Runs 2–4 are treatment with progressively richer Lore context.
+Run 1 is the single control and always resets the DB to empty. Runs 2–10 have Lore ON with progressively richer context from prior runs. No hand-authored seed concepts — Lore must bootstrap entirely from concepts the model captures organically.
 
 ## How to run
 
@@ -30,40 +29,31 @@ LORE_LOCAL_MODEL=qwen2.5-coder:32b \
 python benchmarks/run.py --run 1
 ```
 
-Run all four sequentially:
+Run all 10 sequentially (resets DB on Run 1, accumulates across runs):
 
 ```bash
-for i in 1 2 3 4; do python benchmarks/run.py --run $i; done
+python benchmarks/run.py --all
+```
+
+Or step through individually:
+
+```bash
+for i in $(seq 1 10); do python benchmarks/run.py --run $i; done
 ```
 
 ## Seeding rationale
 
-The benchmark includes hand-authored seed concepts in `seed_concepts/`. These are injected into the Lore DB immediately after the Run 1 reset, before any model runs.
+Hand-authored seed concepts are available in `seed_concepts/` but are **not injected** in the current design. Lore must bootstrap purely from concepts the model captures organically during each run.
 
-**Why we seed:**
+**Why no seeding:**
 
-All local models tested (qwen2.5-coder:7b, qwen2.5-coder:32b, deepseek-r1:32b) consistently failed to complete the task due to a specific knowledge gap: they hallucinate non-existent trimesh geometry APIs (`trimesh.contour`, `trimesh.triangulation`, `trimesh.creation.text()` etc.). The real pipeline uses `skimage.measure.find_contours()` + `trimesh.creation.extrude_polygon()`, which is sparsely represented in training data.
+Earlier experiments (see "Post-IoU-fix run" and "No-seed control experiment" results below) showed that a single well-targeted seed concept could single-handedly determine success or failure, making it impossible to isolate whether *Lore as a system* is improving — as opposed to the seed concept doing all the work. The 10-run no-seed design measures whether the accumulation of organically-captured knowledge actually helps.
 
-This is a training-data gap, not a reasoning failure. The models understand *what* to do (render text → extract contours → extrude → export STL) but confabulate the *how*.
+**What this tests:**
 
-Without seeding, all 4 runs produce FAIL because:
-- Run 1 fails (model doesn't know the right API)
-- Run 2 searches Lore but finds nothing useful (DB only has wrong concepts from Run 1)
-- Runs 3 and 4 repeat the same failure
+Whether the full Lore loop (capture → accumulate → search → apply) produces measurable improvement run-over-run when the knowledge base grows entirely from model output. The hypothesis: by run 5–10 the DB should contain enough correct concepts that the model outperforms its run-1 baseline.
 
-This defeats the purpose of the benchmark: we cannot measure whether Lore *helps* if Lore never has the right answer.
-
-**What seeding tests:**
-
-With a correct seed concept in the DB, the Lore-ON runs (2 and 4) retrieve it on turn 1 via `search_concepts`. If the model uses the retrieved API correctly, tests pass — demonstrating that Lore-sourced knowledge can rescue a model from a pure knowledge gap. The Lore-OFF runs (1 and 3) still lack the information and are expected to fail, giving a clean FAIL vs PASS comparison.
-
-This is the core Lore hypothesis in its purest form: *one agent captures working knowledge; a future agent uses it to succeed where it would otherwise fail.*
-
-**What seeding does NOT test:**
-
-- Whether the model would organically capture the right approach (it wouldn't — it never succeeds)
-- Whether the Lore graph is self-populating from model runs alone
-- General Lore utility beyond this specific knowledge gap
+**`seed_concepts/` files are preserved** for ad-hoc debugging — you can call `_seed_concepts()` manually in a Python session if you want to test the seeded scenario.
 
 ## Seed concepts
 
@@ -218,4 +208,4 @@ problems without the complete fix.
 | `LORE_LLM_PROVIDER` | `anthropic` | `anthropic` or `local` |
 | `LORE_LOCAL_BASE_URL` | `http://localhost:11434` | Ollama base URL (no `/v1`) |
 | `LORE_LOCAL_MODEL` | `qwen2.5-coder:32b` | Model name for local runs |
-| `LORE_DB_PATH` | `~/.lore/lore.db` | Path to Lore SQLite DB |
+| `LORE_API_URL` | `http://localhost:8765` | Lore selfhosted API base URL |

@@ -227,7 +227,7 @@ docker compose up -d
 | Build | Multi-stage (builder + runtime) |
 | Base image | `python:3.11-slim` |
 | Baked model | `all-MiniLM-L6-v2` (~90 MB weights at `/app/.cache`) — no network at runtime |
-| Total image size | ~2.9 GB (PyTorch ~1.8 GB dominates; model weights ~90 MB; `python:3.11-slim` base ~130 MB) |
+| Total image size | ~8.7 GB (PyTorch ~1.8 GB, CUDA toolkit, and dependencies; model weights live in `lore-model-cache` volume, not the image) |
 | Runtime user | `lore` (uid 1000, non-root) |
 | Exposed port | `8765` |
 | Healthcheck | `python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/v1/health')"` (no curl dependency) |
@@ -244,7 +244,7 @@ docker run -p 8765:8765 lore/selfhosted
 docker compose up -d
 ```
 
-The builder stage installs all dependencies and pre-downloads the embedding model. The runtime stage copies only the installed site-packages, uvicorn binary, model cache, and source — keeping the image lean and guaranteeing offline operation.
+The builder stage installs all Python dependencies. The runtime stage copies only the installed site-packages, uvicorn binary, and source. The embedding model (`all-MiniLM-L6-v2`, ~90 MB) is **not** baked into the image — `entrypoint.sh` downloads it on first container start and caches it in the `lore-model-cache` named Docker volume. Subsequent starts skip the download and set `TRANSFORMERS_OFFLINE=1` automatically.
 
 ### Backend 2 (GitHub Gists)
 
