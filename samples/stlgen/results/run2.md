@@ -2,20 +2,20 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-26 09:34 |
+| Date | 2026-06-27 16:13 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (7 concepts) |
+| Lore search active | yes (2 concepts) |
 | Web search active | yes |
 | Turn budget | 40 |
-| Turns (main loop) | 27 |
+| Turns (main loop) | 25 |
 | Turns (capture) | 15 |
-| Turns (wrapup) | 11 |
+| Turns (wrapup) | 7 |
 | Task submitted | yes |
-| Input tokens | 51,994 |
-| Output tokens | 19,838 |
-| Total tokens | 71,832 |
+| Input tokens | 44,242 |
+| Output tokens | 17,091 |
+| Total tokens | 61,333 |
 | Concepts captured this run | 6 |
-| Elapsed | 1320.9s |
+| Elapsed | 1083.0s |
 | Tests passed | ✅ yes (13/13) |
 
 ## Test output
@@ -24,7 +24,7 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
 cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run2_him6v1jn
+rootdir: /tmp/lore_stlgen_run2_ccnbvdim
 configfile: pyproject.toml
 plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -49,10 +49,10 @@ tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_tex
 
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run2_him6v1jn/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run2_ccnbvdim/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================== 13 passed, 1 warning in 23.42s ========================
+======================== 13 passed, 1 warning in 16.07s ========================
 
 ```

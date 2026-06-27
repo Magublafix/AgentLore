@@ -81,6 +81,10 @@ def mock_qdrant():
     """Return a MagicMock QdrantClient that satisfies health checks."""
     client = MagicMock()
     client.get_collections.return_value = MagicMock(collections=[])
+    # Default: no near-duplicate found — query_points returns empty points list.
+    no_dup = MagicMock()
+    no_dup.points = []
+    client.query_points.return_value = no_dup
     return client
 
 

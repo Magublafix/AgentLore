@@ -1,8 +1,7 @@
 """Content scanner for the Lore MCP server (LORE-005).
 
 Scans concept fields for credentials, internal URLs, and custom blocklist
-patterns before any write to the knowledge graph.  This module is the
-authoritative scanner implementation — the stub in LORE-003 is replaced here.
+patterns before any write to the knowledge graph.
 
 Environment variables
 ---------------------

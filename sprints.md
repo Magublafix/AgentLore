@@ -80,11 +80,11 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ### Notes
 - LORE-018 must complete before any run — all runs use the same 13-test suite.
-- 4-run progressive design: same hard task, same 20-turn budget, 4 times.
-- What changes each run: (a) Lore content grows, (b) concepts get rated via `lore:wrapup` between runs.
-- Tests: does Lore help at all? (R1→R2)  more knowledge help more? (R2→R3)  rating improve relevance? (R3→R4)
+- 10-run progressive design: same hard task, same 40-turn budget, 10 times.
+- What changes each run: (a) Lore content grows organically (no seed), (b) concepts get rated via wrapup phase after each run.
+- Tests: does Lore help at all? (R1→R2)  does accumulated knowledge compound? (R2→R5+)  does rating improve relevance? (unrated early → rated later)
 - All runs use forced 15-turn capture phase after main loop — concepts captured even on failure.
-- Run 1 attempt on 2026-06-13 hit MAX_TURNS=50 without approach hint. Redesigned to 4×20-turn progressive structure.
+- Run 1 attempt on 2026-06-13 hit MAX_TURNS=50 without approach hint. Redesigned to progressive structure; seed concept removed after post-IoU-fix experiments.
 - DoD Gates 3 and 4 waived for benchmark stories (same as Sprint 2).
 
 ---

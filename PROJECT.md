@@ -56,7 +56,7 @@ avg_rating           REAL DEFAULT 0,
 usage_count          INTEGER DEFAULT 0,
 time_saved_avg_hours REAL,             -- reported by raters: hours saved vs. from scratch
 created_at           TEXT,
-embedding            BLOB              -- sqlite-vec float32 vector on when_to_use + name
+embedding            BLOB              -- raw float32 BLOB on when_to_use + name; vector queries go through Qdrant
 ```
 
 ### links table
@@ -315,7 +315,7 @@ on a schedule.
 
 ### search-concepts skill
 
-Located at `.claude/skills/search-concepts.md`. When invoked:
+Located at `skills/search-concepts/SKILL.md`. When invoked:
 
 1. Calls `search_concepts` MCP tool with the agent's problem
 2. Appends returned concept IDs to `~/.lore/session.json`
@@ -323,7 +323,7 @@ Located at `.claude/skills/search-concepts.md`. When invoked:
 
 ### capture-concept skill
 
-Located at `.claude/skills/capture-concept.md`. Called by the agent at any
+Located at `skills/capture-concept/SKILL.md`. Called by the agent at any
 point during a task when it believes it has encountered something worth
 preserving. The skill embeds structured reflection criteria to help the agent
 evaluate quality before submitting.

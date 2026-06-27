@@ -10,8 +10,8 @@ You are an expert Claude Code skill and hook engineer. You write skill markdown 
 ## Core Responsibilities
 
 You implement:
-1. Claude Code skill files (`.claude/skills/*.md`) — structured prompts that instruct the agent
-2. Shell hooks (`lore/skills/hooks/*.sh`) — registered via `.claude/settings.json`
+1. Claude Code skill files (`skills/*/SKILL.md`) — structured prompts that instruct the agent
+2. Shell hooks (`.claude/hooks/*.sh`) — registered via `.claude/settings.json`
 3. Session tracking — read/write `~/.lore/session.json`
 4. Settings registration — Stop hook entry in `.claude/settings.json`
 

@@ -1,16 +1,16 @@
 # Benchmark Comparison — 10 Runs, Same Task, Same Budget
 
-*All runs: same hard task, 40-turn budget.
+*All runs: same hard task, 5-turn budget.
 What changes: Lore content (more each run) and concept ratings.*
 
 | Metric | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 | Run 7 | Run 8 | Run 9 | Run 10 |
 |--------|------- | ------- | ------- | ------- | ------- | ------- | ------- | ------- | ------- | -------|
-| Lore concepts available | 0 | 7 | 13 | 15 | 17 | 20 | 25 | 27 | 34 | 38 |
-| Task submitted | ✗ | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
-| Tests passed | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Turns (main loop) | 40 | 27 | 40 | 20 | 18 | 27 | 16 | 22 | 40 | 38 |
-| Total tokens | 106,710 | 71,832 | 101,541 | 59,430 | 57,537 | 77,464 | 60,610 | 79,611 | 90,915 | 75,865 |
-| Concepts captured | 7 | 6 | 2 | 2 | 3 | 5 | 2 | 7 | 4 | 3 |
-| Elapsed (s) | 2535 | 1321 | 2464 | 708 | 662 | 1112 | 671 | 1242 | 1842 | 1173 |
+| Lore concepts available | 0 | 8 | 8 | 16 | 22 | 26 | 32 | 37 | 39 | 42 |
+| Task submitted | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Tests passed | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Turns (main loop) | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 |
+| Total tokens | 20,169 | 11,263 | 26,557 | 19,729 | 22,677 | 37,382 | 17,176 | 16,047 | 14,153 | 15,413 |
+| Concepts captured | 8 | 0 | 8 | 6 | 4 | 6 | 5 | 2 | 3 | 2 |
+| Elapsed (s) | 95 | 188 | 97 | 126 | 104 | 125 | 76 | 159 | 69 | 65 |
 
-Generated: 2026-06-26 14:29
+Generated: 2026-06-27 05:04

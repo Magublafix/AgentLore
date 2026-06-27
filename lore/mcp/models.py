@@ -34,8 +34,8 @@ class Concept:
             reported by raters.  None until at least one rating provides a
             value.
         created_at: ISO-8601 UTC timestamp string.
-        embedding: Raw float32 BLOB from sqlite-vec, or None before the
-            embedding pipeline has run.
+        embedding: Raw float32 BLOB, or None before the embedding pipeline
+            has run.
     """
 
     concept_id: str

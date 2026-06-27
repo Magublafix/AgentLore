@@ -364,14 +364,17 @@ class TestSubmitConcept:
             with pytest.raises(httpx.ConnectError):
                 submit_concept(**self._VALID_ARGS)
 
-    def test_backend_409_raises_runtime_error(self):
-        """A non-422 4xx from the backend (e.g. 409 Conflict) raises RuntimeError, not ValueError."""
-        api_response = _make_response(409, {"error": "Concept already exists"})
+    def test_backend_409_returns_body(self):
+        """A 409 from the backend (semantic duplicate) returns the body dict for caller use."""
+        body = {"error": "semantic_duplicate", "existing_concept_id": "abc-123", "similarity": 0.95}
+        api_response = _make_response(409, body)
         mock_client = _mock_client(api_response)
 
         with patch("lore.mcp.server._client", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="409"):
-                submit_concept(**self._VALID_ARGS)
+            result = submit_concept(**self._VALID_ARGS)
+
+        assert result["error"] == "semantic_duplicate"
+        assert result["existing_concept_id"] == "abc-123"
 
     def test_local_scan_rejects_credential_in_name(self):
         """Credential pattern in the name field triggers local scan rejection."""

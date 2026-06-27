@@ -30,7 +30,7 @@ cd lore
 docker compose up -d
 ```
 
-This starts the selfhosted backend (FastAPI + SQLite + Qdrant) on port 8765. The embedding model is baked into the image — no network access required at runtime.
+This starts the selfhosted backend (FastAPI + SQLite + Qdrant) on port 8765. On first start, the entrypoint downloads the embedding model (~90 MB) into a named Docker volume (`lore-model-cache`). Subsequent starts are fully offline.
 
 Verify:
 ```bash
@@ -177,12 +177,14 @@ lore/
 │   ├── db.py              # SQLite CRUD
 │   ├── indexer.py         # Embedding + vector upsert
 │   ├── vector_store.py    # Qdrant operations
-│   └── Dockerfile         # Single-container image (~2.9 GB, model baked in)
+│   └── Dockerfile         # Single-container image (~8.7 GB); model cached in lore-model-cache volume
 ├── seed/concepts.py       # REST CLI blueprint — 6 concepts, 5 links
 └── tests/                 # 177 tests, 98% coverage
+skills/
+├── search-concepts/SKILL.md    # /search-concepts skill
+├── capture-concept/SKILL.md    # /capture-concept skill
+└── wrapup/SKILL.md             # /wrapup skill
 .claude/
-├── skills/search-concepts.md   # /search-concepts skill
-├── skills/capture-concept.md   # /capture-concept skill
 ├── hooks/lore-stop.sh          # Stop hook
 └── settings.json               # Hook registration
 docker-compose.yml              # lore-selfhosted + qdrant

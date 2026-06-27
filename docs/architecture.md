@@ -154,8 +154,9 @@ reconciles SQLite concept_ids against Qdrant point IDs.
 
 | Component | Responsibility |
 |-----------|---------------|
-| `.claude/skills/search-concepts.md` | Claude Code skill: calls `search_concepts(problem=...)`, appends returned concept IDs to `~/.lore/session.json` |
-| `.claude/skills/capture-concept.md` | Claude Code skill: reflection gate, mandatory generalization step, `LORE_CAPTURE_MODE` gate, calls `submit_concept` with correct parameters |
+| `skills/search-concepts/SKILL.md` | Claude Code skill: calls `search_concepts(problem=...)`, appends returned concept IDs to `~/.lore/session.json` |
+| `skills/capture-concept/SKILL.md` | Claude Code skill: reflection gate, mandatory generalization step, `LORE_CAPTURE_MODE` gate, calls `submit_concept` with correct parameters; tracks `existing_concept_id` on 409 dedup |
+| `skills/wrapup/SKILL.md` | Claude Code skill: manual session close — resolves concepts via API, rates each, captures new insights, clears session file |
 | `.claude/hooks/lore-stop.sh` | Stop hook: reads session.json, resolves concept names via selfhosted API, emits batch rating + reflection prompts, clears session file; always exits 0 |
 | `.claude/settings.json` | Registers lore-stop.sh as a Claude Code Stop hook |
 

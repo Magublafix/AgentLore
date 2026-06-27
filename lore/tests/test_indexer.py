@@ -178,7 +178,7 @@ class TestSearchConcepts:
         qdrant = _make_qdrant_client(hit_concept_ids=[cid1, cid2])
         model = _make_model()
 
-        results = search_concepts(conn, qdrant, model, "some problem")
+        results = search_concepts(conn, qdrant, model, "some problem", min_rating=0)
         assert len(results) == 2
         assert results[0].concept_id == cid1
         assert results[1].concept_id == cid2
@@ -197,7 +197,7 @@ class TestSearchConcepts:
         qdrant = _make_qdrant_client(hit_concept_ids=[cid_pattern, cid_tool])
         model = _make_model()
 
-        results = search_concepts(conn, qdrant, model, "some problem", type_filter="pattern")
+        results = search_concepts(conn, qdrant, model, "some problem", type_filter="pattern", min_rating=0)
         assert len(results) == 1
         assert results[0].type == "pattern"
         assert results[0].concept_id == cid_pattern
@@ -217,7 +217,7 @@ class TestSearchConcepts:
         model = _make_model()
 
         results = search_concepts(
-            conn, qdrant, model, "some problem", language_filter="python"
+            conn, qdrant, model, "some problem", language_filter="python", min_rating=0
         )
         assert len(results) == 1
         assert results[0].language == "python"
@@ -242,7 +242,7 @@ class TestSearchConcepts:
         qdrant = _make_qdrant_client(hit_concept_ids=ids)
         model = _make_model()
 
-        results = search_concepts(conn, qdrant, model, "problem", limit=3)
+        results = search_concepts(conn, qdrant, model, "problem", limit=3, min_rating=0)
         assert len(results) == 3
 
     def test_search_concepts_type_and_language_filter_combined(self) -> None:
@@ -269,7 +269,7 @@ class TestSearchConcepts:
 
         results = search_concepts(
             conn, qdrant, model, "some problem",
-            type_filter="pattern", language_filter="python"
+            type_filter="pattern", language_filter="python", min_rating=0
         )
         assert len(results) == 1
         assert results[0].concept_id == cid_match
@@ -291,7 +291,7 @@ class TestSearchConcepts:
         model = _make_model()
 
         results = search_concepts(
-            conn, qdrant, model, "problem", language_filter="python"
+            conn, qdrant, model, "problem", language_filter="python", min_rating=0
         )
         assert len(results) == 1
         assert results[0].concept_id == cid_py
