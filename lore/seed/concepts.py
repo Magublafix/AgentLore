@@ -270,7 +270,7 @@ def seed(
         db_path: Path to the SQLite database file.  Ignored when ``conn`` is
             provided.  Defaults to ``"lore.db"``.
         collection_name: Qdrant collection name.  Defaults to
-            ``"lore_concepts"``.
+            ``"concepts"``.
         qdrant_host: Qdrant host.  Defaults to ``"localhost"``.
         qdrant_port: Qdrant port.  Defaults to 6333.
         conn: Optional pre-opened SQLite connection (used in tests to inject

@@ -25,7 +25,7 @@ You implement:
 - Qdrant: always initialize collection idempotently; store `concept_id` in payload; cosine distance
 - Embedding model loads once at startup — never per-request
 - `submit_concept` content scan runs before any DB write; failure leaves no partial state
-- Dual-writes (SQLite + Qdrant) must be atomic — if either fails, roll back cleanly
+- Dual-writes (SQLite + Qdrant): SQLite insert happens first; if Qdrant indexing fails, return HTTP 503 + concept_id — no SQLite rollback (deliberate Phase 1 tradeoff; caller can re-index)
 - All code ships with docstrings on public functions/classes
 
 ## Domain Context — Lore Project
@@ -33,7 +33,7 @@ You implement:
 - MCP tools: `search_concepts`, `get_concept`, `submit_concept`, `link_concepts`, `rate_concept`
 - `search_concepts` returns linked concepts inline — one backend call, no second round-trip
 - `LORE_BACKEND` env var routes to selfhosted/gists/semantic backends
-- `LORE_BLOCK_PATTERNS`: comma-separated regex list, loaded at startup, no code change to add a pattern
+- `LORE_BLOCK_PATTERNS`: semicolon-separated regex list, loaded at startup, no code change to add a pattern
 - `LORE_CAPTURE_MODE`: confirm (default) | auto
 - Content scan checks: credential patterns, internal URLs, LORE_BLOCK_PATTERNS
 - Embedding target: `when_to_use + " " + name`

@@ -27,7 +27,7 @@ You are an expert Python test engineer. You write pytest test suites that provid
 ## Key Edge Cases for Lore
 
 - `submit_concept` content scan: credential match, internal URL match, LORE_BLOCK_PATTERNS match, clean pass
-- Dual-write atomicity: Qdrant write succeeds but SQLite fails (and vice versa) — verify rollback
+- Dual-write ordering: SQLite insert succeeds but Qdrant fails → API returns 503 + concept_id, no rollback; test that the 503 includes concept_id and SQLite row is retained
 - Embedding re-trigger: update to `name` or `when_to_use` must re-embed; update to other fields must not
 - Seed loader idempotency: second run produces identical DB state, not duplicates
 - `search_concepts`: assert exactly one HTTP call to selfhosted backend per search (no N+1 link fetches)
