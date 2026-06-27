@@ -470,7 +470,7 @@ def handle_rate_concept(inputs: dict) -> str:
         return json.dumps({"error": "concept_id required"})
     outcome_raw = inputs.get("outcome") or inputs.get("score") or inputs.get("rating")
     if outcome_raw is None:
-        return json.dumps({"error": "outcome required (0-5)"})
+        return json.dumps({"error": "outcome required (1-5)"})
     outcome = int(outcome_raw)
     payload: dict = {"outcome": outcome, "session_id": "benchmark-run"}
     if inputs.get("hours_saved") is not None:
@@ -963,8 +963,8 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
                 f"Rate this concept using rate_concept.\n\n"
                 f"Concept: {line}\n\n"
                 f"Run outcome: {outcome_ctx}\n\n"
-                f"Rating guide (0-5): Rate on this concept's own merits, not the overall outcome. "
-                f"0=actively misled (wrong approach, consumed effort), 1=irrelevant, "
+                f"Rating guide (1-5): Rate on this concept's own merits, not the overall outcome. "
+                f"1=irrelevant or actively misled, "
                 f"2=partially relevant but limited impact, 3=somewhat useful, "
                 f"4=very helpful, 5=directly enabled the solution. "
                 f"If the task failed, scrutinize whether this concept contributed to the failing approach — "
@@ -1304,7 +1304,7 @@ def _write_comparison(results: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Lore effectiveness benchmark — text2stl, 4 progressive runs",
+        description="Lore effectiveness benchmark — text2stl, 10 progressive runs",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

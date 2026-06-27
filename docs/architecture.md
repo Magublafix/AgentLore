@@ -124,7 +124,7 @@ lore/
 | `selfhosted/api.py` | FastAPI HTTP service exposing all /v1/ endpoints; shared EmbeddingModel, SQLite connection, and QdrantClient live in FastAPI lifespan |
 | `selfhosted/db.py` | SQLite schema + CRUD operations (concepts, links, ratings, session_usage) |
 | `selfhosted/schema.sql` | Table definitions for concepts, links, ratings, session_usage |
-| `selfhosted/vector_store.py` | Qdrant collection init, vector upsert, and similarity search |
+| `selfhosted/vector_store.py` | Qdrant collection init, vector upsert, similarity search, and near-duplicate detection (`find_near_duplicate`, threshold 0.88) |
 | `selfhosted/indexer.py` | Wires embedding model to storage: `index_concept()` and `search_concepts()` |
 | `core/scanner.py` | `scan_content()` — credential, hex/base64, internal URL, and custom blocklist detection; called by `submit_concept` before any write |
 | `selfhosted/Dockerfile` | Single-container image (`docker run -p 8765:8765 lore/selfhosted`) |
@@ -227,7 +227,7 @@ docker compose up -d
 |----------|-------|
 | Build | Multi-stage (builder + runtime) |
 | Base image | `python:3.11-slim` |
-| Baked model | `all-MiniLM-L6-v2` (~90 MB weights at `/app/.cache`) — no network at runtime |
+| Cached model | `all-MiniLM-L6-v2` (~90 MB) — downloaded on first container start via `entrypoint.sh`, cached in `lore-model-cache` Docker volume; subsequent starts are fully offline |
 | Total image size | ~8.7 GB (PyTorch ~1.8 GB, CUDA toolkit, and dependencies; model weights live in `lore-model-cache` volume, not the image) |
 | Runtime user | `lore` (uid 1000, non-root) |
 | Exposed port | `8765` |
@@ -354,5 +354,5 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | `hours_saved` | Estimated hours saved vs. building from scratch; the primary rating signal |
 | Session file | `~/.lore/session.json` — tracks concept IDs used in the current agent session |
 | Stop hook | Bash script fired by Claude Code when a session ends; collects batch ratings |
-| Seed graph | Five linked concepts pre-loaded on first run to validate the full retrieval path |
+| Seed graph | Six concepts and five links pre-loaded on first run to validate the full retrieval path |
 | Content scanner | `core/scanner.py` — checks concept fields for credential patterns, internal URLs, and LORE_BLOCK_PATTERNS before persisting |

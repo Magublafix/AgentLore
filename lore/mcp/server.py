@@ -237,12 +237,15 @@ def submit_concept(
             ``alternative_to``, ``requires``.
 
     Returns:
-        A dict with ``concept_id`` and ``name`` on success.
+        On success (HTTP 201): a dict with ``concept_id`` and ``name``.
+        On semantic duplicate (HTTP 409): a dict with ``error``,
+        ``existing_concept_id``, and ``similarity`` — callers should track
+        ``existing_concept_id`` for end-of-session rating.
 
     Raises:
         ValueError: If the content scan detects credentials, internal URLs,
             or custom blocklist patterns.
-        RuntimeError: If the backend returns an error.
+        RuntimeError: If the backend returns an unexpected error.
     """
     from lore.core.scanner import scan_content
 
