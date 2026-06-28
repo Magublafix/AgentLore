@@ -197,6 +197,26 @@ Before implementing, consult relevant agents in **parallel** (background) and su
 
 ---
 
+## Benchmark & Test Runner Design
+
+**Skills are the single source of truth for agent behavior guidance.**
+
+Any code that drives a Lore phase (capture, search, wrapup) must load the skill file — never duplicate its guidance inline. Inline copies drift silently and bypass fixes made to the skill.
+
+| Phase | Skill file | How to load |
+|-------|-----------|-------------|
+| Search | `skills/search-concepts/SKILL.md` | `_load_skill("search-concepts")` |
+| Capture | `skills/capture-concept/SKILL.md` | `_load_skill("capture-concept")` |
+| Wrapup / rating | `skills/wrapup/SKILL.md` | `_load_skill("wrapup")` |
+
+**Rules:**
+- A benchmark runner that builds its own wrapup prompt from scratch is wrong. Load the skill.
+- If a runner needs extra context (run number, concept list), append it to the loaded skill — do not replace the skill with a summary of it.
+- Any change to agent behavior (rating guidance, reflection criteria, capture standards) goes in the skill file first. The runner inherits it automatically.
+- Review note: if you see hardcoded rating scales (`1=irrelevant, 5=excellent`) in a runner script, that is a duplication violation — move it to the skill.
+
+---
+
 ## Key Constraints
 
 - The MCP tool interface (`search_concepts`, `submit_concept`, etc.) must be identical across all backends — switching backend is a config change only.

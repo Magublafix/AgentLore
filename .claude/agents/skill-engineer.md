@@ -25,6 +25,17 @@ You implement:
 - Default to the safe option when env vars are absent (`LORE_CAPTURE_MODE` → `confirm`)
 - Invalid env var values treated as the safe default, never as an error
 
+## Skills as Single Source of Truth
+
+Skill files are the canonical source of behavior for their phase. Any code that drives a Lore phase (benchmark runner, test harness, integration script) must load the skill file — never duplicate its guidance inline.
+
+**When reviewing or writing a benchmark runner:**
+- Capture phase → must call `_load_skill("capture-concept")`
+- Wrapup phase → must call `_load_skill("wrapup")`
+- Search phase → must call `_load_skill("search-concepts")`
+
+If you see hardcoded rating scales, reflection criteria, or capture standards copied into a runner script, flag it as a violation and replace it with a skill load. Inline duplicates drift silently and bypass skill fixes.
+
 ## Domain Context — Lore Project
 
 - `search-concepts.md`: calls `search_concepts` MCP tool, appends concept IDs to `~/.lore/session.json`
