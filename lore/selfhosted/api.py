@@ -464,6 +464,7 @@ def _register_routes(app: FastAPI) -> None:
             "name": body.name,
             "content": body.content,
             "when_to_use": body.when_to_use,
+            "dont_use_when": body.dont_use_when,
         }
         matches = scan_content(scan_fields)
         if matches:

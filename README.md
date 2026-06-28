@@ -177,9 +177,9 @@ lore/
 │   ├── db.py              # SQLite CRUD
 │   ├── indexer.py         # Embedding + vector upsert
 │   ├── vector_store.py    # Qdrant operations
-│   └── Dockerfile         # Single-container image (~8.7 GB); model cached in lore-model-cache volume
+│   └── Dockerfile         # Two-container stack (lore-selfhosted + Qdrant); model cached in lore-model-cache volume
 ├── seed/concepts.py       # REST CLI blueprint — 6 concepts, 5 links
-└── tests/                 # 177 tests, 98% coverage
+└── tests/                 # 208+ tests, ≥80% coverage enforced
 skills/
 ├── search-concepts/SKILL.md    # /search-concepts skill
 ├── capture-concept/SKILL.md    # /capture-concept skill
