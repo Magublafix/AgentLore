@@ -373,6 +373,23 @@ def build_system_with_lore() -> str:
     )
 
 
+def build_system_wrapup() -> str:
+    if PROVIDER == "local":
+        return (
+            "You are a senior developer rating the concepts you used or captured during a coding session. "
+            "Use rate_concept(concept_id, outcome, hours_saved) to record your ratings. "
+            "Call submit when done."
+        )
+    wrapup_skill = _load_skill("wrapup")
+    return (
+        "You are a senior developer rating the concepts you used or captured during a coding session.\n\n"
+        "---\n"
+        f"# Lore Skill: wrapup\n\n{wrapup_skill}\n"
+        "---\n\n"
+        "Follow the skill instructions to rate each concept and call submit when done."
+    )
+
+
 def build_system_capture() -> str:
     if PROVIDER == "local":
         return (
@@ -939,7 +956,7 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
 
     concept_list = "\n".join(concept_lines)
 
-    wrapup_system = build_system_capture()
+    wrapup_system = build_system_wrapup()
     if PROVIDER == "local":
         wrapup_system = LOCAL_SYSTEM_PREFIX + wrapup_system
 
@@ -963,12 +980,7 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
                 f"Rate this concept using rate_concept.\n\n"
                 f"Concept: {line}\n\n"
                 f"Run outcome: {outcome_ctx}\n\n"
-                f"Rating guide (1-5): "
-                f"1=irrelevant or actively misled, "
-                f"2=partially relevant but limited impact, 3=somewhat useful, "
-                f"4=very helpful, 5=directly enabled the solution. "
-                f"If you followed this concept's approach and it produced wrong results or had to be abandoned, rate it 1 — "
-                f"an approach that fails is misleading regardless of how reasonable it seemed."
+                f"Follow the rating guidance in your instructions."
             )
             wrapup_msgs: list[dict] = [{"role": "user", "content": single_prompt}]
             rated = False
@@ -1033,15 +1045,8 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
         f"You have just completed Run {run_num} of the text2stl benchmark. "
         f"The following concepts were used or captured during this run:\n\n"
         f"{concept_list}\n\n"
-        "For each concept, reflect on whether it was useful in this session "
-        "and call `rate_concept` with:\n"
-        "  - outcome 5: directly solved a key problem\n"
-        "  - outcome 4: meaningfully helpful\n"
-        "  - outcome 3: somewhat relevant but not decisive\n"
-        "  - outcome 2: appeared in results but wasn't applied\n"
-        "  - outcome 1: irrelevant or misleading\n\n"
-        "Important: if you followed a concept's approach and it produced wrong results or had to be abandoned, "
-        "rate it 1 — an approach that fails is misleading regardless of how reasonable it seemed.\n\n"
+        "Rate each concept using rate_concept. "
+        "Follow the rating guidance in your instructions. "
         "Add hours_saved if you can honestly estimate it. "
         "Call `submit` when all concepts have been rated."
     )
