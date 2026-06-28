@@ -130,7 +130,7 @@ def search_vectors(
         List of ``concept_id`` strings, ordered by relevance.  The list may
         be shorter than ``limit`` if the collection has fewer vectors.
     """
-    # qdrant-client ≥1.7 replaced .search() with .query_points()
+    # qdrant-client ≥1.8 replaced .search() with .query_points()
     try:
         response = client.query_points(
             collection_name=collection_name,

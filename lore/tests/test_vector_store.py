@@ -167,7 +167,7 @@ class TestSearchVectors:
         return hit
 
     def _mock_response(self, hits: list) -> MagicMock:
-        """Wrap hits in a response object with a .points attribute (qdrant-client ≥1.7)."""
+        """Wrap hits in a response object with a .points attribute (qdrant-client ≥1.8)."""
         resp = MagicMock()
         resp.points = hits
         return resp
