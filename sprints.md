@@ -89,6 +89,24 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
+## Sprint 4 — 2026-06-30 → 2026-07-11
+**Goal:** Wire up CI/CD — automated test runs, Docker image builds, and Renovate dependency updates — before beginning Phase 2 feature work.
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-023 | GitHub Actions — CI test pipeline | devops-docker-engineer | planned | — |
+| LORE-024 | GitHub Actions — Docker image build and push | devops-docker-engineer | planned | — |
+| LORE-025 | Renovate — automated dependency updates | devops-docker-engineer | planned | — |
+
+### Notes
+- LORE-023 (tests) should land first; LORE-024 (Docker build) can follow independently.
+- LORE-025 (Renovate) is independent — can run at any time during the sprint.
+- DoD Gate 4 verification: run `pytest --cov=lore --cov-fail-under=80` locally to confirm CI mirrors the same gate.
+
+---
+
 ## [LORE-018] Define text2stl CLI scope and test suite
 
 **Phase:** Benchmark
@@ -284,3 +302,82 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **DoD:**
 - [x] AC above met — tokens recorded (150,867)
 - [x] `samples/radev/results/run2.md` and `samples/radev/results/comparison.md` committed
+
+---
+
+## [LORE-023] GitHub Actions — CI test pipeline
+
+**Phase:** Infrastructure
+**Priority:** high
+**Effort:** S
+**Agent:** devops-docker-engineer
+**Phase item:** N/A — infrastructure sprint
+
+**As a** Lore developer
+**I want to be able to** have tests run automatically on every push and pull request
+**So that** regressions are caught before merging and the main branch stays green
+
+**Acceptance Criteria:**
+- [ ] `.github/workflows/test.yml` committed — triggers on `push` and `pull_request` to `main`
+- [ ] Workflow runs `pytest lore/tests/ --cov=lore --cov-fail-under=80` in the project's Python 3.11 venv
+- [ ] Workflow caches pip dependencies to keep run time under 3 minutes
+- [ ] Failing tests block the PR (status check required)
+- [ ] Badge added to `README.md` showing CI status
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Workflow passes on `main` branch
+- [ ] `pytest --cov=lore --cov-fail-under=80` passes locally
+
+---
+
+## [LORE-024] GitHub Actions — Docker image build and push
+
+**Phase:** Infrastructure
+**Priority:** high
+**Effort:** M
+**Agent:** devops-docker-engineer
+**Phase item:** N/A — infrastructure sprint
+
+**As a** Lore developer
+**I want to be able to** have the selfhosted Docker image built and pushed to a registry automatically on every merge to main
+**So that** a fresh image is always available without manual `docker build` steps
+
+**Acceptance Criteria:**
+- [ ] `.github/workflows/docker.yml` committed — triggers on `push` to `main`
+- [ ] Workflow builds `lore/selfhosted/Dockerfile` and pushes to GitHub Container Registry (`ghcr.io`)
+- [ ] Image tagged with both `latest` and the short commit SHA
+- [ ] Build uses Docker layer caching (BuildKit cache) to avoid re-downloading PyTorch on every run
+- [ ] Workflow fails fast if `docker build` exits non-zero
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Image visible at `ghcr.io/<owner>/lore-selfhosted:latest` after a push to `main`
+- [ ] Local `docker pull ghcr.io/<owner>/lore-selfhosted:latest` succeeds
+
+---
+
+## [LORE-025] Renovate — automated dependency updates
+
+**Phase:** Infrastructure
+**Priority:** medium
+**Effort:** S
+**Agent:** devops-docker-engineer
+**Phase item:** N/A — infrastructure sprint
+
+**As a** Lore developer
+**I want to be able to** receive automated pull requests when Python or Docker dependencies have updates available
+**So that** the project stays current without manual dependency audits
+
+**Acceptance Criteria:**
+- [ ] `renovate.json` committed at repo root with a sensible base config
+- [ ] Python dependencies in `lore/selfhosted/requirements.txt` and `pyproject.toml` covered
+- [ ] Docker base image in `lore/selfhosted/Dockerfile` covered
+- [ ] GitHub Actions workflow files covered (action version pinning)
+- [ ] Renovate configured to group patch updates and open PRs on a weekly schedule (not daily noise)
+- [ ] `README.md` mentions Renovate is active
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Renovate app installed on the repository (or Renovate GitHub Action configured as fallback)
+- [ ] At least one dependency PR opened (or dry-run output confirms it would)
