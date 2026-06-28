@@ -62,6 +62,7 @@ For each concept, reflect:
 - Did it directly enable a correct solution or save significant lookup time? → `outcome` 4–5
 - Did it influence the approach taken but with limited or uncertain impact? → `outcome` 2–3
 - Was it retrieved but not meaningfully used, or actively misleading? → `outcome` 1
+- Did you follow this concept's approach and it produced wrong results or had to be abandoned? → `outcome` 1. An approach that fails is misleading regardless of how reasonable it seemed.
 
 **Use run outcome as a signal, not a ceiling.** If the task failed, scrutinize whether this concept contributed to the failing approach. If it did, rate it 1. If the task succeeded but this concept was irrelevant, rate it 1 anyway.
 

@@ -963,12 +963,12 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
                 f"Rate this concept using rate_concept.\n\n"
                 f"Concept: {line}\n\n"
                 f"Run outcome: {outcome_ctx}\n\n"
-                f"Rating guide (1-5): Rate on this concept's own merits, not the overall outcome. "
+                f"Rating guide (1-5): "
                 f"1=irrelevant or actively misled, "
                 f"2=partially relevant but limited impact, 3=somewhat useful, "
                 f"4=very helpful, 5=directly enabled the solution. "
-                f"If the task failed, scrutinize whether this concept contributed to the failing approach — "
-                f"if it did, rate 0-1 regardless of how authoritative it seemed."
+                f"If you followed this concept's approach and it produced wrong results or had to be abandoned, rate it 1 — "
+                f"an approach that fails is misleading regardless of how reasonable it seemed."
             )
             wrapup_msgs: list[dict] = [{"role": "user", "content": single_prompt}]
             rated = False
@@ -1040,6 +1040,8 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
         "  - outcome 3: somewhat relevant but not decisive\n"
         "  - outcome 2: appeared in results but wasn't applied\n"
         "  - outcome 1: irrelevant or misleading\n\n"
+        "Important: if you followed a concept's approach and it produced wrong results or had to be abandoned, "
+        "rate it 1 — an approach that fails is misleading regardless of how reasonable it seemed.\n\n"
         "Add hours_saved if you can honestly estimate it. "
         "Call `submit` when all concepts have been rated."
     )
