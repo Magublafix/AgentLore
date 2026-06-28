@@ -56,7 +56,7 @@ def _make_model(vector: list[float] | None = None) -> MagicMock:
 def _make_qdrant_client(hit_concept_ids: list[str] | None = None) -> MagicMock:
     """Return a mock QdrantClient.
 
-    Uses query_points (qdrant-client ≥1.7) which returns a response object
+    Uses query_points (qdrant-client ≥1.8) which returns a response object
     with a .points attribute rather than a bare list.
     """
     client = MagicMock()

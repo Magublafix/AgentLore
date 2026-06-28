@@ -508,12 +508,17 @@ lore/
 │   ├── watcher.py              # Gist watcher + indexer
 │   └── Dockerfile
 ├── skills/
-│   ├── search-concepts.md      # Claude Code skill — search + session tracking
-│   ├── capture-concept.md      # Claude Code skill — agent-initiated concept submission
-│   └── hooks/
-│       └── stop.sh             # Stop hook — batch rating + session-end reflection prompt
+│   ├── search-concepts/
+│   │   └── SKILL.md            # Claude Code skill — search + session tracking
+│   ├── capture-concept/
+│   │   └── SKILL.md            # Claude Code skill — agent-initiated concept submission
+│   └── wrapup/
+│       └── SKILL.md            # Claude Code skill — end-of-session rating and reflection
+├── hooks/
+│   ├── hooks.json              # Plugin hook registration (Stop hook)
+│   └── lore-stop.sh            # Stop hook — batch rating + session-end reflection prompt
 ├── seed/
-│   └── concepts.json           # Seed concept graph (REST CLI + 4 linked)
+│   └── concepts.py             # Seed concept graph (anchor + 5 linked concepts)
 ├── tests/
 ├── docker-compose.yml          # selfhosted stack (Backend 1)
 ├── pyproject.toml

@@ -37,4 +37,4 @@ You implement:
 - `LORE_CAPTURE_MODE`: confirm (default) | auto
 - Content scan checks: credential patterns, internal URLs, LORE_BLOCK_PATTERNS
 - Embedding target: `when_to_use + " " + name`
-- Stack: Python + FastMCP, SQLite, Qdrant (embedded for Docker single-container), sentence-transformers all-MiniLM-L6-v2
+- Stack: Python + FastMCP, SQLite, Qdrant (sidecar container; lore-selfhosted connects via QDRANT_HOST:QDRANT_PORT), sentence-transformers all-MiniLM-L6-v2

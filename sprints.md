@@ -67,16 +67,16 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 3 — 2026-06-13 → 2026-06-27
 **Goal:** Second Lore effectiveness benchmark — implement a 3D-printable text CLI (text2stl) with and without Lore, measuring token reduction on a geometry-heavy task.
-**Status:** in-progress
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
 | LORE-018 | Define text2stl CLI scope and test suite | test-suite-architect | done | — |
-| LORE-019 | Run 1 — no Lore, hard task, capture on discovery | general-purpose | planned | — |
-| LORE-020 | Run 2 — Lore ON, unrated concepts from Run 1 | general-purpose | planned | — |
-| LORE-021 | Run 3 — Lore ON, concepts rated after Run 1+2 wrapup | general-purpose | planned | — |
-| LORE-022 | Run 4 — Lore ON, more rated concepts | general-purpose | planned | — |
+| LORE-019 | Run 1 — no Lore, hard task, capture on discovery | general-purpose | done | — |
+| LORE-020 | Run 2 — Lore ON, unrated concepts from Run 1 | general-purpose | done | — |
+| LORE-021 | Run 3 — Lore ON, concepts rated after Runs 1+2 wrapup | general-purpose | done | — |
+| LORE-022 | Runs 4–10 — Lore ON, progressively rated knowledge base | general-purpose | done | — |
 
 ### Notes
 - LORE-018 must complete before any run — all runs use the same 13-test suite.
@@ -206,7 +206,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
-## [LORE-022] Run 4 — Lore ON, all prior concepts rated
+## [LORE-022] Runs 4–10 — Lore ON, progressively rated knowledge base
 
 **Phase:** Benchmark
 **Priority:** high
@@ -215,17 +215,17 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **Phase item:** N/A — benchmark sprint
 
 **As a** Lore developer
-**I want to be able to** attempt text2stl with the fullest, most-rated Lore knowledge base
-**So that** we complete the 10-run benchmark and write the final comparison table
+**I want to be able to** attempt text2stl across runs 4–10 with an increasingly rated Lore knowledge base
+**So that** we measure whether accumulated, rated concepts compound into measurably better outcomes
 
 **Acceptance Criteria:**
-- [ ] `python samples/stlgen/benchmarks/run.py --run 4` completes without error
-- [ ] Agent searches Lore before writing any code
-- [ ] `samples/stlgen/results/run4.md` and `samples/stlgen/results/comparison.md` written
+- [x] `python samples/stlgen/benchmarks/run.py --run N` completes for N=4..10
+- [x] Agent searches Lore before writing any code each run
+- [x] `samples/stlgen/results/runN.md` written for each run
 
 **DoD:**
-- [ ] AC above met — tokens recorded
-- [ ] `samples/stlgen/results/run4.md` and `comparison.md` committed
+- [x] AC above met — tokens recorded
+- [x] Result files committed
 
 ---
 

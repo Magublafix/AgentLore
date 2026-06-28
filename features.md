@@ -185,3 +185,73 @@ Feature format:
 **What changed:** `samples/radev/results/run2.md` and `samples/radev/results/comparison.md` record the Lore-assisted result: 17 turns (-19%), 150,867 total tokens (-7.6%), 143.7s elapsed (-10.7%), 9/9 tests passed. 8 concepts were available from Run 1.
 
 **Implementation notes:** `search_concepts` does a keyword search against `~/.lore/lore.db` and returns matching concepts injected into the system prompt at session start. Savings are conservative — the concept graph was populated in the same benchmark session; a mature graph with accumulated domain knowledge would be expected to show larger reductions.
+
+---
+
+## [LORE-018] Define text2stl CLI scope and test suite
+
+**Sprint:** 3   **Shipped:** 2026-06-13   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** reference a fixed CLI specification and 13-test suite before each benchmark run
+**So that** all 10 progressive runs target an identical definition of done
+
+**What changed:** `samples/stlgen/tests/test_text2stl_cli.py` — 13 tests across invocation, validation, STL validity, dimensions, and character shapes. `samples/stlgen/benchmarks/run.py` — 10-run progressive benchmark runner with 40-turn budget, forced capture + wrapup phases, `--run N` / `--all` interface.
+
+**Implementation notes:** IoU test (`test_character_shapes_match_text`) required tight-bbox normalization on the PIL reference side to prevent scale mismatch vs the STL cross-section (which always fills its bounding box). All runs share one DB that accumulates organically — no seed concepts injected. Wrapup phase loads `skills/wrapup/SKILL.md` via `_load_skill()` — not inline guidance.
+
+---
+
+## [LORE-019] Run 1 — no Lore baseline
+
+**Sprint:** 3   **Shipped:** 2026-06-13   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl without Lore in 40 turns, capturing concepts as I discover them
+**So that** we establish a baseline and populate Lore for subsequent runs, even if the task fails
+
+**What changed:** `samples/stlgen/results/run1.md` — baseline result. DB reset to empty on Run 1 start; concepts captured during session populate it for Run 2.
+
+**Implementation notes:** No `search_concepts` tool available. Forced 15-turn capture phase runs after main loop regardless of task outcome.
+
+---
+
+## [LORE-020] Run 2 — Lore ON, unrated concepts from Run 1
+
+**Sprint:** 3   **Shipped:** 2026-06-13   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl with unrated Lore concepts from Run 1
+**So that** we measure whether any organic Lore knowledge shifts the outcome before ratings provide a quality filter
+
+**What changed:** `samples/stlgen/results/run2.md`.
+
+**Implementation notes:** `search_concepts` default `min_rating=2.0` means concepts with `avg_rating=0.0` (unrated) are invisible. Run 2 effectively had 0 searchable concepts — the wrapup after Run 1 must rate concepts above 2.0 before they surface in Run 3+.
+
+---
+
+## [LORE-021] Run 3 — Lore ON, concepts rated after Runs 1+2
+
+**Sprint:** 3   **Shipped:** 2026-06-14   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl with rated Lore concepts from prior runs
+**So that** we measure whether concept ratings improve search relevance and compound run-over-run
+
+**What changed:** `samples/stlgen/results/run3.md`.
+
+**Implementation notes:** Series 1 wrapup prompt was ambiguous — allowed rating tried-and-failed approaches 2–3 instead of 1, making bad voxel/marching-cubes concepts visible in search. Fixed in `skills/wrapup/SKILL.md` (tried-and-failed → rate 1) for Series 2.
+
+---
+
+## [LORE-022] Runs 4–10 — Lore ON, progressively rated knowledge base
+
+**Sprint:** 3   **Shipped:** 2026-06-27   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** attempt text2stl across runs 4–10 with an increasingly rated Lore knowledge base
+**So that** we measure whether accumulated, rated concepts compound into measurably better outcomes
+
+**What changed:** `samples/stlgen/results/run4.md` through `run10.md`. `samples/stlgen/benchmarks/README.md` — full series results and analysis including bad-concept amplification diagnosis.
+
+**Implementation notes:** Series 1 DB ended with ~49 concepts; voxel/marching-cubes concepts rated ≥2.0 (visible) while correct Shapely extrusion concepts rated <2.0 (invisible) — `min_rating=2.0` filter acted as a voxel amplifier. Root cause: ambiguous wrapup prompt. Series 2 benchmark needed to validate the wrapup skill fix.
