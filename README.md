@@ -47,7 +47,7 @@ docker exec agentlore-lore-selfhosted-1 python -m lore.seed.concepts
 # [lore.seed] Done. concepts=6, links=5, indexed=6
 ```
 
-This loads the REST CLI blueprint — five linked concepts covering project structure, tool setup, testing strategy, pagination, and auth. It validates the full retrieval path and gives you something to search against immediately.
+This loads the REST CLI blueprint — six concepts (an anchor project plus five linked concepts covering tool setup, command hierarchy, testing strategy, pagination, and auth). It validates the full retrieval path and gives you something to search against immediately.
 
 ---
 
@@ -186,7 +186,7 @@ skills/
 └── wrapup/SKILL.md             # /wrapup skill
 .claude/
 ├── hooks/lore-stop.sh          # Stop hook
-└── settings.json               # Hook registration
+└── settings.json               # (empty — hook registered via hooks/hooks.json)
 docker-compose.yml              # lore-selfhosted + qdrant
 ```
 

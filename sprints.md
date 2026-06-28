@@ -124,7 +124,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **Phase item:** N/A — benchmark sprint
 
 **As a** Lore developer
-**I want to be able to** attempt text2stl without Lore in 20 turns, capturing concepts as I work
+**I want to be able to** attempt text2stl without Lore in 40 turns, capturing concepts as I work
 **So that** we establish a baseline and populate Lore for subsequent runs, even if the task fails
 
 **Acceptance Criteria:**
@@ -149,7 +149,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **Phase item:** N/A — benchmark sprint
 
 **As a** Lore developer
-**I want to be able to** attempt text2stl with unrated Lore concepts from Run 1, same 20-turn budget
+**I want to be able to** attempt text2stl with unrated Lore concepts from Run 1, same 40-turn budget
 **So that** we measure whether Lore knowledge (unrated) converts a failing run into a passing one
 
 **Acceptance Criteria:**
@@ -173,7 +173,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **Phase item:** N/A — benchmark sprint
 
 **As a** Lore developer
-**I want to be able to** attempt text2stl with rated Lore concepts, same 20-turn budget
+**I want to be able to** attempt text2stl with rated Lore concepts, same 40-turn budget
 **So that** we measure whether concept ratings improve search relevance and task outcome
 
 **Acceptance Criteria:**
@@ -198,7 +198,7 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 **As a** Lore developer
 **I want to be able to** attempt text2stl with the fullest, most-rated Lore knowledge base
-**So that** we complete the 4-run comparison and write the final comparison table
+**So that** we complete the 10-run benchmark and write the final comparison table
 
 **Acceptance Criteria:**
 - [ ] `python samples/stlgen/benchmarks/run.py --run 4` completes without error

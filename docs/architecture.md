@@ -104,7 +104,7 @@ lore/
 ├── selfhosted/     # Backend 1: FastAPI + SQLite + Qdrant
 ├── semantic-server/ # Backend 3: FastAPI + Qdrant + gist watcher
 ├── skills/         # Claude Code skill file + Stop hook
-├── seed/           # Seed concept graph (5 linked concepts)
+├── seed/           # Seed concept graph (6 concepts, 5 links)
 └── tests/          # unit/ and integration/
 ```
 

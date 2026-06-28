@@ -38,10 +38,11 @@ pytest samples/stlgen/tests/test_text2stl_cli.py -v
 ## Running the benchmark
 
 ```bash
-python benchmarks/run.py --run 1   # baseline (clears DB, no Lore)
-python benchmarks/run.py --run 2   # Lore ON, unrated concepts from Run 1
-python benchmarks/run.py --run 3   # Lore ON, concepts rated after Run 2
-python benchmarks/run.py --run 4   # Lore ON, all prior concepts rated
+python benchmarks/run.py --run 1    # baseline (clears DB, no Lore)
+python benchmarks/run.py --run 2    # Lore ON, concepts accumulate from Run 1
+python benchmarks/run.py --run 3    # Lore ON, concepts accumulate from Runs 1-2
+# ... repeat through run 10
+python benchmarks/run.py --all      # run all 10 sequentially
 ```
 
 By default the runner uses the Anthropic API. To use a self-hosted LLM instead, see the next section.

@@ -219,7 +219,7 @@ Input:
   problem   str        — natural language description of what you're building
   type      str?       — filter by concept type (project|pattern|tool|testing|architecture)
   language  str?       — filter by language
-  limit     int = 5
+  limit     int = 3
 
 Output: ranked list of concepts, each with:
   concept_id, name, type, when_to_use, content (markdown),
@@ -354,7 +354,7 @@ the agent may have noted but not yet captured.
 
 ### Stop hook
 
-Registered in `.claude/settings.json`. Fires when a session ends:
+Registered in `hooks/hooks.json` (plugin system). Fires when a session ends:
 
 1. Reads `~/.lore/session.json` for concept IDs used this session
 2. If any concepts were used, presents a batch rating prompt:
@@ -403,7 +403,7 @@ If yes, call capture-concept for each one before closing.
 
 ## Seed Concept Graph
 
-Validates the full retrieval path on first run. Five linked concepts
+Validates the full retrieval path on first run. Six concepts and five links
 covering the REST CLI blueprint end-to-end.
 
 ```
@@ -439,7 +439,7 @@ path to a working system with full semantic search.
 - [x] Docker image: single container, `docker run -p 8765:8765 lore/selfhosted`
 - [x] MCP server with `LORE_BACKEND=selfhosted` routing:
       search_concepts, get_concept, submit_concept, link_concepts, rate_concept
-- [x] Seed the REST CLI concept graph (5 linked concepts)
+- [x] Seed the REST CLI concept graph (6 concepts, 5 links)
 - [x] Claude Code search-concepts skill file
 - [x] capture-concept skill file (confirm/auto mode, structured reflection criteria)
 - [x] Stop hook: batch rating prompt (hours_saved) + session-end reflection prompt
@@ -539,7 +539,7 @@ lore/
   regardless of `LORE_CAPTURE_MODE`. In `auto` mode this is the only leak gate.
 - `confirm` mode is strongly recommended for teams on sensitive codebases —
   human review is the final guard the scan cannot replace.
-- `LORE_BLOCK_PATTERNS` accepts a comma-separated list of regex strings for
+- `LORE_BLOCK_PATTERNS` accepts a semicolon-separated list of regex strings for
   team-specific sensitive terms (internal service names, proprietary identifiers).
 - Backends are not mutually exclusive in future: a team could run
   Backend 1 for private concepts and Backend 2/3 for public ones —

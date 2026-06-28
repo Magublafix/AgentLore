@@ -6,7 +6,7 @@ a request (or test) and close them when done.
 
 IDs are generated with :func:`uuid.uuid4` and formatted as lowercase
 hyphenated strings.  Timestamps are ISO-8601 UTC strings produced by
-:func:`datetime.datetime.utcnow`.
+:func:`datetime.datetime.now` with :attr:`datetime.timezone.utc`.
 """
 
 from __future__ import annotations
