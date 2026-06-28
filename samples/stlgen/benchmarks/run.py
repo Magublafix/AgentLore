@@ -919,6 +919,7 @@ def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple
     in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
         system, TOOLS_CAPTURE, capture_messages,
         workdir=None, max_turns=MAX_TURNS_CAPTURE, verbose=verbose, label="[capture] ",
+        stop_on_submit=True,
     )
     print(f"  [capture] done — {_count_concepts()} total concepts in DB "
           f"({turns} turns, {in_tok + out_tok:,} tokens)")
