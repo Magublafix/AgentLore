@@ -2,74 +2,57 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-27 04:58 |
+| Date | 2026-06-28 19:53 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (39 concepts) |
+| Lore search active | yes (24 concepts) |
 | Web search active | yes |
-| Turn budget | 5 |
-| Turns (main loop) | 5 |
-| Turns (capture) | 15 |
-| Turns (wrapup) | 0 |
-| Task submitted | no (hit limit) |
-| Input tokens | 10,266 |
-| Output tokens | 3,887 |
-| Total tokens | 14,153 |
-| Concepts captured this run | 3 |
-| Elapsed | 69.1s |
-| Tests passed | ❌ no |
+| Turn budget | 36 |
+| Turns (main loop) | 19 |
+| Turns (capture) | 9 |
+| Turns (wrapup) | 7 |
+| Task submitted | yes |
+| Input tokens | 39,692 |
+| Output tokens | 9,041 |
+| Total tokens | 48,733 |
+| Concepts captured this run | 4 |
+| Elapsed | 708.7s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
 ```
-(most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-_______________ TestDimensions.test_width_scales_with_char_count _______________
-tests/test_text2stl_cli.py:199: in test_width_scales_with_char_count
-    text2stl("A", "-o", str(out1))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-643/test_width_scales_with_char_co0/a.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
-tests/test_text2stl_cli.py:217: in test_cross_section_is_nonempty
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-643/test_cross_section_is_nonempty0/hello.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-643/test_character_shapes_match_te0/hello.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
-FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 1.02s =====================
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /tmp/lore_stlgen_run9_khd2oi87
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 13 items
+
+tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
+tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 15%]
+tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 23%]
+tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 30%]
+tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 38%]
+tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 46%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 53%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 61%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 69%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 76%]
+tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 84%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
+  /tmp/lore_stlgen_run9_khd2oi87/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+    section_2d, _ = section.to_planar()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 13 passed, 1 warning in 16.35s ========================
 
 ```

@@ -22,12 +22,54 @@ Run 1 is the single control and always resets the DB to empty. Runs 2–10 have 
 # Cloud Claude (anthropic provider)
 python benchmarks/run.py --run 1
 
-# Local model via Ollama Anthropic-compatible API
+# Local model via an Anthropic-compatible server (llama.cpp or Ollama)
 LORE_LLM_PROVIDER=local \
-LORE_LOCAL_BASE_URL=http://192.168.1.38:11434 \
-LORE_LOCAL_MODEL=qwen2.5-coder:32b \
+LORE_LOCAL_BASE_URL=http://192.168.1.38:8080 \
+LORE_LOCAL_MODEL="unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
 python benchmarks/run.py --run 1
 ```
+
+### Starting the local llama.cpp server
+
+The benchmark talks to `llama-server`'s built-in Anthropic-compatible
+`/v1/messages` endpoint, not Ollama — `/health` and `/props` on port 8080
+confirm a llama.cpp server (`build_info` like `bNNNN-<hash>`), and Ollama's
+own port (11434) isn't even open on that host. Start it like this:
+
+```bash
+llama-server \
+  -hf unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M \
+  --host 0.0.0.0 --port 8080 \
+  --ctx-size 32768 \
+  --jinja \
+  --reasoning-format auto \
+  --temp 0.6
+```
+
+`--jinja` is the load-bearing flag here. Without it, `llama-server` falls
+back to a plain-content chat path — confirmed via `GET /props`, which reports
+`"chat_format": "Content-only"` and `"reasoning_format": "none"` when it's
+missing. In that mode there is no grammar constraining the model into its
+native `<tool_call><function=...>` format, so:
+
+- `tool_choice: {"type": "any"}` is accepted by the request but has nothing
+  to enforce it — the model can still end its turn right after `</think>`
+  with no tool call.
+- Assistant-message prefill (priming the next turn with a partial tool-call
+  JSON object) is rejected outright with a `500: "model produced output
+  that does not match the expected peg-native format"` — the shim's parser
+  expects the Hermes-style `<tool_call>` XML it's configured for, not raw
+  JSON.
+
+`--jinja` engages `llama-server`'s native chat-template detection and
+grammar-constrained tool-call generation for the model's own format, which
+is the actual fix for the "thinking→act" empty-turn retries documented
+below. The default sampler temperature is `1.0`; `--temp 0.6` is a
+reasonable starting point for more reliable instruction-following — tune to
+taste. `run.py`'s existing user-turn retry (re-prompting "now output exactly
+one tool call") still serves as a safety net even with `--jinja` on, since
+no amount of grammar constraining stops a model from genuinely declining to
+act.
 
 Run all 10 sequentially (resets DB on Run 1, accumulates across runs):
 
@@ -206,6 +248,6 @@ problems without the complete fix.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LORE_LLM_PROVIDER` | `anthropic` | `anthropic` or `local` |
-| `LORE_LOCAL_BASE_URL` | `http://localhost:11434` | Ollama base URL (no `/v1`) |
+| `LORE_LOCAL_BASE_URL` | `http://localhost:11434` | llama.cpp / Ollama-compatible server base URL (no `/v1`) — see [Starting the local llama.cpp server](#starting-the-local-llamacpp-server) |
 | `LORE_LOCAL_MODEL` | `qwen2.5-coder:32b` | Model name for local runs |
 | `LORE_API_URL` | `http://localhost:8765` | Lore selfhosted API base URL |

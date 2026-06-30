@@ -768,11 +768,18 @@ def _run_agent_anthropic(
     total_in = total_out = turns = 0
     submitted = False
 
+    # Local thinking models (e.g. Qwen3.5 via Ollama) frequently end a turn right
+    # after their <think> block with no tool call when tool_choice is left at the
+    # default "auto" — forcing "any" eliminates that failure mode (~36% of turns
+    # were lost to it in earlier runs). Cloud Claude doesn't need this.
+    extra_kwargs = {"tool_choice": {"type": "any"}} if PROVIDER == "local" else {}
+
     while turns < max_turns:
         try:
             response = client.messages.create(
                 model=model, max_tokens=max_tok,
                 system=system, tools=tools, messages=messages,
+                **extra_kwargs,
             )
         except Exception as exc:
             print(f"  {label}[API ERROR turn {turns+1}] {exc}", flush=True)
@@ -807,6 +814,13 @@ def _run_agent_anthropic(
                 _thinking_text = b.thinking
 
         if not content_blocks:
+            # Ollama's serving layer (llama.cpp grammar-constrained tool calling)
+            # frequently stops generating right after </think> with no tool call.
+            # Confirmed not fixable from the client: tool_choice="any" does not
+            # reliably force a call here, and assistant-message prefill continuation
+            # is rejected outright by the server's tool-call grammar ("peg-native
+            # format" 500 errors) once more than a trivial tool registry is in play.
+            # The only working mitigation is re-prompting in a fresh user turn.
             if _thinking_text:
                 # think→act: feed the reasoning conclusion back as the retry prompt
                 conclusion = _thinking_text[-1500:].strip()
@@ -1087,7 +1101,22 @@ def run_tests(workdir: Path) -> tuple[bool, str]:
 # Core step function — all runs share this logic
 # ---------------------------------------------------------------------------
 
-def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TURNS) -> dict | None:
+def step_run(
+    run_num: int,
+    verbose: bool,
+    dry_run: bool,
+    max_turns: int = MAX_TURNS,
+    output_dir: Path | None = None,
+) -> dict | None:
+    """Execute a single benchmark run.
+
+    Args:
+        run_num: 1-based run number within a series.
+        verbose: Whether to print verbose tool call output.
+        dry_run: If True, print header and return immediately without running.
+        max_turns: Turn budget for the main coding loop.
+        output_dir: Directory to write run*.md into. Defaults to RESULTS_DIR.
+    """
     lore_active = run_num > 1
 
     if run_num == 1:
@@ -1096,7 +1125,8 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
     concepts_in_db = _count_concepts()
 
     lore_label = f"Lore ON ({concepts_in_db} concepts)" if lore_active else "no Lore"
-    print(f"\n{'='*60}\n  Run {run_num} — {lore_label}  |  {max_turns} turns  |  {MODEL}\n{'='*60}")
+    model_name = LOCAL_MODEL if PROVIDER == "local" else MODEL
+    print(f"\n{'='*60}\n  Run {run_num} — {lore_label}  |  {max_turns} turns  |  {model_name}\n{'='*60}")
 
     if dry_run:
         print("[dry-run] skipping.")
@@ -1158,7 +1188,7 @@ def step_run(run_num: int, verbose: bool, dry_run: bool, max_turns: int = MAX_TU
             "task_submitted": submitted,
             "tests_passed": passed,
         }
-        _write_run_md(result, test_out)
+        _write_run_md(result, test_out, output_dir=output_dir)
         _print_summary(result)
         return result
     finally:
@@ -1226,11 +1256,19 @@ def _seed_concepts() -> None:
         print(f"  [seed] {seeded} concept(s) seeded into DB.", flush=True)
 
 
-def _write_run_md(r: dict, test_out: str) -> None:
-    RESULTS_DIR.mkdir(exist_ok=True)
+def _write_run_md(r: dict, test_out: str, output_dir: Path | None = None) -> None:
+    """Write per-run markdown results file.
+
+    Args:
+        r: Run result dict.
+        test_out: Raw pytest output string.
+        output_dir: Directory to write into. Defaults to RESULTS_DIR.
+    """
+    out_dir = output_dir or RESULTS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
     run_n = r["run"]
     lore = f"yes ({r['concepts_available']} concepts)" if r["lore_active"] else "no"
-    (RESULTS_DIR / f"run{run_n}.md").write_text(
+    (out_dir / f"run{run_n}.md").write_text(
         f"# Benchmark — Run {run_n}\n\n"
         f"| Field | Value |\n|-------|-------|\n"
         f"| Date | {datetime.now().strftime('%Y-%m-%d %H:%M')} |\n"
@@ -1251,7 +1289,7 @@ def _write_run_md(r: dict, test_out: str) -> None:
         f"## Test output\n\n```\n{test_out[-3000:]}\n```\n",
         encoding="utf-8",
     )
-    print(f"  Results → {RESULTS_DIR / f'run{run_n}.md'}")
+    print(f"  Results → {out_dir / f'run{run_n}.md'}")
 
 
 def _print_summary(r: dict) -> None:
@@ -1266,8 +1304,15 @@ def _print_summary(r: dict) -> None:
 
 
 
-def _write_comparison(results: list[dict]) -> None:
-    RESULTS_DIR.mkdir(exist_ok=True)
+def _write_comparison(results: list[dict], output_dir: Path | None = None) -> None:
+    """Write the cross-run comparison markdown table.
+
+    Args:
+        results: List of run result dicts for a single series.
+        output_dir: Directory to write comparison.md into. Defaults to RESULTS_DIR.
+    """
+    out_dir = output_dir or RESULTS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
     n = max(r["run"] for r in results)
     run_cols = " | ".join(f"Run {i}" for i in range(1, n + 1))
     sep_cols  = " | ".join("-------" for _ in range(1, n + 1))
@@ -1303,14 +1348,138 @@ def _write_comparison(results: list[dict]) -> None:
         table += f"| {label} | {' | '.join(cells)} |\n"
     table += f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
 
-    (RESULTS_DIR / "comparison.md").write_text(table, encoding="utf-8")
-    print(f"\nComparison → {RESULTS_DIR / 'comparison.md'}")
+    (out_dir / "comparison.md").write_text(table, encoding="utf-8")
+    print(f"\nComparison → {out_dir / 'comparison.md'}")
+
+
+# ---------------------------------------------------------------------------
+# Multi-series helpers
+# ---------------------------------------------------------------------------
+
+def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budget: int) -> None:
+    """Append a completed series to results/aggregate.json.
+
+    Loads existing data if the file exists and appends the new series block.
+    Top-level metadata (model, turn_budget, generated) is updated on each write.
+
+    Args:
+        series_id: 1-based series number.
+        series_results: List of run result dicts for this series.
+        turn_budget: The --max-turns value used for this run.
+    """
+    agg_path = RESULTS_DIR / "aggregate.json"
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Load existing data or start fresh
+    if agg_path.exists():
+        try:
+            existing = json.loads(agg_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+    else:
+        existing = {}
+
+    existing_series: list[dict] = existing.get("series", [])
+
+    new_series = {
+        "series_id": series_id,
+        "runs": [
+            {
+                "run": r["run"],
+                "lore_active": r["lore_active"],
+                "concepts_available": r["concepts_available"],
+                "concepts_captured": r["concepts_captured"],
+                "turn_budget": r["turn_budget"],
+                "turns_main": r["turns_main"],
+                "turns_capture": r["turns_capture"],
+                "turns_wrapup": r["turns_wrapup"],
+                "input_tokens": r["input_tokens"],
+                "output_tokens": r["output_tokens"],
+                "total_tokens": r["total_tokens"],
+                "elapsed": round(r["elapsed"], 1),
+                "task_submitted": r["task_submitted"],
+                "tests_passed": r["tests_passed"],
+            }
+            for r in series_results
+        ],
+    }
+    existing_series.append(new_series)
+
+    model_name = LOCAL_MODEL if PROVIDER == "local" else MODEL
+    output = {
+        "model": model_name,
+        "turn_budget": turn_budget,
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "series": existing_series,
+    }
+
+    agg_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+    print(f"\nAggregate → {agg_path}")
+
+
+def _print_series_summary(all_series: list[list[dict]]) -> None:
+    """Print a cross-series summary table after all series complete.
+
+    Args:
+        all_series: List of series, each being a list of run result dicts.
+    """
+    n_series = len(all_series)
+    # Determine run count from the first series that has data
+    n_runs = max(len(s) for s in all_series) if all_series else 0
+    if n_runs == 0:
+        return
+
+    print(f"\n{'='*65}")
+    print(f"  Multi-Series Summary ({n_series} series x {n_runs} runs)")
+    print(f"{'='*65}")
+    print(f"{'Run':>4} | {'Pass rate':>9} | {'Avg turns (pass)':>16} | {'Avg tokens':>10} | {'Avg elapsed':>11}")
+    print(f"{'-'*4}-+-{'-'*9}-+-{'-'*16}-+-{'-'*10}-+-{'-'*11}")
+
+    for run_idx in range(1, n_runs + 1):
+        # Collect results for this run number across all series
+        run_results = [
+            r
+            for series in all_series
+            for r in series
+            if r["run"] == run_idx
+        ]
+        if not run_results:
+            continue
+
+        total = len(run_results)
+        passed = [r for r in run_results if r["tests_passed"]]
+        pass_rate = len(passed) / total * 100
+
+        avg_turns_pass = (
+            sum(r["turns_main"] for r in passed) / len(passed)
+            if passed else None
+        )
+        avg_tokens = sum(r["total_tokens"] for r in run_results) / total
+        avg_elapsed_m = sum(r["elapsed"] for r in run_results) / total / 60
+
+        pass_str   = f"{pass_rate:.0f}%"
+        turns_str  = f"{avg_turns_pass:.1f}" if avg_turns_pass is not None else "—"
+        tokens_str = f"{avg_tokens:,.0f}"
+        elapsed_str = f"{avg_elapsed_m:.1f}m"
+
+        print(
+            f"{run_idx:>4} | {pass_str:>9} | {turns_str:>16} | {tokens_str:>10} | {elapsed_str:>11}"
+        )
+    print()
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    """Entry point for the Lore benchmark runner.
+
+    Modes:
+      --run N      Run a single numbered run (single-series, writes to results/).
+      --all        Run all 10 runs in sequence (single-series, writes to results/).
+      --series N   Run N complete 10-run series in sequence, each starting fresh.
+                   Writes to results/series_NNN/ and appends to results/aggregate.json.
+    """
     parser = argparse.ArgumentParser(
         description="Lore effectiveness benchmark — text2stl, 10 progressive runs",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1321,22 +1490,62 @@ def main() -> None:
                       help="Run a single numbered run")
     mode.add_argument("--all", action="store_true",
                       help="Run all 10 in sequence")
+    mode.add_argument("--series", type=int, metavar="N",
+                      help="Run N complete 10-run series in sequence (each series starts fresh)")
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-turns", type=int, default=MAX_TURNS, metavar="N",
                         help=f"Turn budget for the main coding loop (default: {MAX_TURNS})")
     args = parser.parse_args()
 
-    runs = list(range(1, 11)) if args.all else [args.run]
-    results: list[dict] = []
+    if args.series is not None:
+        # Multi-series mode: run N complete 10-run series.
+        # Each series gets its own results/series_NNN/ subdirectory.
+        n_series = args.series
+        all_series_results: list[list[dict]] = []
 
-    for run_num in runs:
-        res = step_run(run_num, args.verbose, args.dry_run, max_turns=args.max_turns)
-        if res:
-            results.append(res)
+        for series_num in range(1, n_series + 1):
+            series_dir = RESULTS_DIR / f"series_{series_num:03d}"
+            print(f"\n{'#'*60}")
+            print(f"  SERIES {series_num}/{n_series}")
+            print(f"  Output dir: {series_dir}")
+            print(f"{'#'*60}")
 
-    if len(results) >= 2:
-        _write_comparison(results)
+            series_results: list[dict] = []
+            for run_num in range(1, 11):
+                res = step_run(
+                    run_num,
+                    args.verbose,
+                    args.dry_run,
+                    max_turns=args.max_turns,
+                    output_dir=series_dir,
+                )
+                if res:
+                    series_results.append(res)
+
+            if len(series_results) >= 2:
+                _write_comparison(series_results, output_dir=series_dir)
+
+            if series_results and not args.dry_run:
+                _write_aggregate_json(series_num, series_results, args.max_turns)
+
+            all_series_results.append(series_results)
+
+        if not args.dry_run:
+            _print_series_summary(all_series_results)
+
+    else:
+        # Single-series mode (--all or --run): unchanged behaviour.
+        runs = list(range(1, 11)) if args.all else [args.run]
+        results: list[dict] = []
+
+        for run_num in runs:
+            res = step_run(run_num, args.verbose, args.dry_run, max_turns=args.max_turns)
+            if res:
+                results.append(res)
+
+        if len(results) >= 2:
+            _write_comparison(results)
 
 
 if __name__ == "__main__":

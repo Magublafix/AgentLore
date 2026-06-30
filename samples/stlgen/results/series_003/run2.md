@@ -1,21 +1,21 @@
-# Benchmark — Run 1
+# Benchmark — Run 2
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-28 16:49 |
+| Date | 2026-06-29 12:28 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | no |
+| Lore search active | yes (2 concepts) |
 | Web search active | yes |
 | Turn budget | 36 |
 | Turns (main loop) | 36 |
-| Turns (capture) | 10 |
-| Turns (wrapup) | 6 |
+| Turns (capture) | 7 |
+| Turns (wrapup) | 4 |
 | Task submitted | no (hit limit) |
-| Input tokens | 58,334 |
-| Output tokens | 10,591 |
-| Total tokens | 68,925 |
-| Concepts captured this run | 6 |
-| Elapsed | 919.2s |
+| Input tokens | 32,919 |
+| Output tokens | 9,351 |
+| Total tokens | 42,270 |
+| Concepts captured this run | 4 |
+| Elapsed | 774.7s |
 | Tests passed | ❌ no |
 
 ## Test output
@@ -30,7 +30,7 @@ tests/test_text2stl_cli.py:199: in test_width_scales_with_char_count
     text2stl("A", "-o", str(out1))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-771/test_width_scales_with_char_co0/a.stl exited 1
+E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-865/test_width_scales_with_char_co0/a.stl exited 1
 E   stdout: 
 E   stderr: Traceback (most recent call last):
 E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
@@ -41,7 +41,7 @@ tests/test_text2stl_cli.py:217: in test_cross_section_is_nonempty
     text2stl("HELLO", "-o", str(out))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-771/test_cross_section_is_nonempty0/hello.stl exited 1
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-865/test_cross_section_is_nonempty0/hello.stl exited 1
 E   stdout: 
 E   stderr: Traceback (most recent call last):
 E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
@@ -52,7 +52,7 @@ tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
     text2stl("HELLO", "-o", str(out))
 tests/test_text2stl_cli.py:29: in text2stl
     pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-771/test_character_shapes_match_te0/hello.stl exited 1
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-865/test_character_shapes_match_te0/hello.stl exited 1
 E   stdout: 
 E   stderr: Traceback (most recent call last):
 E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
@@ -70,6 +70,6 @@ ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 0.95s =====================
+==================== 7 failed, 2 passed, 4 errors in 0.65s =====================
 
 ```
