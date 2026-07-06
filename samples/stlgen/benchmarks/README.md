@@ -41,35 +41,62 @@ llama-server \
   -hf unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M \
   --host 0.0.0.0 --port 8080 \
   --ctx-size 32768 \
-  --jinja \
-  --reasoning-format auto \
-  --temp 0.6
+  --jinja --reasoning off \
+  --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0 --presence-penalty 1.5
 ```
 
-`--jinja` is the load-bearing flag here. Without it, `llama-server` falls
-back to a plain-content chat path — confirmed via `GET /props`, which reports
-`"chat_format": "Content-only"` and `"reasoning_format": "none"` when it's
-missing. In that mode there is no grammar constraining the model into its
-native `<tool_call><function=...>` format, so:
+`--reasoning off` is the current (non-deprecated) flag for disabling
+thinking mode — `--chat-template-kwargs '{"enable_thinking":false}'` still
+works but `llama-server` now warns it's deprecated in favor of
+`--reasoning on`/`--reasoning off`. `--reasoning off` also sidesteps the
+Windows PowerShell quoting problem entirely, since it takes a plain word
+instead of a JSON string argument — no quote-escaping pitfalls. (For the
+record, if you ever do need to pass a literal JSON-string argument to a
+native exe from PowerShell: neither `\"`-escaped double quotes nor a plain
+single-quoted string reliably survive PowerShell's argument reconstruction
+before invoking the native process — the stop-parsing token `--%` followed
+by literal `\"`-escaped JSON is the reliable workaround, e.g.
+`.\llama-server.exe --% --chat-template-kwargs "{\"enable_thinking\":false}"`.)
 
-- `tool_choice: {"type": "any"}` is accepted by the request but has nothing
-  to enforce it — the model can still end its turn right after `</think>`
-  with no tool call.
+### The "thinking→act" empty-turn retry, and what actually fixes it
+
+On roughly 1 in 3 turns with this model, the model emits a `<think>...</think>`
+block and then ends its turn with **no tool call** — `run.py` recovers by
+re-prompting in a fresh user turn ("now output exactly one tool call"),
+which works but costs an extra turn each time. Two hypotheses were tested
+and ruled out by live validation before finding the actual lever:
+
+- **`tool_choice: {"type": "any"}`** — accepted by the request but not
+  enforced; the model still ends turns with `stop_reason=end_turn` and only
+  a `thinking` block.
+- **`--jinja`** — accepted, confirmed active (sampler settings from `/props`
+  changed after restart), but the retry rate was statistically unchanged
+  (38.5% post-restart vs. ~36% baseline). `GET /props` reports
+  `"chat_format": "Content-only"` and `"reasoning_format": "none"`
+  regardless of `--jinja` for this model/build — this llama.cpp build does
+  not appear to grammar-constrain tool-call output for this template family,
+  so there's nothing for `--jinja` to lock down. Also ruled out:
+  re-downloading the GGUF (the locally cached snapshot already matched the
+  latest upstream commit, including Unsloth's official tool-calling
+  chat-template fix from March 5).
 - Assistant-message prefill (priming the next turn with a partial tool-call
   JSON object) is rejected outright with a `500: "model produced output
   that does not match the expected peg-native format"` — the shim's parser
   expects the Hermes-style `<tool_call>` XML it's configured for, not raw
-  JSON.
+  JSON, so this isn't a viable workaround either.
 
-`--jinja` engages `llama-server`'s native chat-template detection and
-grammar-constrained tool-call generation for the model's own format, which
-is the actual fix for the "thinking→act" empty-turn retries documented
-below. The default sampler temperature is `1.0`; `--temp 0.6` is a
-reasonable starting point for more reliable instruction-following — tune to
-taste. `run.py`'s existing user-turn retry (re-prompting "now output exactly
-one tool call") still serves as a safety net even with `--jinja` on, since
-no amount of grammar constraining stops a model from genuinely declining to
-act.
+**`--chat-template-kwargs "{\"enable_thinking\":false}"`** removes the
+failure mode at the root instead of trying to make thinking-mode reliable:
+the chat template inserts a pre-closed, empty `<think>\n\n</think>\n\n`
+block directly into the prompt when thinking is disabled, so the model
+starts generating real content/tool-calls immediately rather than ever
+having the option to trail off after an open-ended `<think>` block. Use the
+non-thinking/instruct sampling profile above (different from the
+thinking-mode profile: temp 0.6–1.0, no presence penalty) — this is
+Unsloth's documented recommendation for `enable_thinking:false`, not a
+guess. `run.py`'s existing user-turn retry still serves as a safety net
+regardless, since no amount of template engineering stops a model from
+genuinely declining to act.
 
 Run all 10 sequentially (resets DB on Run 1, accumulates across runs):
 
@@ -188,6 +215,81 @@ Two alternative fixes were considered and rejected:
   ineffective: blank canvas around rendered glyphs produces no mesh
   geometry, so it cannot survive into the STL's bounding box no matter what
   margin convention the model follows.
+
+### Truncation-detection fix
+
+The IoU fix above traded one failure mode for a quieter one. A separately
+inspected implementation rendered text into a bitmap using an oversized
+font (`font_size = canvas_height * 0.75`) combined with bottom-anchored
+placement (`y = canvas_height - text_height`); the lower portion of every
+glyph fell outside the render canvas and was silently dropped by PIL before
+the mesh was ever built. Opening the resulting STL showed only the upper
+half of each letter — the lower half was simply missing. Despite this,
+`test_character_shapes_match_text` passed: IoU = 0.514 against the 0.25
+threshold.
+
+**Root cause of the blind spot:** both sides of the IoU comparison crop
+tightly to their own non-zero bounding box and *independently rescale* to
+the same fixed frame before comparing — exactly the convention the fix
+above introduced, and necessarily so (see previous section). The side
+effect: a glyph missing a contiguous chunk of its extent still gets
+stretched to fill the frame after cropping, and the surviving fragment can
+resemble the full glyph well enough to clear the IoU bar purely on
+remaining-shape similarity. Sweeping the same implementation's font-size
+fraction from 0.40 to 0.75 (canvas size and bottom-anchored placement held
+fixed) showed it clips approximately 24-25% of the glyph's true height at
+every setting — a near-constant fraction, since the cause is structural
+(font metrics relative to canvas height), not incidental — and the old IoU
+test passed at four of the eight fractions tested (IoU 0.25-0.51 against
+the 0.25 threshold), failing only at the most extreme settings where the
+remaining fragment stopped resembling the reference shape at all. A single
+global aspect-ratio check on the tight bounding box was tried first and
+rejected: it works when truncation happens on only one axis, but this
+implementation's font size also overflowed the canvas *width*, clipping
+horizontally too, and the two clips partially canceled in the aspect ratio
+(STL tight-bbox aspect 4.63 vs. reference 4.10 — only an 11% deviation,
+inside any tolerance wide enough to keep allowing legitimate scale
+variation).
+
+**Fix:** added `test_character_shapes_not_truncated`, a second, independent
+test alongside (not replacing) the IoU test. It divides the same
+tight-cropped bitmaps into 20 bands along each axis and computes the
+Pearson correlation between the STL and reference ink-density profiles per
+axis (`_band_profile`, `_min_band_correlation` in
+`tests/test_text2stl_cli.py`), asserting the worse of the two axis
+correlations is >= 0.3. Truncation removes a contiguous chunk of the glyph
+along one axis *before* the crop/rescale, which reshuffles where the
+remaining features (crossbars, counters, serifs) land in that axis's band
+layout — a signal whole-image IoU overlap cannot see, because rescaling a
+truncated fragment to fill the frame is exactly what erases it. Checking
+both axes and taking the minimum catches truncation regardless of which
+axis it happens on (or both at once, as in the case above). Because the
+check runs on the same already-tight-cropped bitmaps the IoU test uses,
+legitimate scale/padding variation — the exact case the IoU fix was
+protecting — washes out identically: an untruncated glyph reproduces the
+reference's band profile almost exactly (correlation ~1.0) regardless of
+how much padding surrounded it before cropping.
+
+**Validation:** against the implementation described above (24.83% bottom
+clip, IoU = 0.156, the most severe font-size setting in the sweep), the new
+check scored band-correlation = -0.019. Against the mildest setting that
+still cleared the old IoU bar (font fraction 0.55, 24.41% bottom clip,
+IoU = 0.514 — a clean "pass" under the pre-existing test), the new check
+scored -0.003 — still well below the 0.3 threshold. Across the full
+0.40-0.75 sweep, every truncated variant scored between -0.094 and 0.207,
+never approaching 0.3. A correctly-rendered, non-clipped reference
+implementation (different extrusion method — marching-squares contouring
+instead of per-column box-stacking, to rule out a method-specific
+coincidence) scored 0.646 on the new check and continued to pass the
+existing IoU test unchanged. The two tests now cover orthogonal failure
+modes: IoU catches wrong/malformed/reordered letters, band-correlation
+catches truncation that IoU's scale-normalization can no longer see.
+
+A combined aspect-ratio-only check (single scalar, no per-axis band
+profile) was tried and rejected for the reason above: it is fooled
+whenever clipping happens on both axes at once, which is not a contrived
+edge case — it is what this real implementation actually did, since an
+oversized font tends to overflow both canvas dimensions together.
 
 ### Post-IoU-fix run — seeded sequence
 

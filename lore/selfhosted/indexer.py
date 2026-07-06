@@ -156,6 +156,8 @@ def search_concepts(
     if language_filter is not None:
         concepts = [c for c in concepts if c.language == language_filter]
     if min_rating > 0:
-        concepts = [c for c in concepts if c.avg_rating is not None and c.avg_rating >= min_rating]
+        # Unrated concepts (avg_rating None or 0.0) always pass through — only
+        # actively low-rated ones are excluded.
+        concepts = [c for c in concepts if not c.avg_rating or c.avg_rating >= min_rating]
 
     return concepts[:limit]

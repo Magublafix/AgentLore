@@ -107,6 +107,71 @@ def _iou(a: np.ndarray, b: np.ndarray) -> float:
     return float(intersection) / float(union) if union > 0 else 0.0
 
 
+def _band_profile(a: np.ndarray, axis: int, n: int = 20) -> np.ndarray:
+    """Mean ink density in `n` equal bands along `axis` (0=columns, 1=rows).
+
+    Captures *where* ink sits along an axis, not just how much. Unlike IoU
+    on the tight-cropped-and-rescaled image, this is sensitive to which
+    fraction of the glyph's extent is actually present — a glyph missing a
+    contiguous chunk (e.g. truncated by a canvas edge) gets its remaining
+    features compressed/redistributed into the band layout in a way that no
+    longer lines up with an intact reference, even after independent
+    rescaling. See `_min_band_correlation` / "truncation-detection fix" in
+    benchmarks/README.md.
+    """
+    # axis=1 means "bands along rows" (top-to-bottom), so the band count is
+    # taken from the row dimension (shape[0]); axis=0 means "bands along
+    # columns" (left-to-right), taken from shape[1].
+    length = a.shape[0] if axis == 1 else a.shape[1]
+    edges = np.linspace(0, length, n + 1).astype(int)
+    bands = []
+    for i in range(n):
+        lo, hi = edges[i], edges[i + 1]
+        if hi <= lo:
+            bands.append(0.0)
+            continue
+        sl = a[lo:hi, :] if axis == 1 else a[:, lo:hi]
+        bands.append(float(sl.mean()))
+    return np.array(bands)
+
+
+def _safe_corr(a: np.ndarray, b: np.ndarray) -> float:
+    """Pearson correlation, treating a constant (zero-variance) series as
+    uncorrelated (0.0) instead of raising/NaN-ing — a fully solid or fully
+    empty band profile carries no shape information either way."""
+    if a.std() == 0 or b.std() == 0:
+        return 0.0
+    return float(np.corrcoef(a, b)[0, 1])
+
+
+def _min_band_correlation(arr_stl: np.ndarray, arr_ref: np.ndarray) -> float:
+    """Worst-of-(row-profile, column-profile) correlation between the STL
+    cross-section and the reference, best-of-(normal, vertically-flipped)
+    orientation.
+
+    Both profiles are computed on the same tight-cropped-and-rescaled
+    bitmaps the IoU test uses, so legitimate scale/padding differences
+    wash out exactly as they do for IoU (a uniformly-scaled, untruncated
+    glyph reproduces the reference's band profile almost exactly on both
+    axes). Truncation, however, removes a contiguous chunk of the glyph
+    along one axis *before* the independent rescale — that reshuffles
+    where remaining features (crossbars, counters, serifs) land along that
+    axis, which IoU's whole-image overlap can't distinguish from "smaller
+    but correctly shaped" but which band correlation on the affected axis
+    picks up sharply (the row profile no longer resembles the reference's
+    row profile even though the rescaled image is now the same size).
+    Taking the min across axes ensures truncation on *either* axis is
+    caught, since a glyph clipped on one axis only is otherwise free to
+    pass on the other.
+    """
+    best = -1.0
+    for candidate in (arr_stl, np.flipud(arr_stl)):
+        row_corr = _safe_corr(_band_profile(candidate, axis=1), _band_profile(arr_ref, axis=1))
+        col_corr = _safe_corr(_band_profile(candidate, axis=0), _band_profile(arr_ref, axis=0))
+        best = max(best, min(row_corr, col_corr))
+    return best
+
+
 # ---------------------------------------------------------------------------
 # Basic invocation
 # ---------------------------------------------------------------------------
@@ -250,4 +315,54 @@ class TestCharacterShapes:
             f"Character shape IoU {iou:.3f} < 0.25 — "
             "cross-section does not resemble 'HELLO'. "
             "Letters may be malformed, missing, or in wrong order."
+        )
+
+    def test_character_shapes_not_truncated(self, tmp_path):
+        """
+        Catches truncation (e.g. glyphs clipped by a canvas/render boundary)
+        that survives `test_character_shapes_match_text`'s IoU check.
+
+        That test crops both the STL cross-section and the PIL reference to
+        their own tight bounding box before rescaling to a common frame
+        (deliberately, to tolerate legitimate scale/padding differences —
+        see `_text_reference_bitmap`'s docstring). The side effect: a glyph
+        that's missing a meaningful chunk of its vertical (or horizontal)
+        extent still gets stretched to fill the frame, and the surviving
+        fragment can incidentally resemble the full glyph well enough to
+        clear the IoU threshold. A real generated implementation hit this:
+        an oversized font combined with bottom-anchored placement clipped
+        the bottom ~25-45% of every glyph against the canvas edge, and the
+        truncated cross-section still passed IoU >= 0.25.
+
+        This test checks `_min_band_correlation` instead: it divides the
+        same tight-cropped bitmaps into bands along each axis and compares
+        ink-density profiles. Truncation removes a contiguous chunk of the
+        glyph along one axis *before* the crop/rescale, which reshuffles
+        where remaining features land in the band layout — a signal IoU's
+        whole-image overlap can't see. Legitimate scale/padding variation
+        leaves both profiles essentially unchanged (both sides are already
+        tight-cropped), so it doesn't reintroduce the original IoU
+        false-negative. See benchmarks/README.md "truncation-detection fix"
+        for the empirical calibration.
+        """
+        out = tmp_path / "hello.stl"
+        text2stl("HELLO", "-o", str(out))
+
+        stl_img = _stl_cross_section_bitmap(out)
+        if stl_img is None:
+            pytest.fail("Could not rasterize cross-section — check mesh height")
+
+        ref_img = _text_reference_bitmap("HELLO")
+        arr_stl = np.array(stl_img) > 127
+        arr_ref = np.array(ref_img) > 127
+
+        min_corr = _min_band_correlation(arr_stl, arr_ref)
+
+        assert min_corr >= 0.3, (
+            f"Band-profile correlation {min_corr:.3f} < 0.3 — cross-section "
+            "looks truncated (missing a chunk of its vertical or horizontal "
+            "extent) even though it may still pass the IoU shape check. "
+            "Check for clipping against canvas/render boundaries — e.g. "
+            "font size too large relative to canvas combined with "
+            "edge-anchored text placement."
         )

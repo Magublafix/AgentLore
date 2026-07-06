@@ -10,6 +10,7 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: "6333"
       LORE_DB_PATH: /data/lore.db
+      LORE_ADMIN_TOKEN: "${LORE_ADMIN_TOKEN:-benchmark-reset-token}"
     volumes:
       - lore-data:/data
       - lore-model-cache:/app/.cache

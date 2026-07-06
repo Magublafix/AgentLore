@@ -43,9 +43,8 @@ import anthropic
 # ---------------------------------------------------------------------------
 
 MODEL = "claude-sonnet-4-6"
-MAX_TURNS = 40          # same budget for every run
-MAX_TURNS_CAPTURE = 15  # forced post-loop capture phase
-MAX_TURNS_WRAPUP  = 15  # wrapup/rating phase that runs after capture
+MAX_TURNS        = 40  # same budget for every run
+MAX_TURNS_WRAPUP = 30  # unified end-of-session wrapup (rate + capture)
 
 # Provider — set LORE_LLM_PROVIDER=local to use Ollama / any OpenAI-compatible server.
 # See samples/stlgen/README.md §"Running with a local LLM" for setup instructions.
@@ -58,7 +57,11 @@ LORE_API_URL   = os.environ.get("LORE_API_URL", "http://localhost:8765")
 LOCAL_MAX_TOKENS = 8192
 
 # Prepended to the system prompt for local models to encourage immediate tool use.
+# /no_think disables Qwen3.x thinking mode — prevents multi-minute <think> chains
+# on complex inputs (e.g. IoU test failures) that cause apparent hangs.
 LOCAL_SYSTEM_PREFIX = """\
+/no_think
+
 CRITICAL INSTRUCTIONS FOR THIS SESSION:
 - Before acting, write 1-3 short sentences of reasoning: what the last tool
   result actually told you, and what it implies you should do next. Use this
@@ -88,6 +91,12 @@ SAMPLES_DIR = Path(__file__).parent.parent
 RESULTS_DIR = SAMPLES_DIR / "results"
 TEST_FILE = SAMPLES_DIR / "tests" / "test_text2stl_cli.py"
 CONFTEST_FILE = SAMPLES_DIR / "tests" / "conftest.py"
+
+# Per-run workdirs are kept on disk for inspection until the whole benchmark
+# invocation finishes (see _cleanup_all_workdirs), rather than being deleted
+# right after each run — useful for manually checking generated code/output.
+_ALL_WORKDIRS: list[Path] = []
+_CURRENT_SESSION_ID: str | None = None  # set per-run so search calls carry X-Session-ID
 
 # ---------------------------------------------------------------------------
 # Skill loader
@@ -184,24 +193,7 @@ TASK_PROMPT_NO_LORE   = _TASK + (_CAPTURE_SUFFIX_LOCAL if PROVIDER == "local" el
 TASK_PROMPT_WITH_LORE = _TASK + (_SEARCH_SUFFIX_LOCAL  if PROVIDER == "local" else _SEARCH_SUFFIX)
 
 # Forced capture prompt — injected into the same conversation after the main loop
-FORCED_CAPTURE_PROMPT = """\
-The main coding phase is now complete (turn limit reached or task submitted).
-You have full context of what you just attempted above.
-
-Now extract domain knowledge from this session.
-Call `submit_concept` for every insight that would help a future agent with this task:
-  - Which Python libraries work (or don't) for 3D text geometry
-  - How to extract font glyph outlines and turn them into extrudable 2D polygons
-  - How to build a watertight (manifold) STL from character shapes
-  - Approaches that failed and why — capture these with `dont_use_when`
-  - Specific errors and what caused them
-  - Non-obvious pip / pyproject.toml steps for CLI entry points
-
-Focus only on domain knowledge (3D geometry, STL format, fonts, Python packaging).
-Do NOT submit concepts about the Lore system itself.
-
-Call `submit` when you have nothing more to add.
-"""
+WRAPUP_HISTORY_TURNS = 15  # coding session turns to include as wrapup context
 
 # ---------------------------------------------------------------------------
 # Tool definitions (identical signatures to lore/mcp/server.py)
@@ -323,21 +315,13 @@ TOOL_WEB_SEARCH = {
 
 TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
 TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
-TOOLS_CAPTURE   = [TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT]
-TOOLS_WRAPUP    = [TOOL_RATE_CONCEPT, TOOL_SUBMIT]
+TOOLS_WRAPUP    = [TOOL_READ_FILE, TOOL_RATE_CONCEPT, TOOL_SUBMIT_CONCEPT, TOOL_SUBMIT]
 
 # ---------------------------------------------------------------------------
 # System prompt builders
 # ---------------------------------------------------------------------------
 
 def build_system_no_lore() -> str:
-    if PROVIDER == "local":
-        return (
-            "You are an expert Python developer. Implement the CLI exactly as specified. "
-            "Use tools to write files and run shell commands. "
-            "Use web_search to look up library APIs and examples when you are unsure. "
-            "Use submit_concept(name, type, content, when_to_use, tags) to save domain patterns you discover."
-        )
     capture_skill = _load_skill("capture-concept")
     return (
         "You are an expert Python developer. Implement the CLI exactly as specified. "
@@ -351,14 +335,6 @@ def build_system_no_lore() -> str:
 
 
 def build_system_with_lore() -> str:
-    if PROVIDER == "local":
-        return (
-            "You are an expert Python developer. Implement the CLI exactly as specified. "
-            "Use tools to write files and run shell commands. "
-            "Search Lore before writing any code. "
-            "Use web_search to look up library APIs and examples when Lore doesn't have what you need. "
-            "Use submit_concept(name, type, content, when_to_use, tags) to save new domain patterns."
-        )
     search_skill  = _load_skill("search-concepts")
     capture_skill = _load_skill("capture-concept")
     return (
@@ -374,30 +350,21 @@ def build_system_with_lore() -> str:
 
 
 def build_system_wrapup() -> str:
-    if PROVIDER == "local":
-        return (
-            "You are a senior developer rating the concepts you used or captured during a coding session. "
-            "Use rate_concept(concept_id, outcome, hours_saved) to record your ratings. "
-            "Call submit when done."
-        )
-    wrapup_skill = _load_skill("wrapup")
+    wrapup_skill   = _load_skill("wrapup")
+    capture_skill  = _load_skill("capture-concept")
     return (
-        "You are a senior developer rating the concepts you used or captured during a coding session.\n\n"
+        "You are a senior developer closing out a coding session.\n\n"
         "---\n"
-        f"# Lore Skill: wrapup\n\n{wrapup_skill}\n"
+        f"# Lore Skill: wrapup\n\n{wrapup_skill}\n\n"
+        f"# Lore Skill: capture-concept\n\n{capture_skill}\n"
         "---\n\n"
-        "Follow the skill instructions to rate each concept and call submit when done."
+        "Follow the wrapup skill. When it says to invoke capture-concept, call submit_concept directly.\n"
+        "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts.\n"
+        "Call submit when you have finished rating and capturing."
     )
 
 
 def build_system_capture() -> str:
-    if PROVIDER == "local":
-        return (
-            "You are a senior developer reflecting on a just-completed coding attempt. "
-            "Extract and record what you learned. "
-            "Use submit_concept(name, type, content, when_to_use, tags) to save insights. "
-            "Call submit when done."
-        )
     capture_skill = _load_skill("capture-concept")
     return (
         "You are a senior developer reflecting on a just-completed coding attempt. "
@@ -412,14 +379,19 @@ def build_system_capture() -> str:
 # Lore API helpers
 # ---------------------------------------------------------------------------
 
-def _lore_api(method: str, path: str, **kwargs) -> dict:
+def _lore_api(method: str, path: str, session_id: str | None = None,
+              admin_token: str | None = None, **kwargs) -> dict:
     """Call the selfhosted Lore API and return parsed JSON. Raises on HTTP errors."""
     import urllib.request as _ur
     import urllib.error as _ue
     url = f"{LORE_API_URL}{path}"
     data = json.dumps(kwargs["json"]).encode() if "json" in kwargs else None
-    req = _ur.Request(url, data=data, method=method,
-                      headers={"Content-Type": "application/json"} if data else {})
+    headers = {"Content-Type": "application/json"} if data else {}
+    if session_id:
+        headers["X-Session-ID"] = session_id
+    if admin_token:
+        headers["X-Admin-Token"] = admin_token
+    req = _ur.Request(url, data=data, method=method, headers=headers)
     try:
         with _ur.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -444,7 +416,7 @@ def handle_search_concepts(inputs: dict) -> str:
         payload["type"] = inputs["type"]
     if inputs.get("language"):
         payload["language"] = inputs["language"]
-    result = _lore_api("POST", "/v1/concepts/search", json=payload)
+    result = _lore_api("POST", "/v1/concepts/search", session_id=_CURRENT_SESSION_ID, json=payload)
     if "error" not in result:
         _update_session(r["concept_id"] for r in result.get("results", []))
     return json.dumps(result)
@@ -573,15 +545,16 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
             return f"[error] permission denied writing {raw}: {e}"
         return f"Written {raw} ({len(inputs['content'])} chars)"
 
-    if name == "read_file" and workdir:
+    if name == "read_file":
         raw = inputs.get("path") or inputs.get("file_path") or inputs.get("filename")
         if not raw:
             return "[error] read_file requires a 'path' argument"
-        p = Path(raw)
-        if p.is_absolute():
-            return f"[error] absolute paths not allowed: {raw}. Use a relative path under the working directory."
-        path = workdir / raw
-        return path.read_text(encoding="utf-8") if path.exists() else f"[not found: {raw}]"
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            if not workdir:
+                return "[error] read_file: relative path requires a working directory"
+            p = workdir / raw
+        return p.read_text(encoding="utf-8") if p.exists() else f"[not found: {raw}]"
 
     if name == "submit":
         if workdir:
@@ -759,7 +732,7 @@ def _run_agent_anthropic(
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
     if PROVIDER == "local":
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=1200.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=300.0)
         model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
     else:
         client = anthropic.Anthropic()
@@ -918,34 +891,13 @@ def run_agent(
                                 stop_on_submit=stop_on_submit)
 
 
-def run_capture_phase(messages: list[dict], system: str, verbose: bool) -> tuple[int, int, int]:
-    """Continue the same conversation for concept extraction.
-
-    Keeps only the last CAPTURE_HISTORY_TURNS message pairs to avoid exceeding
-    the local model's context window (qwen2.5-coder:32b defaults to 32K tokens).
-    Returns (in_tokens, out_tokens, turns).
-    """
-    CAPTURE_HISTORY_TURNS = 15  # keep last N user/assistant pairs (~30 messages); 64K ctx fits this
-    tail = messages[-(CAPTURE_HISTORY_TURNS * 2):] if len(messages) > CAPTURE_HISTORY_TURNS * 2 else list(messages)
-    print(f"\n  [capture] concept extraction — up to {MAX_TURNS_CAPTURE} turns "
-          f"(using last {len(tail)} messages of {len(messages)} to stay within context window)...")
-    capture_messages = tail + [{"role": "user", "content": FORCED_CAPTURE_PROMPT}]
-    in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
-        system, TOOLS_CAPTURE, capture_messages,
-        workdir=None, max_turns=MAX_TURNS_CAPTURE, verbose=verbose, label="[capture] ",
-        stop_on_submit=True,
-    )
-    print(f"  [capture] done — {_count_concepts()} total concepts in DB "
-          f"({turns} turns, {in_tok + out_tok:,} tokens)")
-    return in_tok, out_tok, turns
 
 
-def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) -> tuple[int, int, int]:
-    """
-    Rate the concepts used during this run — mirrors the lore:wrapup skill.
+def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple[int, int, int]:
+    """Unified end-of-session wrapup: rate used concepts then capture new ones.
 
-    Reads session.json, resolves concept names, presents them to an agent that
-    calls rate_concept for each one, then clears the session file.
+    Mirrors the lore:wrapup skill — one agent call with full session context,
+    both rate_concept and submit_concept tools, ending with submit.
     Returns (input_tokens, output_tokens, turns_used).
     """
     try:
@@ -953,133 +905,31 @@ def run_wrapup_phase(run_num: int, verbose: bool, tests_passed: bool = False) ->
     except (json.JSONDecodeError, OSError):
         session_ids = []
 
-    if not session_ids:
-        print(f"  [wrapup] no concepts in session file — skipping.")
-        return 0, 0, 0
-
-    # Resolve concept names via API for a readable wrapup prompt.
-    concept_lines: list[str] = []
-    for cid in session_ids:
-        result = _lore_api("GET", f"/v1/concepts/{cid}")
-        if "concept_id" in result:
-            avg = result.get("avg_rating") or 0.0
-            concept_lines.append(
-                f"  - [{result['type']}] {result['name']}  (current avg_rating: {avg:.1f})  id={cid}"
-            )
-        else:
-            concept_lines.append(f"  - (unresolved)  id={cid}")
-
-    concept_list = "\n".join(concept_lines)
-
     wrapup_system = build_system_wrapup()
     if PROVIDER == "local":
         wrapup_system = LOCAL_SYSTEM_PREFIX + wrapup_system
 
-    if PROVIDER == "local":
-        # One focused API call per concept — avoids stalling in a shared session.
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=1200.0)
-        global _TOOLS_REGISTRY_NAMES
-        _TOOLS_REGISTRY_NAMES = {t["name"] for t in TOOLS_WRAPUP}
+    # Inject the tail of the coding session so the agent has recollection context.
+    tail = messages[-(WRAPUP_HISTORY_TURNS * 2):] if len(messages) > WRAPUP_HISTORY_TURNS * 2 else list(messages)
 
-        print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — one call per concept...", flush=True)
-        total_in = total_out = total_turns = 0
+    wrapup_prompt = "The coding session above is now complete. Follow the wrapup skill from step 1."
 
-        for i, cid in enumerate(session_ids):
-            line = concept_lines[i].strip() if i < len(concept_lines) else f"id={cid}"
-            outcome_ctx = (
-                "The task PASSED all tests this run."
-                if tests_passed else
-                "The task FAILED this run — tests did not pass."
-            )
-            single_prompt = (
-                f"Rate this concept using rate_concept.\n\n"
-                f"Concept: {line}\n\n"
-                f"Run outcome: {outcome_ctx}\n\n"
-                f"Follow the rating guidance in your instructions."
-            )
-            wrapup_msgs: list[dict] = [{"role": "user", "content": single_prompt}]
-            rated = False
+    wrapup_messages = tail + [{"role": "user", "content": wrapup_prompt}]
 
-            for attempt in range(5):
-                try:
-                    response = client.messages.create(
-                        model=LOCAL_MODEL,
-                        max_tokens=LOCAL_MAX_TOKENS,
-                        system=wrapup_system,
-                        tools=TOOLS_WRAPUP,
-                        messages=wrapup_msgs,
-                    )
-                except Exception as exc:
-                    print(f"  [wrapup] concept {i+1} API error: {exc}", flush=True)
-                    break
+    label = "[wrapup] "
+    n_concepts = len(session_ids)
+    print(f"\n  [wrapup] {n_concepts} concept(s) to rate — up to {MAX_TURNS_WRAPUP} turns "
+          f"(session context: last {len(tail)} messages)...", flush=True)
 
-                total_in  += response.usage.input_tokens
-                total_out += response.usage.output_tokens
-                total_turns += 1
-
-                content_blocks: list[dict] = []
-                for b in response.content:
-                    if b.type == "tool_use":
-                        content_blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
-                    elif b.type == "text":
-                        content_blocks.append({"type": "text", "text": b.text})
-
-                # Text promotion for local models
-                if not any(b.get("type") == "tool_use" for b in content_blocks):
-                    promoted = _parse_tool_from_text_blocks(content_blocks)
-                    if promoted:
-                        print(f"  [wrapup] [promoted text tool call: {promoted['name']}]", flush=True)
-                        content_blocks = [promoted]
-
-                tool_blocks = [b for b in content_blocks if b.get("type") == "tool_use"]
-                if not tool_blocks:
-                    print(f"  [wrapup] concept {i+1} no tool call (attempt {attempt+1}) — retrying", flush=True)
-                    wrapup_msgs.append({"role": "assistant", "content": content_blocks})
-                    wrapup_msgs.append({"role": "user", "content": f"Call rate_concept for concept id={cid}."})
-                    continue
-
-                for block in tool_blocks:
-                    if verbose:
-                        print(f"    → {block['name']}({json.dumps(block.get('input',{}))[:100]})", flush=True)
-                    result = handle_tool(block["name"], block.get("input", {}), workdir=None)
-                    if verbose:
-                        print(f"    ← {str(result)[:120].replace(chr(10), ' ')}", flush=True)
-                    if block["name"] == "rate_concept":
-                        rated = True
-                break
-
-            if not rated:
-                print(f"  [wrapup] concept {i+1} ({cid}) — skipped after 5 attempts", flush=True)
-
-        SESSION_FILE.write_text("[]")
-        print(f"  [wrapup] done ({total_turns} turns, {total_in + total_out:,} tokens) — session cleared.", flush=True)
-        return total_in, total_out, total_turns
-
-    # Cloud / unified path: single session rates all concepts, ends with submit
-    wrapup_prompt = (
-        f"You have just completed Run {run_num} of the text2stl benchmark. "
-        f"The following concepts were used or captured during this run:\n\n"
-        f"{concept_list}\n\n"
-        "Rate each concept using rate_concept. "
-        "Follow the rating guidance in your instructions. "
-        "Add hours_saved if you can honestly estimate it. "
-        "Call `submit` when all concepts have been rated."
+    in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
+        wrapup_system, TOOLS_WRAPUP, wrapup_messages,
+        workdir=None, max_turns=MAX_TURNS_WRAPUP, verbose=verbose,
+        label=label, stop_on_submit=True,
     )
 
-    print(f"\n  [wrapup] rating {len(session_ids)} concept(s) — up to {MAX_TURNS_WRAPUP} turns...", flush=True)
-    in_tok, out_tok, turns, _, _messages = run_agent(
-        system=wrapup_system,
-        tools=TOOLS_WRAPUP,
-        first_message=wrapup_prompt,
-        workdir=None,
-        max_turns=MAX_TURNS_WRAPUP,
-        verbose=verbose,
-        stop_on_submit=True,
-    )
-
-    # Clear session file — same final step as the real wrapup skill
     SESSION_FILE.write_text("[]")
-    print(f"  [wrapup] done ({turns} turns, {in_tok + out_tok:,} tokens) — session cleared.", flush=True)
+    print(f"  [wrapup] done — {_count_concepts()} total concepts in DB "
+          f"({turns} turns, {in_tok + out_tok:,} tokens) — session cleared.", flush=True)
     return in_tok, out_tok, turns
 
 # ---------------------------------------------------------------------------
@@ -1107,6 +957,7 @@ def step_run(
     dry_run: bool,
     max_turns: int = MAX_TURNS,
     output_dir: Path | None = None,
+    series_num: int = 1,
 ) -> dict | None:
     """Execute a single benchmark run.
 
@@ -1132,6 +983,9 @@ def step_run(
         print("[dry-run] skipping.")
         return None
 
+    global _CURRENT_SESSION_ID
+    _CURRENT_SESSION_ID = f"benchmark-s{series_num}-r{run_num}"
+
     SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.write_text("[]")
     concepts_before = concepts_in_db
@@ -1143,56 +997,54 @@ def step_run(
     task_prompt = TASK_PROMPT_WITH_LORE if lore_active else TASK_PROMPT_NO_LORE
 
     workdir = Path(tempfile.mkdtemp(prefix=f"lore_stlgen_run{run_num}_"))
+    _ALL_WORKDIRS.append(workdir)
     print(f"Working dir: {workdir}")
-    try:
-        (workdir / "tests").mkdir(exist_ok=True)
-        shutil.copy(TEST_FILE,    workdir / "tests" / "test_text2stl_cli.py")
-        shutil.copy(CONFTEST_FILE, workdir / "tests" / "conftest.py")
+    (workdir / "tests").mkdir(exist_ok=True)
+    shutil.copy(TEST_FILE,    workdir / "tests" / "test_text2stl_cli.py")
+    shutil.copy(CONFTEST_FILE, workdir / "tests" / "conftest.py")
 
-        start = datetime.now()
-        in_tok, out_tok, turns, submitted, messages = run_agent(
-            system, tools, task_prompt, workdir, max_turns, verbose,
-            stop_on_submit=True,
-        )
-        elapsed = (datetime.now() - start).total_seconds()
+    start = datetime.now()
+    in_tok, out_tok, turns, submitted, messages = run_agent(
+        system, tools, task_prompt, workdir, max_turns, verbose,
+        stop_on_submit=True,
+    )
+    elapsed = (datetime.now() - start).total_seconds()
 
-        # All runs capture concepts, including Run 1 — Lore should bootstrap from
-        # nothing rather than rely on a hand-authored seed.
-        c_in, c_out, c_turns = run_capture_phase(messages, system, verbose)
-        in_tok  += c_in
-        out_tok += c_out
+    print(f"\nMain loop {'✓ submitted' if submitted else '✗ hit limit'}. Running tests...")
+    passed, test_out = run_tests(workdir)
 
-        print(f"\nMain loop {'✓ submitted' if submitted else '✗ hit limit'}. Running tests...")
-        passed, test_out = run_tests(workdir)
+    # Unified wrapup: rate used concepts and capture new ones in one call with session context.
+    w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose, messages)
+    in_tok  += w_in
+    out_tok += w_out
 
-        concepts_captured = _count_concepts() - concepts_before
+    concepts_captured = _count_concepts() - concepts_before
 
-        # Wrapup: rate all concepts used this run, then clear session file
-        w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose, tests_passed=passed)
-        in_tok  += w_in
-        out_tok += w_out
+    result = {
+        "run": run_num,
+        "lore_active": lore_active,
+        "concepts_available": concepts_in_db,
+        "concepts_captured": concepts_captured,
+        "turn_budget": max_turns,
+        "turns_main": turns,
+        "turns_wrapup": w_turns,
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
+        "total_tokens": in_tok + out_tok,
+        "elapsed": elapsed,
+        "task_submitted": submitted,
+        "tests_passed": passed,
+    }
+    _write_run_md(result, test_out, output_dir=output_dir)
+    _print_summary(result)
+    return result
 
-        result = {
-            "run": run_num,
-            "lore_active": lore_active,
-            "concepts_available": concepts_in_db,
-            "concepts_captured": concepts_captured,
-            "turn_budget": max_turns,
-            "turns_main": turns,
-            "turns_capture": c_turns,
-            "turns_wrapup": w_turns,
-            "input_tokens": in_tok,
-            "output_tokens": out_tok,
-            "total_tokens": in_tok + out_tok,
-            "elapsed": elapsed,
-            "task_submitted": submitted,
-            "tests_passed": passed,
-        }
-        _write_run_md(result, test_out, output_dir=output_dir)
-        _print_summary(result)
-        return result
-    finally:
+
+def _cleanup_all_workdirs() -> None:
+    """Remove every per-run temp workdir accumulated so far in this invocation."""
+    for workdir in _ALL_WORKDIRS:
         shutil.rmtree(workdir, ignore_errors=True)
+    _ALL_WORKDIRS.clear()
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -1205,7 +1057,8 @@ def _count_concepts() -> int:
 
 def _clear_db() -> None:
     """Drop all concepts, ratings, and Qdrant vectors via the selfhosted API."""
-    result = _lore_api("DELETE", "/v1/admin/reset")
+    result = _lore_api("DELETE", "/v1/admin/reset",
+                       admin_token=os.environ.get("LORE_ADMIN_TOKEN", ""))
     if SESSION_FILE.exists():
         SESSION_FILE.write_text("[]")
     deleted = result.get("concepts_deleted", "?")
@@ -1277,7 +1130,6 @@ def _write_run_md(r: dict, test_out: str, output_dir: Path | None = None) -> Non
         f"| Web search active | yes |\n"
         f"| Turn budget | {r['turn_budget']} |\n"
         f"| Turns (main loop) | {r['turns_main']} |\n"
-        f"| Turns (capture) | {r['turns_capture']} |\n"
         f"| Turns (wrapup) | {r['turns_wrapup']} |\n"
         f"| Task submitted | {'yes' if r['task_submitted'] else 'no (hit limit)'} |\n"
         f"| Input tokens | {r['input_tokens']:,} |\n"
@@ -1391,7 +1243,6 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
                 "concepts_captured": r["concepts_captured"],
                 "turn_budget": r["turn_budget"],
                 "turns_main": r["turns_main"],
-                "turns_capture": r["turns_capture"],
                 "turns_wrapup": r["turns_wrapup"],
                 "input_tokens": r["input_tokens"],
                 "output_tokens": r["output_tokens"],
@@ -1513,13 +1364,20 @@ def main() -> None:
 
             series_results: list[dict] = []
             for run_num in range(1, 11):
-                res = step_run(
-                    run_num,
-                    args.verbose,
-                    args.dry_run,
-                    max_turns=args.max_turns,
-                    output_dir=series_dir,
-                )
+                try:
+                    res = step_run(
+                        run_num,
+                        args.verbose,
+                        args.dry_run,
+                        max_turns=args.max_turns,
+                        output_dir=series_dir,
+                        series_num=series_num,
+                    )
+                except Exception as _run_exc:
+                    import traceback as _tb
+                    print(f"\n[FATAL] S{series_num}R{run_num} crashed: {_run_exc}", flush=True)
+                    print(_tb.format_exc(), flush=True)
+                    res = None
                 if res:
                     series_results.append(res)
 
@@ -1529,10 +1387,15 @@ def main() -> None:
             if series_results and not args.dry_run:
                 _write_aggregate_json(series_num, series_results, args.max_turns)
 
+            passes = sum(1 for r in series_results if r.get("tests_passed"))
+            print(f"\n@@SERIES_COMPLETE@@:{series_num}/{n_series}:passes={passes}/{len(series_results)}", flush=True)
+
             all_series_results.append(series_results)
 
         if not args.dry_run:
             _print_series_summary(all_series_results)
+
+        _cleanup_all_workdirs()
 
     else:
         # Single-series mode (--all or --run): unchanged behaviour.
@@ -1546,6 +1409,8 @@ def main() -> None:
 
         if len(results) >= 2:
             _write_comparison(results)
+
+        _cleanup_all_workdirs()
 
 
 if __name__ == "__main__":

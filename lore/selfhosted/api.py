@@ -413,10 +413,17 @@ def _register_routes(app: FastAPI) -> None:
         """Wipe all concepts and ratings from SQLite and delete the Qdrant collection.
 
         Intended for benchmark resets only — destructive and irreversible.
+        Requires the ``X-Admin-Token`` header to match the ``LORE_ADMIN_TOKEN``
+        environment variable.  If that variable is unset the endpoint is disabled.
 
         Returns:
             JSON with ``concepts_deleted`` and ``ratings_deleted`` counts.
         """
+        _admin_token = os.environ.get("LORE_ADMIN_TOKEN", "")
+        if not _admin_token or request.headers.get("X-Admin-Token") != _admin_token:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Admin token required")
+
         conn: sqlite3.Connection = request.app.state.db
         qdrant_client: QdrantClient = request.app.state.qdrant
 

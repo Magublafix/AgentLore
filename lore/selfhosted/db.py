@@ -428,4 +428,8 @@ def log_session_usage(
         "INSERT INTO session_usage (session_id, concept_id, used_at) VALUES (?, ?, ?)",
         (session_id, concept_id, _utcnow()),
     )
+    conn.execute(
+        "UPDATE concepts SET usage_count = usage_count + 1 WHERE concept_id = ?",
+        (concept_id,),
+    )
     conn.commit()
