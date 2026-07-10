@@ -1,5 +1,8 @@
 # Lore
 
+[![CI](https://github.com/Magublafix/AgentLore/actions/workflows/test.yml/badge.svg)](https://github.com/Magublafix/AgentLore/actions/workflows/test.yml)
+[![Renovate](https://img.shields.io/badge/renovate-enabled-brightgreen?logo=renovatebot)](https://renovateapp.com)
+
 **A typed, linked knowledge graph for AI coding agents.**
 
 Lore lets Claude Code agents search for reusable patterns, capture new ones, and rate what actually helped — so every agent session builds on the work of the last.

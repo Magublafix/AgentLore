@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+
+  // Weekly cadence: run once before 6 AM Monday, UTC.
+  // This avoids daily PR noise while still keeping dependencies reasonably fresh.
+  "schedule": ["before 6am on Monday"],
+
+  // Cap concurrent open PRs so the first Renovate run (which may open many)
+  // doesn't flood the PR queue.
+  "prConcurrentLimit": 5,
+
+  // Explicitly enable the managers that cover this repo's dependency surface:
+  //   pep621        — pyproject.toml [project.dependencies] / [project.optional-dependencies]
+  //   dockerfile    — FROM lines in any Dockerfile
+  //   github-actions — uses: <action>@<ref> pins in .github/workflows/
+  "enabledManagers": ["pep621", "dockerfile", "github-actions"],
+
+  "packageRules": [
+    // --- Group all patch-level bumps into a single weekly PR ---
+    // Patch updates are low-risk; batching them reduces PR overhead significantly.
+    {
+      "matchUpdateTypes": ["patch"],
+      "groupName": "patch updates",
+      "schedule": ["before 6am on Monday"]
+    },
+
+    // --- Minor Python dependency updates: one PR per package ---
+    // Minor bumps occasionally introduce breaking changes in pre-1.0 packages
+    // (fastmcp, sentence-transformers), so keep them individual for easier bisect.
+    {
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor"],
+      "schedule": ["before 6am on Monday"]
+    },
+
+    // --- Docker base image: pin digest on major/minor, allow patch grouping ---
+    // python:3.11-slim patch releases (security fixes) are safe to batch;
+    // any major/minor change to the base image warrants its own PR.
+    {
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["major", "minor"],
+      "groupName": "docker base image major/minor"
+    },
+
+    // --- GitHub Actions: group all action version bumps together ---
+    // Action pins are low-risk and typically just SHA or tag updates.
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions updates",
+      "schedule": ["before 6am on Monday"]
+    }
+  ]
+}
