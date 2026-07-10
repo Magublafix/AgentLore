@@ -18,6 +18,22 @@ jobs:
 
     steps:
       # -----------------------------------------------------------------------
+      # 0. Free disk space — ubuntu-latest has ~14 GB free by default.
+      #    PyTorch + sentence-transformers layers fill the disk mid-build.
+      #    Removing Android SDK, .NET, and large pre-installed tool sets
+      #    recovers ~20 GB before BuildKit starts pulling layers.
+      # -----------------------------------------------------------------------
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/lib/jvm
+          sudo rm -rf /usr/share/swift
+          df -h
+
+      # -----------------------------------------------------------------------
       # 1. Checkout — full repo needed because the Dockerfile copies both
       #    pyproject.toml and lore/ from the repo root as the build context.
       # -----------------------------------------------------------------------
