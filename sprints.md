@@ -91,13 +91,13 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 4 — 2026-07-09 → 2026-07-16
 **Goal:** Document and explain the multi-series stlgen benchmark — aggregate results from 10 series × 10 runs, produce a benchmark README with methodology, findings, and conclusions.
-**Status:** planned
+**Status:** in-progress
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-026 | Aggregate and analyze multi-series benchmark results | general-purpose | planned | — |
-| LORE-027 | Write benchmark README with methodology and findings | general-purpose | planned | — |
+| LORE-026 | Aggregate and analyze multi-series benchmark results | general-purpose | done | 73,680 |
+| LORE-027 | Write benchmark README with methodology and findings | general-purpose | in-progress | — |
 
 ### Notes
 - LORE-026 first — analysis informs the README narrative.
