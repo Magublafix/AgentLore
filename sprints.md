@@ -107,14 +107,14 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 5 — 2026-07-17 → 2026-07-28
 **Goal:** Wire up CI/CD — automated test runs, Docker image builds, and Renovate dependency updates — before beginning Phase 2 feature work.
-**Status:** in-progress
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-023 | GitHub Actions — CI test pipeline | devops-docker-engineer | in-progress | — |
-| LORE-024 | GitHub Actions — Docker image build and push | devops-docker-engineer | in-progress | — |
-| LORE-025 | Renovate — automated dependency updates | devops-docker-engineer | in-progress | — |
+| LORE-023 | GitHub Actions — CI test pipeline | devops-docker-engineer | done | 35,488 |
+| LORE-024 | GitHub Actions — Docker image build and push | devops-docker-engineer | done | 29,142 |
+| LORE-025 | Renovate — automated dependency updates | devops-docker-engineer | done | 32,431 |
 
 ### Notes
 - LORE-023 (tests) should land first; LORE-024 (Docker build) can follow independently.

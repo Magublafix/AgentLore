@@ -283,3 +283,45 @@ Feature format:
 **What changed:** `samples/stlgen/BENCHMARK.md` — standalone benchmark document covering task description, methodology, series-level results, learning curve, concept-bucket analysis, outlier explanation (S4/S10), conclusions, and known limitations.
 
 **Implementation notes:** Links to `results/aggregate.md` for raw tables. No invented numbers — all statistics sourced from aggregate.md. Includes explicit note on cross-series isolation design rationale and seed-concept exclusion rationale.
+
+---
+
+## [LORE-023] GitHub Actions — CI test pipeline
+
+**Sprint:** 5   **Shipped:** 2026-07-10   **Phase:** Infrastructure   **Tokens:** 35,488
+
+**As a** Lore developer
+**I want to be able to** have tests run automatically on every push and pull request
+**So that** regressions are caught before merging and the main branch stays green
+
+**What changed:** `.github/workflows/test.yml` — runs `pytest lore/tests/ --cov=lore --cov-fail-under=80` on push/PR to main. CI badge added to `README.md`.
+
+**Implementation notes:** Caches both `~/.venv` (pip install) and `~/.cache/huggingface` (all-MiniLM-L6-v2, ~90 MB) keyed on `pyproject.toml` hash. Sets `TRANSFORMERS_OFFLINE=1` when the HF cache is warm to block outbound hub requests during test runs.
+
+---
+
+## [LORE-024] GitHub Actions — Docker image build and push
+
+**Sprint:** 5   **Shipped:** 2026-07-10   **Phase:** Infrastructure   **Tokens:** 29,142
+
+**As a** Lore developer
+**I want to be able to** have the selfhosted Docker image built and pushed to a registry automatically on every merge to main
+**So that** a fresh image is always available without manual `docker build` steps
+
+**What changed:** `.github/workflows/docker.yml` — builds `lore/selfhosted/Dockerfile` and pushes to `ghcr.io/magublafix/lore-selfhosted` on push to main. Tagged `latest` + short SHA.
+
+**Implementation notes:** Build context is repo root (Dockerfile references `pyproject.toml` and `lore/` at root level). Uses `type=gha,mode=max` BuildKit cache to preserve the builder-stage PyTorch/sentence-transformers layers (~1–2 GB) across runs. `packages: write` permission set explicitly in workflow.
+
+---
+
+## [LORE-025] Renovate — automated dependency updates
+
+**Sprint:** 5   **Shipped:** 2026-07-10   **Phase:** Infrastructure   **Tokens:** 32,431
+
+**As a** Lore developer
+**I want to be able to** receive automated pull requests when Python or Docker dependencies have updates available
+**So that** the project stays current without manual dependency audits
+
+**What changed:** `renovate.json` at repo root. Renovate badge added to `README.md`.
+
+**Implementation notes:** Extends `config:recommended`. Managers: `pep621` (pyproject.toml), `dockerfile`, `github-actions`. Weekly schedule (Monday before 6am UTC). Patch updates batched into one PR; Python minor updates stay individual (pre-1.0 packages like fastmcp and sentence-transformers can break on minor); Docker major/minor get their own PR; Actions updates grouped separately.
