@@ -11,7 +11,7 @@
 # switch to TRANSFORMERS_OFFLINE=1 automatically.
 # ---------------------------------------------------------------------------
 
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -46,7 +46,7 @@ RUN pip install --no-cache-dir --no-deps .
 # ---------------------------------------------------------------------------
 # Runtime stage — minimal, non-root
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # HF cache path is fixed so the entrypoint sentinel check is reliable.
 # TRANSFORMERS_OFFLINE is NOT set here — entrypoint.sh sets it after the
