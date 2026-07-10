@@ -6,7 +6,7 @@
 
   // Weekly cadence: run once before 6 AM Monday, UTC.
   // This avoids daily PR noise while still keeping dependencies reasonably fresh.
-  "schedule": ["before 6am on Monday"],
+  "schedule": ["before 6am"],
 
   // Cap concurrent open PRs so the first Renovate run (which may open many)
   // doesn't flood the PR queue.
@@ -24,7 +24,7 @@
     {
       "matchUpdateTypes": ["patch"],
       "groupName": "patch updates",
-      "schedule": ["before 6am on Monday"]
+      "schedule": ["before 6am"]
     },
 
     // --- Minor Python dependency updates: one PR per package ---
@@ -33,7 +33,7 @@
     {
       "matchManagers": ["pep621"],
       "matchUpdateTypes": ["minor"],
-      "schedule": ["before 6am on Monday"]
+      "schedule": ["before 6am"]
     },
 
     // --- Docker base image: pin digest on major/minor, allow patch grouping ---
@@ -50,7 +50,7 @@
     {
       "matchManagers": ["github-actions"],
       "groupName": "github-actions updates",
-      "schedule": ["before 6am on Monday"]
+      "schedule": ["before 6am"]
     }
   ]
 }
