@@ -95,16 +95,16 @@ The curve then oscillates between 50% and 80% rather than continuing to climb mo
 
 A more direct measure of knowledge accumulation: the **concept-bucket analysis** groups all 100 runs by how many concepts were available at run start and computes the pass rate for each bucket.
 
-| Concepts Available | Pass Rate | N runs |
-|-------------------|-----------|--------|
-| 0–4               | 34.6%     | 26     |
-| 5–9               | 50.0%     | 16     |
-| 10–14             | 63.6%     | 11     |
-| 15–19             | 61.5%     | 13     |
-| 20–24             | 78.6%     | 14     |
-| 25–29             | 50.0%     | 10     |
-| 30–34             | 66.7%     | 6      |
-| 35+               | 75.0%     | 4      |
+| Concepts Available | Pass Rate | Mean Tokens | N runs |
+|-------------------|-----------|-------------|--------|
+| 0–4               | 34.6%     | 45,181      | 26     |
+| 5–9               | 50.0%     | 40,948      | 16     |
+| 10–14             | 63.6%     | 43,791      | 11     |
+| 15–19             | 61.5%     | 49,811      | 13     |
+| 20–24             | 78.6%     | 33,856      | 14     |
+| 25–29             | 50.0%     | 47,323      | 10     |
+| 30–34             | 66.7%     | 38,148      | 6      |
+| 35+               | 75.0%     | 42,402      | 4      |
 
 The trend from 0–4 concepts (34.6%) up to 20–24 concepts (78.6%) is clear: more accumulated knowledge correlates with higher success rates. The 25–29 bucket drops back to 50%, but this is largely a S10 artifact — that series accumulated a large concept database while failing persistently, so many of its late runs land in the higher buckets and pull the rate down. See the Outlier Series section below.
 
