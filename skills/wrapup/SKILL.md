@@ -16,13 +16,13 @@ Do not invoke mid-session — it clears the session file as its final step.
 
 ### 1. Identify session concepts (Group A)
 
-**If the session conversation is visible in your context** (benchmark runs, remote sessions with history): scan the visible turns for any `search_concepts` results or `submit_concept` calls — those concept IDs are your Group A list. Skip to step 4.
+**If the session conversation is visible in your context** (benchmark runs, remote sessions with history): scan the visible turns for any `search_concepts` results or `submit_concept` calls — those concept IDs are your Group A list.
 
-**If you are starting cold** (Stop hook, no session history visible): read `~/.lore/session.json`. Parse the array of concept IDs — these are your Group A list. If the file is missing, unreadable, or contains `[]`, Group A is empty. Continue to step 4 regardless — there may still be insights to capture.
+**If you are starting cold** (Stop hook, no session history visible): read `~/.lore/session.json`. Parse the array of concept IDs — these are your Group A list. If the file is missing, unreadable, or contains `[]`, Group A is empty.
 
-There is no early exit. An empty Group A just means skip Group A rating in step 5; it does not mean the wrapup is done.
+There is no early exit. An empty Group A just means skip Group A rating in step 3; it does not mean the wrapup is done. **Always proceed to step 2.**
 
-### 4. Reflection gate — capture new insights (agent-autonomous)
+### 2. Reflection gate — capture new insights (agent-autonomous)
 
 Do not ask the user. Work through these steps before rating anything:
 
@@ -41,7 +41,7 @@ For each area from 4a, ask: does it meet at least one of these?
 **4c. Capture qualifying areas.**
 For each area that qualifies, invoke `/lore:capture-concept`. Let that skill handle generalization and submission. Record the `concept_id` returned by each `submit_concept` call — you will rate these in the next step. If nothing qualifies, move on silently.
 
-### 5. Rate all concepts (agent-autonomous)
+### 3. Rate all concepts (agent-autonomous)
 
 Rate every concept in two groups:
 
@@ -54,7 +54,7 @@ These were retrieved from Lore and used during the session. Rate each on how use
 
 **Use run outcome as a signal, not a ceiling.** If the task failed, scrutinize whether this concept contributed to the failing approach. If it did, rate it 1. If the task succeeded but this concept was irrelevant, rate it 1 anyway.
 
-**Group B — concepts captured in step 4.**
+**Group B — concepts captured in step 2.**
 These are new insights you just submitted. Rate each on expected future value, not session usage:
 - Clear, generalisable principle with high reuse potential → `outcome` 4–5
 - Useful but narrow or situational → `outcome` 3
@@ -74,13 +74,13 @@ rate_concept(
 
 If `rate_concept` fails for a given concept (backend unreachable), note the failure silently and continue. Do not abort the loop.
 
-### 6. Clear the session file
+### 4. Clear the session file
 
 Only applies to the cold-start path (you read `~/.lore/session.json` in step 1). Write `[]` back to the file after all `rate_concept` calls have been attempted. Do not clear it early.
 
 If the session history was visible in your context (step 1 context path), the benchmark harness clears the file — skip this step.
 
-### 7. Confirm completion
+### 5. Confirm completion
 
 Tell the user:
 

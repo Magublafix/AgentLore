@@ -358,9 +358,12 @@ def build_system_wrapup() -> str:
         f"# Lore Skill: wrapup\n\n{wrapup_skill}\n\n"
         f"# Lore Skill: capture-concept\n\n{capture_skill}\n"
         "---\n\n"
-        "Follow the wrapup skill. When it says to invoke capture-concept, call submit_concept directly.\n"
+        "Follow the wrapup skill steps in order. Step 2 (reflection gate) is MANDATORY — "
+        "you must enumerate 3-6 implementation areas and evaluate each before calling submit, "
+        "even if Group A is empty. Do not call submit until step 2 is complete.\n"
+        "When the skill says to invoke capture-concept, call submit_concept directly.\n"
         "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts.\n"
-        "Call submit when you have finished rating and capturing."
+        "Call submit only after completing steps 2 and 3."
     )
 
 
@@ -450,6 +453,13 @@ def handle_submit_concept(inputs: dict) -> str:
     elif result.get("error") == "semantic_duplicate" and "existing_concept_id" in result:
         # Dedup: track the existing concept so wrapup can rate it.
         _update_session([result["existing_concept_id"]])
+        # Reframe as success so the model doesn't retry — "error" label causes a loop.
+        result = {
+            "status": "already_exists",
+            "concept_id": result["existing_concept_id"],
+            "similarity": result.get("similarity"),
+            "message": "Concept already in Lore. Do not retry — proceed to the next concept or call submit to finish.",
+        }
     return json.dumps(result)
 
 
@@ -732,7 +742,7 @@ def _run_agent_anthropic(
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
     if PROVIDER == "local":
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=300.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=600.0)
         model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
     else:
         client = anthropic.Anthropic()
