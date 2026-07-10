@@ -2,21 +2,20 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-29 03:14 |
+| Date | 2026-07-07 16:58 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (23 concepts) |
+| Lore search active | yes (28 concepts) |
 | Web search active | yes |
-| Turn budget | 36 |
-| Turns (main loop) | 36 |
-| Turns (capture) | 2 |
-| Turns (wrapup) | 11 |
-| Task submitted | no (hit limit) |
-| Input tokens | 55,770 |
-| Output tokens | 18,891 |
-| Total tokens | 74,661 |
-| Concepts captured this run | 7 |
-| Elapsed | 1586.3s |
-| Tests passed | ❌ no |
+| Turn budget | 40 |
+| Turns (main loop) | 30 |
+| Turns (wrapup) | 14 |
+| Task submitted | yes |
+| Input tokens | 23,882 |
+| Output tokens | 8,514 |
+| Total tokens | 32,396 |
+| Concepts captured this run | 3 |
+| Elapsed | 823.1s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
@@ -24,44 +23,36 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
 cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run7_wkd_jcaa
-configfile: pyproject.toml
+rootdir: /tmp/lore_stlgen_run7_a2cxb7nj
 plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 timeout: 60.0s
 timeout method: signal
 timeout func_only: False
-collecting ... collected 13 items
+collecting ... collected 14 items
 
 tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
-tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 15%]
-tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 23%]
-tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 30%]
-tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 38%]
-tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 46%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 53%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight FAILED [ 61%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 69%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 76%]
-tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 84%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [100%]
+tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 14%]
+tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 21%]
+tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 28%]
+tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 35%]
+tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 42%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 50%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 57%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
+tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated PASSED [100%]
 
-=================================== FAILURES ===================================
-___________________ TestSTLValidity.test_mesh_is_watertight ____________________
-tests/test_text2stl_cli.py:170: in test_mesh_is_watertight
-    assert mesh.is_watertight, (
-E   AssertionError: Mesh is not water-tight — not 3D printable. Ensure the mesh is a closed manifold with no open edges.
-E   assert False
-E    +  where False = <trimesh.Trimesh(vertices.shape=(104, 3), faces.shape=(220, 3))>.is_watertight
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run7_wkd_jcaa/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+  /tmp/lore_stlgen_run7_a2cxb7nj/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight
-=================== 1 failed, 12 passed, 1 warning in 17.91s ===================
+================== 14 passed, 2 warnings in 82.02s (0:01:22) ===================
 
 ```

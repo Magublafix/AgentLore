@@ -2,58 +2,58 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-30 07:29 |
+| Date | 2026-07-08 18:01 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (26 concepts) |
+| Lore search active | yes (22 concepts) |
 | Web search active | yes |
-| Turn budget | 36 |
-| Turns (main loop) | 36 |
-| Turns (capture) | 5 |
-| Turns (wrapup) | 3 |
-| Task submitted | no (hit limit) |
-| Input tokens | 34,894 |
-| Output tokens | 11,729 |
-| Total tokens | 46,623 |
-| Concepts captured this run | 3 |
-| Elapsed | 1001.6s |
-| Tests passed | ❌ no |
+| Turn budget | 40 |
+| Turns (main loop) | 13 |
+| Turns (wrapup) | 7 |
+| Task submitted | yes |
+| Input tokens | 24,299 |
+| Output tokens | 4,815 |
+| Total tokens | 29,114 |
+| Concepts captured this run | 1 |
+| Elapsed | 398.9s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
 ```
-v/bin/python: No module named text2stl\n').returncode
-_____________________________ test_stl_water_tight _____________________________
-tests/test_text2stl_cli.py:117: in test_stl_water_tight
-    assert result.returncode == 0
-E   AssertionError: assert 1 == 0
-E    +  where 1 = CompletedProcess(args=['/home/magublafix/AI/AgentLore/.venv/bin/python', '-m', 'text2stl', 'Hi', '-o', 'test_manifold.stl'], returncode=1, stdout='', stderr='/home/magublafix/AI/AgentLore/.venv/bin/python: No module named text2stl\n').returncode
-___________________________ test_stl_normals_outward ___________________________
-tests/test_text2stl_cli.py:136: in test_stl_normals_outward
-    assert result.returncode == 0
-E   AssertionError: assert 1 == 0
-E    +  where 1 = CompletedProcess(args=['/home/magublafix/AI/AgentLore/.venv/bin/python', '-m', 'text2stl', 'X', '-o', 'test_normals.stl'], returncode=1, stdout='', stderr='/home/magublafix/AI/AgentLore/.venv/bin/python: No module named text2stl\n').returncode
-___________________________ test_stl_positive_volume ___________________________
-tests/test_text2stl_cli.py:155: in test_stl_positive_volume
-    assert result.returncode == 0
-E   AssertionError: assert 1 == 0
-E    +  where 1 = CompletedProcess(args=['/home/magublafix/AI/AgentLore/.venv/bin/python', '-m', 'text2stl', 'ABC', '-o', 'test_volume.stl'], returncode=1, stdout='', stderr='/home/magublafix/AI/AgentLore/.venv/bin/python: No module named text2stl\n').returncode
-_______________________ test_stl_characters_recognizable _______________________
-tests/test_text2stl_cli.py:175: in test_stl_characters_recognizable
-    assert result.returncode == 0
-E   AssertionError: assert 1 == 0
-E    +  where 1 = CompletedProcess(args=['/home/magublafix/AI/AgentLore/.venv/bin/python', '-m', 'text2stl', 'Hello', '-o', 'test_chars.stl'], returncode=1, stdout='', stderr='/home/magublafix/AI/AgentLore/.venv/bin/python: No module named text2stl\n').returncode
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::test_cli_basic - AssertionError: assert 1 ...
-FAILED tests/test_text2stl_cli.py::test_cli_with_output_flag - AssertionError...
-FAILED tests/test_text2stl_cli.py::test_cli_empty_string - AssertionError: as...
-FAILED tests/test_text2stl_cli.py::test_cli_too_long_string - AssertionError:...
-FAILED tests/test_text2stl_cli.py::test_cli_15_char_limit - AssertionError: a...
-FAILED tests/test_text2stl_cli.py::test_cli_printable_ascii - AssertionError:...
-FAILED tests/test_text2stl_cli.py::test_stl_valid_format - AssertionError: as...
-FAILED tests/test_text2stl_cli.py::test_stl_water_tight - AssertionError: ass...
-FAILED tests/test_text2stl_cli.py::test_stl_normals_outward - AssertionError:...
-FAILED tests/test_text2stl_cli.py::test_stl_positive_volume - AssertionError:...
-FAILED tests/test_text2stl_cli.py::test_stl_characters_recognizable - Asserti...
-========================= 11 failed, 2 passed in 2.55s =========================
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/lore_stlgen_run8_zgmekmss
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 14 items
+
+tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
+tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 14%]
+tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 21%]
+tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 28%]
+tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 35%]
+tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 42%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 50%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 57%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
+tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+  /tmp/lore_stlgen_run8_zgmekmss/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+    section_2d, _ = section.to_planar()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 14 passed, 2 warnings in 18.45s ========================
 
 ```

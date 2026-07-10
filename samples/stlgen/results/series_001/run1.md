@@ -2,74 +2,64 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-29 00:36 |
+| Date | 2026-07-07 13:30 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
 | Lore search active | no |
 | Web search active | yes |
-| Turn budget | 36 |
-| Turns (main loop) | 36 |
-| Turns (capture) | 3 |
-| Turns (wrapup) | 2 |
+| Turn budget | 40 |
+| Turns (main loop) | 40 |
+| Turns (wrapup) | 10 |
 | Task submitted | no (hit limit) |
-| Input tokens | 34,968 |
-| Output tokens | 7,526 |
-| Total tokens | 42,494 |
-| Concepts captured this run | 2 |
-| Elapsed | 817.0s |
+| Input tokens | 32,547 |
+| Output tokens | 22,151 |
+| Total tokens | 54,698 |
+| Concepts captured this run | 5 |
+| Elapsed | 2369.9s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-(most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-_______________ TestDimensions.test_width_scales_with_char_count _______________
-tests/test_text2stl_cli.py:199: in test_width_scales_with_char_count
-    text2stl("A", "-o", str(out1))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl A -o /tmp/pytest-of-magublafix/pytest-799/test_width_scales_with_char_co0/a.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
-tests/test_text2stl_cli.py:217: in test_cross_section_is_nonempty
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-799/test_cross_section_is_nonempty0/hello.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
-    text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:29: in text2stl
-    pytest.fail(
-E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-799/test_character_shapes_match_te0/hello.stl exited 1
-E   stdout: 
-E   stderr: Traceback (most recent call last):
-E     File "/home/magublafix/.local/bin/text2stl", line 3, in <module>
-E       from text2stl.cli import main
-E   ModuleNotFoundError: No module named 'text2stl'
+ir: .pytest_cache
+rootdir: /tmp/lore_stlgen_run1_eqpol1hr
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 14 items
+
+tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
+tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 14%]
+tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 21%]
+tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 28%]
+tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 35%]
+tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 42%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 50%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 57%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
+tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated FAILED [100%]
+
+=================================== FAILURES ===================================
+___________ TestCharacterShapes.test_character_shapes_not_truncated ____________
+tests/test_text2stl_cli.py:361: in test_character_shapes_not_truncated
+    assert min_corr >= 0.3, (
+E   AssertionError: Band-profile correlation -0.021 < 0.3 — cross-section looks truncated (missing a chunk of its vertical or horizontal extent) even though it may still pass the IoU shape check. Check for clipping against canvas/render boundaries — e.g. font size too large relative to canvas combined with edge-anchored text placement.
+E   assert -0.020755922262031903 >= 0.3
+=============================== warnings summary ===============================
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+  /tmp/lore_stlgen_run1_eqpol1hr/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+    section_2d, _ = section.to_planar()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - Failed:...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
-FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-==================== 7 failed, 2 passed, 4 errors in 1.08s =====================
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+================== 1 failed, 13 passed, 2 warnings in 25.12s ===================
 
 ```

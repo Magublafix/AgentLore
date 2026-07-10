@@ -2,72 +2,73 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-29 19:56 |
+| Date | 2026-07-08 06:13 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (17 concepts) |
+| Lore search active | yes (9 concepts) |
 | Web search active | yes |
-| Turn budget | 36 |
-| Turns (main loop) | 36 |
-| Turns (capture) | 6 |
-| Turns (wrapup) | 4 |
+| Turn budget | 40 |
+| Turns (main loop) | 40 |
+| Turns (wrapup) | 1 |
 | Task submitted | no (hit limit) |
-| Input tokens | 39,790 |
-| Output tokens | 10,721 |
-| Total tokens | 50,511 |
-| Concepts captured this run | 4 |
-| Elapsed | 946.9s |
+| Input tokens | 23,415 |
+| Output tokens | 12,265 |
+| Total tokens | 35,680 |
+| Concepts captured this run | 0 |
+| Elapsed | 1317.2s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-ocess:
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/lib64/python3.11/subprocess.py:1026: in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-/usr/lib64/python3.11/subprocess.py:1955: in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-E   FileNotFoundError: [Errno 2] No such file or directory: 'text2stl'
+t_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HI exited 1
+E   stdout: 
+E   stderr: Error: 'list' object has no attribute 'vertices'
+_______________ TestDimensions.test_width_scales_with_char_count _______________
+tests/test_text2stl_cli.py:265: in test_width_scales_with_char_count
+    text2stl("HELLO", "-o", str(out5))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-2059/test_width_scales_with_char_co0/hello.stl exited 1
+E   stdout: 
+E   stderr: Error: 'list' object has no attribute 'vertices'
 ______________ TestCharacterShapes.test_cross_section_is_nonempty ______________
-tests/test_text2stl_cli.py:217: in test_cross_section_is_nonempty
+tests/test_text2stl_cli.py:282: in test_cross_section_is_nonempty
     text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:22: in text2stl
-    result = subprocess.run(
-/usr/lib64/python3.11/subprocess.py:548: in run
-    with Popen(*popenargs, **kwargs) as process:
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/lib64/python3.11/subprocess.py:1026: in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-/usr/lib64/python3.11/subprocess.py:1955: in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-E   FileNotFoundError: [Errno 2] No such file or directory: 'text2stl'
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-2059/test_cross_section_is_nonempty0/hello.stl exited 1
+E   stdout: 
+E   stderr: Error: 'list' object has no attribute 'vertices'
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:234: in test_character_shapes_match_text
+tests/test_text2stl_cli.py:299: in test_character_shapes_match_text
     text2stl("HELLO", "-o", str(out))
-tests/test_text2stl_cli.py:22: in text2stl
-    result = subprocess.run(
-/usr/lib64/python3.11/subprocess.py:548: in run
-    with Popen(*popenargs, **kwargs) as process:
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/lib64/python3.11/subprocess.py:1026: in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-/usr/lib64/python3.11/subprocess.py:1955: in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-E   FileNotFoundError: [Errno 2] No such file or directory: 'text2stl'
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-2059/test_character_shapes_match_te0/hello.stl exited 1
+E   stdout: 
+E   stderr: Error: 'list' object has no attribute 'vertices'
+___________ TestCharacterShapes.test_character_shapes_not_truncated ____________
+tests/test_text2stl_cli.py:349: in test_character_shapes_not_truncated
+    text2stl("HELLO", "-o", str(out))
+tests/test_text2stl_cli.py:29: in text2stl
+    pytest.fail(
+E   Failed: text2stl HELLO -o /tmp/pytest-of-magublafix/pytest-2059/test_character_shapes_not_trun0/hello.stl exited 1
+E   stdout: 
+E   stderr: Error: 'list' object has no attribute 'vertices'
 =========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_single_char - FileNot...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - FileNotF...
-FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - FileNotF...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_five_chars - Failed: ...
+FAILED tests/test_text2stl_cli.py::TestInvocation::test_max_length - Failed: ...
 FAILED tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename
-FAILED tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected
-FAILED tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected - F...
 FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
 FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty
 FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight - ...
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
 ERROR tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-========================= 9 failed, 4 errors in 1.43s ==========================
+==================== 7 failed, 3 passed, 4 errors in 17.68s ====================
 
 ```

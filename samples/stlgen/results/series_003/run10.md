@@ -2,65 +2,61 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-29 17:27 |
+| Date | 2026-07-08 04:17 |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (29 concepts) |
+| Lore search active | yes (26 concepts) |
 | Web search active | yes |
-| Turn budget | 36 |
-| Turns (main loop) | 36 |
-| Turns (capture) | 2 |
-| Turns (wrapup) | 8 |
+| Turn budget | 40 |
+| Turns (main loop) | 40 |
+| Turns (wrapup) | 7 |
 | Task submitted | no (hit limit) |
-| Input tokens | 86,597 |
-| Output tokens | 27,386 |
-| Total tokens | 113,983 |
-| Concepts captured this run | 6 |
-| Elapsed | 3080.2s |
+| Input tokens | 27,392 |
+| Output tokens | 13,237 |
+| Total tokens | 40,629 |
+| Concepts captured this run | 0 |
+| Elapsed | 1446.8s |
 | Tests passed | ❌ no |
 
 ## Test output
 
 ```
-============================= test session starts ==============================
-platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
-cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run10_6b21i2pi
-configfile: pyproject.toml
-plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-timeout: 60.0s
-timeout method: signal
-timeout func_only: False
-collecting ... collected 13 items
-
-tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
-tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 15%]
-tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 23%]
-tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 30%]
-tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 38%]
-tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 46%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 53%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 61%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 69%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 76%]
-tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 84%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text FAILED [100%]
+0%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight FAILED [ 57%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
+tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text FAILED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated FAILED [100%]
 
 =================================== FAILURES ===================================
+___________________ TestSTLValidity.test_mesh_is_watertight ____________________
+tests/test_text2stl_cli.py:235: in test_mesh_is_watertight
+    assert mesh.is_watertight, (
+E   AssertionError: Mesh is not water-tight — not 3D printable. Ensure the mesh is a closed manifold with no open edges.
+E   assert False
+E    +  where False = <trimesh.Trimesh(vertices.shape=(15576, 3), faces.shape=(28320, 3))>.is_watertight
 _____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:249: in test_character_shapes_match_text
+tests/test_text2stl_cli.py:314: in test_character_shapes_match_text
     assert iou >= 0.25, (
-E   AssertionError: Character shape IoU 0.123 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
-E   assert 0.12311449504381554 >= 0.25
+E   AssertionError: Character shape IoU 0.158 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
+E   assert 0.15756302521008403 >= 0.25
+___________ TestCharacterShapes.test_character_shapes_not_truncated ____________
+tests/test_text2stl_cli.py:361: in test_character_shapes_not_truncated
+    assert min_corr >= 0.3, (
+E   AssertionError: Band-profile correlation -0.318 < 0.3 — cross-section looks truncated (missing a chunk of its vertical or horizontal extent) even though it may still pass the IoU shape check. Check for clipping against canvas/render boundaries — e.g. font size too large relative to canvas combined with edge-anchored text placement.
+E   assert -0.31750452480531316 >= 0.3
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-  /tmp/lore_stlgen_run10_6b21i2pi/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+  /tmp/lore_stlgen_run10_tawlm65l/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
+FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight
 FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-=================== 1 failed, 12 passed, 1 warning in 17.37s ===================
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+================== 3 failed, 11 passed, 2 warnings in 18.61s ===================
 
 ```

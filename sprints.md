@@ -89,7 +89,23 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
-## Sprint 4 — 2026-06-30 → 2026-07-11
+## Sprint 4 — 2026-07-09 → 2026-07-16
+**Goal:** Document and explain the multi-series stlgen benchmark — aggregate results from 10 series × 10 runs, produce a benchmark README with methodology, findings, and conclusions.
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-026 | Aggregate and analyze multi-series benchmark results | general-purpose | planned | — |
+| LORE-027 | Write benchmark README with methodology and findings | general-purpose | planned | — |
+
+### Notes
+- LORE-026 first — analysis informs the README narrative.
+- DoD Gates 3 and 4 waived for benchmark stories (no Lore infrastructure changed).
+
+---
+
+## Sprint 5 — 2026-07-17 → 2026-07-28
 **Goal:** Wire up CI/CD — automated test runs, Docker image builds, and Renovate dependency updates — before beginning Phase 2 feature work.
 **Status:** planned
 
@@ -381,3 +397,57 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 - [ ] AC above met — tokens recorded
 - [ ] Renovate app installed on the repository (or Renovate GitHub Action configured as fallback)
 - [ ] At least one dependency PR opened (or dry-run output confirms it would)
+
+---
+
+## [LORE-026] Aggregate and analyze multi-series benchmark results
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** S
+**Agent:** general-purpose
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** see aggregated pass-rate statistics across all 10 series of the stlgen benchmark
+**So that** I can identify trends in how Lore's accumulated knowledge affects task success over time
+
+**Acceptance Criteria:**
+- [ ] Read `samples/stlgen/results/aggregate.json` — it already contains per-run `concepts_available` (concepts in DB at run start), `total_tokens`, and `tests_passed` for every series; no benchmark re-run needed
+- [ ] Compute per-series pass rate (passes/10), mean pass rate across series, best/worst series
+- [ ] Compute per-run-number pass rate across series (e.g. R1 across S1–S10) to show learning curve
+- [ ] Compute concept accumulation trend — concepts captured per series
+- [ ] Group all runs by `concepts_available` into buckets of size 5 (0–4, 5–9, 10–14, …); for each bucket compute: mean pass rate, mean total tokens, and sample count
+- [ ] `aggregate.md` includes: summary table (series × pass rate), per-run-position table, concepts-in-DB bucket table (bucket | mean pass rate | mean tokens | N), key statistics, and a plain-language interpretation of the trends
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] `samples/stlgen/results/aggregate.md` committed
+
+---
+
+## [LORE-027] Write benchmark README with methodology and findings
+
+**Phase:** Benchmark
+**Priority:** high
+**Effort:** M
+**Agent:** general-purpose
+**Phase item:** N/A — benchmark sprint
+
+**As a** Lore developer
+**I want to be able to** point someone at a single document that explains what was measured, how, and what we found
+**So that** the benchmark results are understandable without reading the code or raw result files
+
+**Acceptance Criteria:**
+- [ ] `samples/stlgen/BENCHMARK.md` committed covering:
+  - Task description (text2stl CLI, 13 tests, geometry constraints)
+  - Methodology: progressive design, 10 runs per series, 40-turn budget, fresh DB per series, wrapup after each run
+  - Results: series-level pass rates, per-run-position trends, Series 4 outlier explanation
+  - Conclusions: does Lore help? does knowledge compound? does rating improve relevance?
+  - Known limitations: local LLM variability, token counts not comparable to cloud
+- [ ] Document links to `aggregate.md` for raw numbers
+- [ ] Document is readable by someone unfamiliar with the Lore codebase
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] `samples/stlgen/BENCHMARK.md` committed
