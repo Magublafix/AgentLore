@@ -64,7 +64,8 @@ RUN groupadd --gid 1000 lore && \
 WORKDIR /app
 
 # Copy installed packages and source from the builder stage.
-COPY --from=builder --chown=lore:lore /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+# Use a glob via shell to avoid hardcoding the Python minor version.
+COPY --from=builder --chown=lore:lore /usr/local/lib /usr/local/lib
 COPY --from=builder --chown=lore:lore /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 COPY --from=builder --chown=lore:lore /app/lore /app/lore
 
