@@ -450,12 +450,12 @@ path to a working system with full semantic search.
 Add the Gists backend. No infrastructure required. Validate the
 community sharing loop with tag-based search.
 
-- [ ] GitHub API client (gist create, update, search by description marker)
-- [ ] `LORE_BACKEND=gists` routing in MCP server
-- [ ] `submit_concept` creates a public gist
-- [ ] `link_concepts` updates `lore.json` on the source gist
-- [ ] `search_concepts` queries GitHub Search API by tags
-- [ ] `rate_concept` stores locally; stars surfaced as community signal
+- [x] GitHub API client (gist create, update, search by description marker)
+- [x] `LORE_BACKEND=gists` routing in MCP server
+- [x] `submit_concept` creates a public gist
+- [x] `link_concepts` updates `lore.json` on the source gist
+- [x] `search_concepts` queries GitHub Search API by tags
+- [x] `rate_concept` stores locally; stars surfaced as community signal
 - [ ] Manual test: submit a concept, search for it, star it, rate it
 
 ### Phase 3 — Backend 3: Semantic search server (community, full search)

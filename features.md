@@ -325,3 +325,73 @@ Feature format:
 **What changed:** `renovate.json` at repo root. Renovate badge added to `README.md`.
 
 **Implementation notes:** Extends `config:recommended`. Managers: `pep621` (pyproject.toml), `dockerfile`, `github-actions`. Weekly schedule (Monday before 6am UTC). Patch updates batched into one PR; Python minor updates stay individual (pre-1.0 packages like fastmcp and sentence-transformers can break on minor); Docker major/minor get their own PR; Actions updates grouped separately.
+
+---
+
+## [LORE-010] GitHub Gists API client
+
+**Sprint:** 6   **Shipped:** 2026-07-10   **Phase:** 2   **Tokens:** 38,179
+
+**As a** Lore gists backend
+**I want to be able to** create, read, update, and search GitHub Gists via a thin API client
+**So that** all GitHub interactions are isolated behind a testable boundary with consistent error handling
+
+**What changed:** `lore/mcp/backends/gists_client.py` — `GistsClient` wraps the GitHub REST API with typed exceptions (`GistAuthError`, `GistNotFoundError`, `GistRateLimitError`, `GistAPIError`), validates the token at init via `GET /user` (storing `authenticated_login`), and implements 8 public methods for full gist + comment CRUD.
+
+**Implementation notes:** All HTTP flows through a single `_request` helper that owns retry (502/503 once with 1-s backoff), rate-limit header inspection (stderr warning at < 10 remaining), and typed exception mapping. Uses `requests` library (added to `pyproject.toml`). 21 tests, 100% coverage of the new module.
+
+---
+
+## [LORE-011] Gists backend: submit_concept and get_concept
+
+**Sprint:** 6   **Shipped:** 2026-07-10   **Phase:** 2   **Tokens:** 50,322
+
+**As a** Claude Code agent
+**I want to be able to** submit concepts as public GitHub Gists and retrieve them by ID
+**So that** concepts are shareable with the community without any infrastructure
+
+**What changed:** `lore/mcp/backends/gists.py` with `submit_concept` (creates `concept.md` + `lore.json` gist) and `get_concept` (depth-1 link resolution, rating aggregation from comments). `lore/mcp/router.py` — `BackendRouter` replaces hardcoded selfhosted dispatch in `server.py`; gists backend lazily initialises `GistsClient`. `server.py` updated to thin wrappers over the router.
+
+**Implementation notes:** `GistsClient` is lazy — importing `server.py` with `LORE_BACKEND=gists` requires no token. Description format: `[lore-concept] {name} [tag1, tag2, ...]`. `lore.json` schema_version "1". Malformed rating comments logged to stderr and skipped. 58 tests added (33 backend + 25 router).
+
+---
+
+## [LORE-012] Gists backend: search_concepts via GitHub Search API
+
+**Sprint:** 6   **Shipped:** 2026-07-10   **Phase:** 2   **Tokens:** 25,744
+
+**As a** Claude Code agent
+**I want to be able to** search the public Lore concept corpus by tags without running any local infrastructure
+**So that** I can discover community-contributed concepts with only a GitHub token
+
+**What changed:** `search_concepts` added to `gists.py`; paginates up to 3 pages × 30 results via GitHub Search API, deduplicates by gist_id, applies client-side `type`/`language`/`min_rating` filters, resolves full concept + links via `get_concept`. `search_gists` in `gists_client.py` extended with `page` and `per_page` params.
+
+**Implementation notes:** Unrated concepts (no comments) are always included regardless of `min_rating`. Early stop once `limit` candidates pass filters. `GistRateLimitError` surfaces as `RuntimeError` to callers. 32 new tests in `test_gists_search.py`.
+
+---
+
+## [LORE-013] Gists backend: link_concepts
+
+**Sprint:** 6   **Shipped:** 2026-07-10   **Phase:** 2   **Tokens:** 58,114
+
+**As a** Claude Code agent
+**I want to be able to** link two community concepts by updating the source gist's metadata
+**So that** the concept graph grows organically without any central database
+
+**What changed:** `link_concepts` added to `gists.py`; reads `lore.json` from the source gist, validates rel and to_id, enforces idempotency and 20-link cap, appends the link entry, and writes back via `update_gist`. Router wired.
+
+**Implementation notes:** `rel` validated before any API call. Idempotency matches on `(to_id, rel)` pair. Concurrent write safety (last writer wins) is a known accepted gap for Phase 2, documented in architecture.md. 34 new tests in `test_gists_link.py`.
+
+---
+
+## [LORE-014] Gists backend: rate_concept via GitHub comments
+
+**Sprint:** 6   **Shipped:** 2026-07-10   **Phase:** 2   **Tokens:** 67,312
+
+**As a** Claude Code agent
+**I want to be able to** rate a community concept by posting a structured GitHub comment
+**So that** quality feedback is community-visible and aggregatable without any central server
+
+**What changed:** `rate_concept` added to `gists.py`; posts `[lore-rating] {"outcome": N, ...}` comments with edit-if-exists logic (matches by `authenticated_login`). `LORE_FREELOADER=true` disables posting while keeping reads active. Rating aggregation in `get_concept` (implemented in LORE-011) unchanged.
+
+**Implementation notes:** Validation runs before freeloader check — bad inputs still raise `ValueError` even with `LORE_FREELOADER=true`. Integration test verifies the full submit → search → rate → get round-trip with mocked client. 41 new tests in `test_gists_rate.py`. Final suite: 390 tests, 96.97% coverage.

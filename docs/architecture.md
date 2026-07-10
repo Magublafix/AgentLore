@@ -72,7 +72,7 @@ Full product spec: `PROJECT.md`.
 |-----------|----------|-------|
 | Agent ↔ MCP server | MCP over stdio or HTTP | FastMCP handles transport |
 | MCP server ↔ Backend 1 | HTTP (FastAPI) | `selfhosted/api.py` on :8765 |
-| MCP server ↔ Backend 2 | HTTPS (GitHub REST API) | PyGithub or httpx |
+| MCP server ↔ Backend 2 | HTTPS (GitHub REST API) | `requests` via `gists_client.py` |
 | MCP server ↔ Backend 3 | HTTPS (FastAPI) | Optional; falls back to Backend 2 |
 | Backend 1 ↔ Qdrant | gRPC / HTTP | qdrant-client SDK |
 | Backend 1 ↔ SQLite | File I/O | sqlite3 (synchronous, WAL mode) |
@@ -112,9 +112,12 @@ lore/
 
 | Component | Responsibility |
 |-----------|---------------|
-| `mcp/server.py` | FastMCP entry point; registers all 5 MCP tools; reads `LORE_BACKEND` and routes HTTP calls to the selfhosted FastAPI service at `LORE_SELFHOSTED_URL` (Phase 1); raises `NotImplementedError` for unknown backends |
+| `mcp/server.py` | FastMCP entry point; registers all 5 MCP tools; reads `LORE_BACKEND` and delegates all tool calls to `BackendRouter`; runs content scan on `submit_concept` before dispatch |
+| `mcp/router.py` | `BackendRouter` — single dispatch point for all tool calls; routes to selfhosted or gists backend based on `LORE_BACKEND`; lazily initialises `GistsClient` on first gists call |
 | `mcp/models.py` | `Concept`, `Link`, `Rating` dataclasses |
 | `mcp/embeddings.py` | `EmbeddingModel` — sentence-transformers wrapper; `embed()` and `embed_batch()` produce 384-dim vectors offline |
+| `mcp/backends/gists_client.py` | Thin `requests`-based wrapper around the GitHub REST API; typed exceptions (`GistAuthError`, `GistNotFoundError`, `GistRateLimitError`, `GistAPIError`); validates token at init via `GET /user`; rate-limit warning + 502/503 retry built in |
+| `mcp/backends/gists.py` | Gists backend: `submit_concept`, `get_concept`, `search_concepts`, `link_concepts`, `rate_concept`; depth-1 link resolution and rating aggregation from gist comments; `LORE_FREELOADER=true` disables comment posting |
 | `core/scanner.py` | `scan_content()` — checks all concept text fields for credential patterns, long hex/base64, internal URLs, and `LORE_BLOCK_PATTERNS` custom blocklist before any write; returns structured violation list; cannot be bypassed |
 
 ### 5.3 Level 2 — Self-hosted Backend

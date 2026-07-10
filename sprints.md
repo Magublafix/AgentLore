@@ -123,6 +123,28 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
+## Sprint 6 — 2026-07-10 → 2026-07-10
+**Goal:** Implement the GitHub Gists backend (Phase 2) — a thin API client plus all five MCP tools — so agents can share and discover concepts with no local infrastructure.
+**Status:** done
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-010 | GitHub Gists API client | python-mcp-engineer | done | 38,179 |
+| LORE-011 | Gists backend: submit_concept and get_concept | python-mcp-engineer | done | 50,322 |
+| LORE-012 | Gists backend: search_concepts via GitHub Search API | python-mcp-engineer | done | 25,744 |
+| LORE-013 | Gists backend: link_concepts | python-mcp-engineer | done | 58,114 |
+| LORE-014 | Gists backend: rate_concept via GitHub comments | python-mcp-engineer | done | 67,312 |
+
+### Notes
+- LORE-010 is the foundation — all other stories depend on `gists_client.py` being in place first.
+- LORE-011 (submit/get) must land before LORE-012 (search) and LORE-013 (link) — they both build on gist structure and routing.
+- LORE-014 (rate) depends on `list_comments` / `create_comment` from LORE-010 and the get_concept comment aggregation from LORE-011.
+- LORE-012 and LORE-013 can run in parallel once LORE-011 is done.
+- All stories target `lore/mcp/backends/` and route through `router.py` via `LORE_BACKEND=gists`.
+
+---
+
 ## [LORE-018] Define text2stl CLI scope and test suite
 
 **Phase:** Benchmark

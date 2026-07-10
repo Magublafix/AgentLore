@@ -3,16 +3,17 @@
 Strategy
 --------
 - The selfhosted HTTP service is mocked via ``unittest.mock.patch`` on
-  ``httpx.Client`` — no real network calls or running service required.
+  ``lore.mcp.router.BackendRouter._client`` — no real network calls or
+  running service required.
 - Each MCP tool is called directly (as a plain Python function) since
   FastMCP tools are synchronous callables decorated with ``@mcp.tool``.
 - Scanner violations are tested both at the MCP layer (local scan) and
   at the backend boundary (backend 422 responses).
-- Invalid backend configuration is tested by temporarily manipulating the
-  module-level ``_BACKEND`` guard.
+- Invalid backend configuration is tested via the router's ValueError path.
 
-All tests import from ``lore.mcp.server`` after patching the backend env var
-to prevent ``NotImplementedError`` on import when LORE_BACKEND is wrong.
+All tests import from ``lore.mcp.server`` after patching the backend env var.
+Since the module-level NotImplementedError guard has been removed, LORE_BACKEND
+can be any value at import time without raising.
 """
 
 from __future__ import annotations
@@ -72,10 +73,13 @@ def _make_response(status_code: int, body: Any) -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def ensure_selfhosted_backend(monkeypatch):
-    """Ensure LORE_BACKEND=selfhosted so the module-level guard doesn't raise."""
+    """Ensure LORE_BACKEND=selfhosted for the module-level router instance."""
     monkeypatch.setenv("LORE_BACKEND", "selfhosted")
-    # Re-import to pick up env if module was already loaded with wrong value
-    # (safe because we always have selfhosted in test runs)
+    # Force the router to use the selfhosted backend for all tool calls in
+    # this test file, even if the module was loaded with a different env var.
+    import lore.mcp.server as _srv
+    import lore.mcp.router as _router_mod
+    _srv._router._backend = "selfhosted"
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +124,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": [concept]})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = search_concepts(problem="concurrent database writes")
 
         assert "results" in result
@@ -134,7 +138,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": [concept]})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="concurrent database writes")
 
         # Exactly one POST call — no secondary GET calls to fetch linked concepts.
@@ -145,7 +149,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": []})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="test", type="pattern")
 
         call_kwargs = mock_client.post.call_args
@@ -156,7 +160,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": []})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="test", language="python")
 
         payload = mock_client.post.call_args[1]["json"]
@@ -166,7 +170,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": []})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="test", limit=10)
 
         payload = mock_client.post.call_args[1]["json"]
@@ -176,7 +180,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": []})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="test", session_id="sess-abc")
 
         headers = mock_client.post.call_args[1]["headers"]
@@ -186,7 +190,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": []})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="test")
 
         headers = mock_client.post.call_args[1]["headers"]
@@ -196,7 +200,7 @@ class TestSearchConcepts:
         api_response = _make_response(500, {"error": "internal"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="500"):
                 search_concepts(problem="test")
 
@@ -204,7 +208,7 @@ class TestSearchConcepts:
         api_response = _make_response(200, {"results": []})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             search_concepts(problem="test")
 
         payload = mock_client.post.call_args[1]["json"]
@@ -226,7 +230,7 @@ class TestGetConcept:
         api_response = _make_response(200, concept)
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = get_concept(concept_id=cid)
 
         assert result["concept_id"] == cid
@@ -237,7 +241,7 @@ class TestGetConcept:
         api_response = _make_response(404, {"error": "not found", "concept_id": cid})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="404"):
                 get_concept(concept_id=cid)
 
@@ -245,7 +249,7 @@ class TestGetConcept:
         api_response = _make_response(503, {"error": "backend unavailable"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError):
                 get_concept(concept_id=str(uuid.uuid4()))
 
@@ -272,7 +276,7 @@ class TestSubmitConcept:
         api_response = _make_response(201, {"concept_id": cid, "name": "SQLite WAL Mode"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = submit_concept(**self._VALID_ARGS)
 
         assert result["concept_id"] == cid
@@ -300,7 +304,7 @@ class TestSubmitConcept:
         )
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(ValueError, match="backend scanner"):
                 submit_concept(**self._VALID_ARGS)
 
@@ -309,7 +313,7 @@ class TestSubmitConcept:
         api_response = _make_response(201, {"concept_id": cid, "name": "X"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             submit_concept(
                 **self._VALID_ARGS,
                 dont_use_when="Not for read-heavy workloads",
@@ -327,7 +331,7 @@ class TestSubmitConcept:
         api_response = _make_response(201, {"concept_id": cid, "name": "X"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             submit_concept(**self._VALID_ARGS)
 
         payload = mock_client.post.call_args[1]["json"]
@@ -337,7 +341,7 @@ class TestSubmitConcept:
         api_response = _make_response(503, {"error": "Qdrant down", "concept_id": "x"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="503"):
                 submit_concept(**self._VALID_ARGS)
 
@@ -350,7 +354,7 @@ class TestSubmitConcept:
         args = {**self._VALID_ARGS}
         args.pop("language", None)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = submit_concept(**args, dont_use_when=None)
 
         assert "concept_id" in result
@@ -360,7 +364,7 @@ class TestSubmitConcept:
         mock_client = _mock_client(MagicMock())
         mock_client.post.side_effect = httpx.ConnectError("Connection refused")
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(httpx.ConnectError):
                 submit_concept(**self._VALID_ARGS)
 
@@ -370,7 +374,7 @@ class TestSubmitConcept:
         api_response = _make_response(409, body)
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = submit_concept(**self._VALID_ARGS)
 
         assert result["error"] == "semantic_duplicate"
@@ -407,7 +411,7 @@ class TestLinkConcepts:
         from_id = str(uuid.uuid4())
         to_id = str(uuid.uuid4())
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = link_concepts(from_id=from_id, to_id=to_id, rel="uses", label="depends on")
 
         assert result["link_id"] == link_id
@@ -419,7 +423,7 @@ class TestLinkConcepts:
         from_id = str(uuid.uuid4())
         to_id = str(uuid.uuid4())
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             link_concepts(from_id=from_id, to_id=to_id, rel="extends", label="extends it")
 
         payload = mock_client.post.call_args[1]["json"]
@@ -432,7 +436,7 @@ class TestLinkConcepts:
         api_response = _make_response(404, {"error": "not found"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="404"):
                 link_concepts(
                     from_id=str(uuid.uuid4()),
@@ -445,7 +449,7 @@ class TestLinkConcepts:
         api_response = _make_response(422, {"detail": [{"msg": "Invalid rel"}]})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="422"):
                 link_concepts(
                     from_id=str(uuid.uuid4()),
@@ -468,7 +472,7 @@ class TestRateConcept:
         api_response = _make_response(200, {"avg_rating": 4.0, "time_saved_avg_hours": 2.5})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = rate_concept(
                 concept_id=cid,
                 outcome=4,
@@ -485,7 +489,7 @@ class TestRateConcept:
         api_response = _make_response(200, {"avg_rating": 3.0, "time_saved_avg_hours": None})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             rate_concept(concept_id=cid, outcome=3, session_id="s")
 
         mock_client.post.assert_called_once()
@@ -497,7 +501,7 @@ class TestRateConcept:
         api_response = _make_response(200, {"avg_rating": 2.0, "time_saved_avg_hours": None})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             result = rate_concept(concept_id=cid, outcome=2, session_id="s")
 
         # Payload should not include hours_saved if not provided
@@ -509,7 +513,7 @@ class TestRateConcept:
         api_response = _make_response(200, {"avg_rating": 5.0, "time_saved_avg_hours": None})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             rate_concept(concept_id=cid, outcome=5, session_id="s")
 
         payload = mock_client.post.call_args[1]["json"]
@@ -520,7 +524,7 @@ class TestRateConcept:
         api_response = _make_response(404, {"error": "not found"})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="404"):
                 rate_concept(concept_id=cid, outcome=3, session_id="s")
 
@@ -529,7 +533,7 @@ class TestRateConcept:
         api_response = _make_response(422, {"detail": [{"msg": "outcome must be between 1 and 5"}]})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="422"):
                 rate_concept(concept_id=cid, outcome=99, session_id="s")
 
@@ -538,7 +542,7 @@ class TestRateConcept:
         api_response = _make_response(200, {"avg_rating": 5.0, "time_saved_avg_hours": 3.0})
         mock_client = _mock_client(api_response)
 
-        with patch("lore.mcp.server._client", return_value=mock_client):
+        with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
             rate_concept(
                 concept_id=cid,
                 outcome=5,
@@ -560,25 +564,35 @@ class TestRateConcept:
 
 
 class TestInvalidBackend:
-    """Module-level guard for unsupported LORE_BACKEND values."""
+    """Router raises ValueError for unknown backend values."""
 
-    def test_invalid_backend_raises_not_implemented(self):
-        """Importing server with LORE_BACKEND=gists raises NotImplementedError."""
-        with patch.dict(os.environ, {"LORE_BACKEND": "gists"}):
-            # Remove cached module so it re-imports with the new env var
-            cached = sys.modules.pop("lore.mcp.server", None)
-            with pytest.raises(NotImplementedError, match="gists"):
-                import lore.mcp.server  # noqa: F401
-            # Restore original module
-            if cached is not None:
-                sys.modules["lore.mcp.server"] = cached
+    def test_unknown_backend_raises_value_error_on_search(self):
+        """Calling search_concepts with an unknown backend raises ValueError."""
+        from lore.mcp.router import BackendRouter
+
+        router = BackendRouter(backend="unknown", selfhosted_url="http://localhost:8765")
+        with pytest.raises(ValueError, match="unknown"):
+            router.search_concepts(problem="test")
+
+    def test_unknown_backend_raises_value_error_on_submit(self):
+        """Calling submit_concept with an unknown backend raises ValueError."""
+        from lore.mcp.router import BackendRouter
+
+        router = BackendRouter(backend="bogus", selfhosted_url="http://localhost:8765")
+        with pytest.raises(ValueError, match="bogus"):
+            router.submit_concept(
+                name="X",
+                type="pattern",
+                content="c",
+                when_to_use="w",
+                tags=[],
+            )
+
+    def test_gists_backend_imports_cleanly(self):
+        """LORE_BACKEND=gists no longer raises NotImplementedError on import."""
+        import lore.mcp.server  # noqa: F401 — should not raise
 
     def test_selfhosted_backend_does_not_raise(self, monkeypatch):
         """LORE_BACKEND=selfhosted imports cleanly."""
         monkeypatch.setenv("LORE_BACKEND", "selfhosted")
-        cached = sys.modules.pop("lore.mcp.server", None)
-        try:
-            import lore.mcp.server  # noqa: F401
-        finally:
-            if cached is not None:
-                sys.modules["lore.mcp.server"] = cached
+        import lore.mcp.server  # noqa: F401 — should not raise

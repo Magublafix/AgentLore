@@ -1,8 +1,7 @@
 """FastMCP server for the Lore knowledge graph (LORE-005).
 
-Routes all MCP tool calls to the selfhosted FastAPI backend at
-``LORE_SELFHOSTED_URL`` (default ``http://localhost:8765``) when
-``LORE_BACKEND=selfhosted`` (the Phase 1 default).
+Routes all MCP tool calls to the configured backend via :class:`BackendRouter`.
+The backend is selected by the ``LORE_BACKEND`` environment variable.
 
 Entry point::
 
@@ -11,8 +10,7 @@ Entry point::
 Environment variables
 ---------------------
 LORE_BACKEND
-    Backend selector.  Only ``selfhosted`` is implemented in Phase 1.
-    Raises :class:`NotImplementedError` for any other value.
+    Backend selector.  Supported values: ``selfhosted``, ``gists``.
     Default: ``selfhosted``.
 
 LORE_SELFHOSTED_URL
@@ -34,8 +32,9 @@ import logging
 import os
 from typing import Optional
 
-import httpx
 from fastmcp import FastMCP
+
+from lore.mcp.router import BackendRouter
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +45,11 @@ logger = logging.getLogger(__name__)
 _BACKEND = os.environ.get("LORE_BACKEND", "selfhosted")
 _SELFHOSTED_URL = os.environ.get("LORE_SELFHOSTED_URL", "http://localhost:8765").rstrip("/")
 
-if _BACKEND != "selfhosted":
-    raise NotImplementedError(
-        f"LORE_BACKEND='{_BACKEND}' is not implemented. "
-        "Only 'selfhosted' is supported in Phase 1."
-    )
+# ---------------------------------------------------------------------------
+# Router instance
+# ---------------------------------------------------------------------------
+
+_router = BackendRouter(backend=_BACKEND, selfhosted_url=_SELFHOSTED_URL)
 
 # ---------------------------------------------------------------------------
 # FastMCP server instance
@@ -65,38 +64,6 @@ mcp = FastMCP(
         "Use rate_concept to record whether a concept helped."
     ),
 )
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-
-def _client() -> httpx.Client:
-    """Return a short-lived synchronous HTTP client pointed at the selfhosted API.
-
-    Returns:
-        A configured :class:`httpx.Client` with a 30-second timeout.
-    """
-    return httpx.Client(base_url=_SELFHOSTED_URL, timeout=30.0)
-
-
-def _raise_for_error(response: httpx.Response) -> None:
-    """Raise a ``RuntimeError`` with a human-readable message on HTTP errors.
-
-    Args:
-        response: The :class:`httpx.Response` to inspect.
-
-    Raises:
-        RuntimeError: If the response status code indicates an error (4xx or 5xx).
-    """
-    if response.is_error:
-        try:
-            detail = response.json()
-        except Exception:
-            detail = response.text
-        raise RuntimeError(
-            f"Selfhosted API error {response.status_code}: {detail}"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +88,8 @@ def search_concepts(
 ) -> dict:
     """Search for concepts semantically similar to a problem description.
 
-    Makes a single call to the selfhosted API which embeds the problem text,
-    queries Qdrant, and attaches all linked concepts inline.
+    Makes a single call to the configured backend which embeds the problem
+    text, queries the store, and attaches all linked concepts inline.
 
     Args:
         problem: Natural language description of what you are building or
@@ -144,20 +111,14 @@ def search_concepts(
         ``content``, ``avg_rating``, ``usage_count``, ``time_saved_avg_hours``,
         and ``links`` (list of linked concept summaries).
     """
-    payload: dict = {"problem": problem, "limit": limit, "min_rating": min_rating}
-    if type is not None:
-        payload["type"] = type
-    if language is not None:
-        payload["language"] = language
-
-    headers = {}
-    if session_id:
-        headers["X-Session-ID"] = session_id
-
-    with _client() as client:
-        response = client.post("/v1/concepts/search", json=payload, headers=headers)
-        _raise_for_error(response)
-        return response.json()
+    return _router.search_concepts(
+        problem=problem,
+        type=type,
+        language=language,
+        limit=limit,
+        min_rating=min_rating,
+        session_id=session_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -172,10 +133,11 @@ def search_concepts(
     )
 )
 def get_concept(concept_id: str) -> dict:
-    """Fetch a concept by its UUID and return it with all links.
+    """Fetch a concept by its ID and return it with all links.
 
     Args:
-        concept_id: The UUID string of the concept to retrieve.
+        concept_id: The identifier of the concept to retrieve (UUID for
+            selfhosted, gist id for gists backend).
 
     Returns:
         The full concept record as a dict, including a ``links`` list.
@@ -184,10 +146,7 @@ def get_concept(concept_id: str) -> dict:
         RuntimeError: If the concept is not found (HTTP 404) or the backend
             returns an error.
     """
-    with _client() as client:
-        response = client.get(f"/v1/concepts/{concept_id}")
-        _raise_for_error(response)
-        return response.json()
+    return _router.get_concept(concept_id=concept_id)
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +208,7 @@ def submit_concept(
     """
     from lore.core.scanner import scan_content
 
-    # Local content scan before any network call.
+    # Local content scan before any backend call — server-layer responsibility.
     scan_fields: dict[str, str | None] = {
         "name": name,
         "content": content,
@@ -263,35 +222,17 @@ def submit_concept(
             f"Violations: {violations}"
         )
 
-    payload: dict = {
-        "name": name,
-        "type": type,
-        "content": content,
-        "when_to_use": when_to_use,
-        "tags": tags,
-        "links": links or [],
-    }
-    if language is not None:
-        payload["language"] = language
-    if dont_use_when is not None:
-        payload["dont_use_when"] = dont_use_when
-    if source_url is not None:
-        payload["source_url"] = source_url
-
-    with _client() as client:
-        response = client.post("/v1/concepts", json=payload)
-        if response.status_code == 409:
-            # Semantic duplicate — return structured response so callers can
-            # track the existing_concept_id for rating.
-            return response.json()
-        if response.status_code == 422:
-            data = response.json()
-            raise ValueError(
-                f"Submission rejected by backend scanner: {data.get('error', 'unknown')} "
-                f"— violations: {data.get('matches', [])}"
-            )
-        _raise_for_error(response)
-        return response.json()
+    return _router.submit_concept(
+        name=name,
+        type=type,
+        content=content,
+        when_to_use=when_to_use,
+        tags=tags,
+        language=language,
+        dont_use_when=dont_use_when,
+        source_url=source_url,
+        links=links,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -314,8 +255,8 @@ def link_concepts(
     """Create a directed edge between two concepts.
 
     Args:
-        from_id: UUID of the source concept.
-        to_id: UUID of the target concept.
+        from_id: Identifier of the source concept.
+        to_id: Identifier of the target concept.
         rel: Relationship type.  Must be one of: ``uses``, ``tested_by``,
             ``extends``, ``alternative_to``, ``requires``.
         label: Human-readable description of the relationship.
@@ -327,12 +268,7 @@ def link_concepts(
         RuntimeError: If either concept does not exist (HTTP 404) or the
             relationship type is invalid (HTTP 422).
     """
-    payload = {"from_id": from_id, "to_id": to_id, "rel": rel, "label": label}
-
-    with _client() as client:
-        response = client.post("/v1/links", json=payload)
-        _raise_for_error(response)
-        return response.json()
+    return _router.link_concepts(from_id=from_id, to_id=to_id, rel=rel, label=label)
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +293,7 @@ def rate_concept(
     """Rate a concept and return updated aggregate statistics.
 
     Args:
-        concept_id: UUID of the concept to rate.
+        concept_id: Identifier of the concept to rate.
         outcome: Integer score 1–5.  5 = extremely helpful, 1 = not helpful.
         session_id: The current agent session identifier.
         hours_saved: Estimated hours saved versus solving from scratch.
@@ -373,16 +309,13 @@ def rate_concept(
         RuntimeError: If the concept does not exist (HTTP 404) or the
             outcome value is out of range (HTTP 422).
     """
-    payload: dict = {"outcome": outcome, "session_id": session_id}
-    if hours_saved is not None:
-        payload["hours_saved"] = hours_saved
-    if notes is not None:
-        payload["notes"] = notes
-
-    with _client() as client:
-        response = client.post(f"/v1/concepts/{concept_id}/rate", json=payload)
-        _raise_for_error(response)
-        return response.json()
+    return _router.rate_concept(
+        concept_id=concept_id,
+        outcome=outcome,
+        session_id=session_id,
+        hours_saved=hours_saved,
+        notes=notes,
+    )
 
 
 # ---------------------------------------------------------------------------
