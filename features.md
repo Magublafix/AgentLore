@@ -255,3 +255,31 @@ Feature format:
 **What changed:** `samples/stlgen/results/run4.md` through `run10.md`. `samples/stlgen/benchmarks/README.md` — full series results and analysis including bad-concept amplification diagnosis.
 
 **Implementation notes:** Series 1 DB ended with ~49 concepts; voxel/marching-cubes concepts rated ≥2.0 (visible) while correct Shapely extrusion concepts rated <2.0 (invisible) — `min_rating=2.0` filter acted as a voxel amplifier. Root cause: ambiguous wrapup prompt. Series 2 benchmark needed to validate the wrapup skill fix.
+
+---
+
+## [LORE-026] Aggregate and analyze multi-series benchmark results
+
+**Sprint:** 4   **Shipped:** 2026-07-10   **Phase:** Benchmark   **Tokens:** 73,680
+
+**As a** Lore developer
+**I want to be able to** see aggregated pass-rate statistics across all 10 series of the stlgen benchmark
+**So that** I can identify trends in how Lore's accumulated knowledge affects task success over time
+
+**What changed:** `samples/stlgen/results/aggregate.md` — full aggregate analysis: per-series pass rates, per-run-position learning curve, concept accumulation table, and concept-bucket analysis.
+
+**Implementation notes:** JSON contained 15 series entries; the first 5 are excluded exploratory runs (duplicate series_id:1, non-fresh DBs). Canonical 10 series are positions 5–14 (0-indexed). Data artifacts noted: position 3 run 4 has concepts_captured: -49; position 3 (series_id:2) is missing run 7.
+
+---
+
+## [LORE-027] Write benchmark README with methodology and findings
+
+**Sprint:** 4   **Shipped:** 2026-07-10   **Phase:** Benchmark   **Tokens:** 43,911
+
+**As a** Lore developer
+**I want to be able to** point someone at a single document that explains what was measured, how, and what we found
+**So that** the benchmark results are understandable without reading the code or raw result files
+
+**What changed:** `samples/stlgen/BENCHMARK.md` — standalone benchmark document covering task description, methodology, series-level results, learning curve, concept-bucket analysis, outlier explanation (S4/S10), conclusions, and known limitations.
+
+**Implementation notes:** Links to `results/aggregate.md` for raw tables. No invented numbers — all statistics sourced from aggregate.md. Includes explicit note on cross-series isolation design rationale and seed-concept exclusion rationale.
