@@ -478,20 +478,19 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 7 — 2026-07-11 → 2026-07-25
 **Goal:** Deliver the Phase 3 core pipeline — semantic search server running, gist watcher indexing community concepts, and MCP routing with graceful fallback.
-**Status:** planned
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-030 | Semantic search server — FastAPI + Qdrant core | python-mcp-engineer | planned | — |
-| LORE-031 | Gist watcher — poll, embed, and index public lore concepts | python-mcp-engineer | planned | — |
-| LORE-032 | LORE_SEMANTIC_URL routing in MCP server | python-mcp-engineer | planned | — |
-| LORE-036 | Graceful fallback — semantic server unreachable → Backend 2 | python-mcp-engineer | planned | — |
+| LORE-030 | Semantic search server — FastAPI + Qdrant core | python-mcp-engineer | done | — |
+| LORE-031 | Gist watcher — poll, embed, and index public lore concepts | python-mcp-engineer | done | — |
+| LORE-032 | LORE_SEMANTIC_URL routing in MCP server | python-mcp-engineer | done | — |
+| LORE-036 | Graceful fallback — semantic server unreachable → Backend 2 | python-mcp-engineer | done | — |
 
 ### Notes
 - LORE-030 is foundational — LORE-031, LORE-032, and LORE-036 all depend on the server being up.
-- Implement order: LORE-030 → LORE-031 (parallel with LORE-032) → LORE-036 (needs LORE-032).
-- Consult ai-data-specialist + software-architect before LORE-030 implementation for schema and deployment decisions.
+- Refactored to unified lore/server/api.py with pluggable storage backends (sqlite_qdrant / gist_qdrant) mid-sprint — cleaner than two separate FastAPI servers.
 - LORE-033, LORE-034, LORE-035 (ratings, auth, dedup) deferred to Sprint 8 — they require the core server.
 
 ---

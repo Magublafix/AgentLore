@@ -395,3 +395,59 @@ Feature format:
 **What changed:** `rate_concept` added to `gists.py`; posts `[lore-rating] {"outcome": N, ...}` comments with edit-if-exists logic (matches by `authenticated_login`). `LORE_FREELOADER=true` disables posting while keeping reads active. Rating aggregation in `get_concept` (implemented in LORE-011) unchanged.
 
 **Implementation notes:** Validation runs before freeloader check — bad inputs still raise `ValueError` even with `LORE_FREELOADER=true`. Integration test verifies the full submit → search → rate → get round-trip with mocked client. 41 new tests in `test_gists_rate.py`. Final suite: 390 tests, 96.97% coverage.
+
+---
+
+## [LORE-030] Semantic search server — FastAPI + Qdrant core
+
+**Sprint:** 7   **Shipped:** 2026-07-11   **Phase:** 3   **Tokens:** —
+
+**As a** Lore operator
+**I want to be able to** deploy an independently runnable FastAPI + Qdrant service that stores concept embeddings and serves vector search
+**So that** community-published concepts are discoverable with semantic similarity beyond tag matching
+
+**What changed:** `lore/server/storage/gist_qdrant.py` — GistQdrantBackend with denormalized Qdrant payload (full concept fields, no SQLite), deterministic point IDs via uuid5(NAMESPACE_URL, gist_id), idempotency via gist_updated_at, payload indexes on type/language/tags/author. `lore/server/api.py` — unified FastAPI server replacing separate selfhosted and semantic_server apps; backend selected via LORE_STORAGE_BACKEND env var. `docker-compose.semantic.yml` — standalone compose; semantic Qdrant has no host port mapping (avoids collision with Backend 1). BackendRouter extended with LORE_SEMANTIC_URL support.
+
+**Implementation notes:** Backend 3 uses denormalized Qdrant payload (differs from Backend 1's bare `{concept_id}`) because there is no SQLite to rehydrate from. Embedding target: `name + when_to_use` — same as Backend 1 for cross-backend vector comparability. Response shape identical to gists backend so MCP router needs zero transformation. 26 new tests; 418 total, 96% coverage.
+
+---
+
+## [LORE-031] Gist watcher — poll, embed, and index public lore concepts
+
+**Sprint:** 7   **Shipped:** 2026-07-11   **Phase:** 3   **Tokens:** —
+
+**As a** Lore operator
+**I want to be able to** run a background watcher that polls GitHub Gists for new or updated `[lore-concept]` entries and indexes them into the semantic server
+**So that** community contributions are automatically available for vector search without manual intervention
+
+**What changed:** `lore/server/watcher.py` — async watch_loop started as asyncio lifespan task when LORE_STORAGE_BACKEND=gist_qdrant. Polls GET /gists/public?since=<cursor> with pagination, filters for [lore-concept] descriptions, parses lore.json, calls storage.upsert_concept(). Cursor persisted to ~/.lore/watcher_cursor.json; defaults to 24h ago on first run. Deduplicates gist IDs within a cycle. Logs WARNING per bad gist without crashing. CancelledError propagates cleanly on shutdown. LORE_WATCH_INTERVAL configurable (default 300s).
+
+**Implementation notes:** Runs in-process (asyncio lifespan task) rather than as a separate container — avoids process coordination overhead for I/O-bound polling. _run_poll_cycle extracted as a testable unit separate from the sleep loop. 25 tests; 443 total, 94% coverage.
+
+---
+
+## [LORE-032] LORE_SEMANTIC_URL routing in MCP server
+
+**Sprint:** 7   **Shipped:** 2026-07-11   **Phase:** 3   **Tokens:** —
+
+**As a** Lore agent user
+**I want to be able to** point the MCP server at a semantic search URL and have `search_concepts` automatically use vector search instead of GitHub tag search
+**So that** switching to full semantic search is a single env-var change with no code changes
+
+**What changed:** BackendRouter reads LORE_SEMANTIC_URL at init; when set with LORE_BACKEND=gists, search_concepts calls GET <url>/search?q=&k= instead of GitHub tag search. Response normalized to ConceptResult schema server-side. LORE_SEMANTIC_URL and LORE_SEMANTIC_TIMEOUT documented in README.md. ADR-010 added to architecture.md.
+
+**Implementation notes:** LORE_SEMANTIC_URL is a modifier on the gists backend (not a third backend enum) — storage authority remains GitHub Gists; the semantic server is only an alternate retrieval path. 5 routing tests in TestSearchConceptsSemanticRouting; 448 total.
+
+---
+
+## [LORE-036] Graceful fallback — semantic server unreachable → Backend 2
+
+**Sprint:** 7   **Shipped:** 2026-07-11   **Phase:** 3   **Tokens:** —
+
+**As a** Lore agent user
+**I want to be able to** have `search_concepts` fall back to GitHub tag search automatically when the semantic server is unreachable
+**So that** a downed semantic server never breaks an agent's workflow
+
+**What changed:** search_concepts retries _semantic_search once before falling back (retry-once policy). Fallback result carries {"fallback": true} so callers can detect the degraded path. LORE_SEMANTIC_TIMEOUT configurable (default 5s). WARNING logged on each failed attempt.
+
+**Implementation notes:** Retry-once chosen over immediate fallback to tolerate transient connection blips without adding meaningful latency on sustained outages. Known gap: if the gists fallback itself fails (rate limit, auth error), the exception propagates uncaught — acceptable at this scale, deferred to Sprint 8+ if needed.
