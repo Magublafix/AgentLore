@@ -47,10 +47,11 @@ LORE_ADMIN_TOKEN        Token required for DELETE /v1/admin/reset.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Optional
 
@@ -259,9 +260,26 @@ async def lifespan(app: FastAPI):
     app.state.model = model
     app.state.backend_name = backend_name
 
+    # Start background Gist watcher when using the gist_qdrant backend.
+    watcher_task: asyncio.Task | None = None
+    if backend_name == "gist_qdrant":
+        from lore.server.watcher import watch_loop
+
+        interval = int(os.environ.get("LORE_WATCH_INTERVAL", "300"))
+        token = os.environ.get("LORE_GITHUB_TOKEN", "")
+        watcher_task = asyncio.create_task(watch_loop(storage, token, interval))
+        logger.info("Gist watcher task started (interval=%ds).", interval)
+
     yield
 
-    # Shutdown: close SQLite connection if backend supports it.
+    # Shutdown: cancel watcher task first, then close storage.
+    if watcher_task is not None:
+        watcher_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await watcher_task
+        logger.info("Gist watcher task stopped.")
+
+    # Close SQLite connection if backend supports it.
     if hasattr(storage, "close"):
         storage.close()
     logger.info("Lore unified server shut down.")

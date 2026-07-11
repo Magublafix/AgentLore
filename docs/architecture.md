@@ -120,13 +120,18 @@ lore/
 | `mcp/backends/gists.py` | Gists backend: `submit_concept`, `get_concept`, `search_concepts`, `link_concepts`, `rate_concept`; depth-1 link resolution and rating aggregation from gist comments; `LORE_FREELOADER=true` disables comment posting |
 | `core/scanner.py` | `scan_content()` — checks all concept text fields for credential patterns, long hex/base64, internal URLs, and `LORE_BLOCK_PATTERNS` custom blocklist before any write; returns structured violation list; cannot be bypassed |
 
-### 5.3 Level 2 — Semantic Server (Backend 3)
+### 5.3 Level 2 — Semantic Server / Unified Server (Backend 3)
 
 | Component | Responsibility |
 |-----------|---------------|
 | `semantic_server/api.py` | Standalone FastAPI service exposing `POST /concepts`, `GET /search`, `GET /health`; no SQLite — all concept metadata is stored denormalized in Qdrant payload |
 | `semantic_server/Dockerfile` | Multi-stage slim image; entrypoint downloads `all-MiniLM-L6-v2` on first start, caches in a named volume |
 | `docker-compose.semantic.yml` | Standalone compose stack: `semantic-server` + `qdrant` sidecar (no host port mapping on Qdrant to avoid collision with Backend 1) |
+| `server/api.py` | Unified FastAPI server replacing both `selfhosted/api.py` and `semantic_server/api.py`; selects Backend 1 or Backend 3 via `LORE_STORAGE_BACKEND` env var; routes identical `/v1/` surface to both backends; starts Gist Watcher task in lifespan when `LORE_STORAGE_BACKEND=gist_qdrant` |
+| `server/storage/base.py` | `StorageBackend` ABC — `upsert_concept`, `search_concepts`, `get_concept`, `rate_concept`, `health_check`; all backends implement this interface |
+| `server/storage/sqlite_qdrant.py` | `SqliteQdrantBackend` — Backend 1 implementation: SQLite + Qdrant; WAL mode; near-duplicate detection at 0.88 cosine threshold |
+| `server/storage/gist_qdrant.py` | `GistQdrantBackend` — Backend 3 implementation: Qdrant-only, denormalized payloads; deterministic point IDs via `uuid5(NAMESPACE_URL, gist_id)`; idempotent upsert via `gist_updated_at` comparison |
+| `server/watcher.py` | **Gist Watcher** — asyncio background task; polls `GET /gists/public?since=<cursor>` for `[lore-concept]` gists; extracts metadata from `lore.json`; calls `storage.upsert_concept()`; persists cursor to `~/.lore/watcher_cursor.json`; deduplicates within each cycle; logs WARNING on bad gists without crashing |
 
 #### Denormalized Qdrant payload
 
@@ -247,7 +252,49 @@ Agent  ← ranked concept list in one call
                  (fallback to gists backend if semantic server unreachable)
 ```
 
-### 6.3 Session Rating (Stop Hook)
+### 6.3 Gist Watcher Background Task (Backend 3)
+
+```
+Server startup (LORE_STORAGE_BACKEND=gist_qdrant)
+  ▼
+lifespan() creates asyncio.Task(watch_loop(storage, token, interval))
+  │
+  ▼ [runs concurrently with request handling]
+watch_loop() — runs forever until cancelled
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Per cycle (default: every 300 s)                          │
+  │                                                             │
+  │  1. Load cursor from ~/.lore/watcher_cursor.json            │
+  │     (default: now - 24h if file absent)                     │
+  │                                                             │
+  │  2. If LORE_GITHUB_TOKEN empty → log WARNING + sleep        │
+  │                                                             │
+  │  3. GET /gists/public?since=<cursor>&per_page=100           │
+  │     Follow Link rel=next pagination                         │
+  │                                                             │
+  │  4. Filter: keep gists with "[lore-concept]" in description │
+  │     Dedup by gist_id within this cycle                      │
+  │                                                             │
+  │  5. For each candidate:                                     │
+  │     a. GET /gists/<id>  (full gist with file content)       │
+  │     b. Parse lore.json → extract metadata                   │
+  │        (WARNING + skip if absent or malformed)              │
+  │     c. storage.upsert_concept(payload)                      │
+  │        (WARNING + continue if upsert raises)                │
+  │                                                             │
+  │  6. Save cursor = max(updated_at) of processed gists        │
+  │     (or now if none processed)                              │
+  │                                                             │
+  │  7. asyncio.sleep(interval)                                 │
+  └─────────────────────────────────────────────────────────────┘
+
+Server shutdown
+  ▼
+lifespan() cancels watcher task → CancelledError propagates cleanly
+```
+
+### 6.4 Session Rating (Stop Hook)
 
 ```
 Session ends

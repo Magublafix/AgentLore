@@ -464,7 +464,7 @@ Add the optional semantic server. GitHub Gists remain the source of
 truth. The server indexes the public corpus and serves vector search.
 
 - [x] FastAPI + Qdrant semantic server (independently deployable)
-- [ ] Gist watcher: polls for new/updated `[lore-concept]` gists,
+- [x] Gist watcher: polls for new/updated `[lore-concept]` gists,
       embeds and indexes them
 - [x] `LORE_SEMANTIC_URL` routing in MCP server — when set, overrides
       GitHub tag search with vector search against the server
