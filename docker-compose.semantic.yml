@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# Lore semantic server — standalone compose file (LORE-030).
+#
+# Runs independently of the Backend 1 compose stack.  Qdrant is NOT exposed
+# on host ports to avoid collision with Backend 1's Qdrant on 6333/6334.
+# Only semantic-server is reachable from the host (port 8766).
+# ---------------------------------------------------------------------------
+
+services:
+  semantic-server:
+    build:
+      context: .
+      dockerfile: lore/semantic_server/Dockerfile
+    image: lore/semantic-server
+    ports:
+      - "8766:8766"
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+    volumes:
+      - semantic-model-cache:/app/.cache
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8766/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    # No host port mapping — reachable only within this compose network.
+    expose:
+      - "6333"
+      - "6334"
+    volumes:
+      - semantic-qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333 && echo -e \"GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && grep -q 200 <&3'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  semantic-qdrant-data:
+  semantic-model-cache:

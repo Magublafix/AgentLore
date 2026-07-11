@@ -473,3 +473,41 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **DoD:**
 - [ ] AC above met — tokens recorded
 - [ ] `samples/stlgen/BENCHMARK.md` committed
+
+---
+
+## Sprint 7 — 2026-07-11 → 2026-07-25
+**Goal:** Deliver the Phase 3 core pipeline — semantic search server running, gist watcher indexing community concepts, and MCP routing with graceful fallback.
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-030 | Semantic search server — FastAPI + Qdrant core | python-mcp-engineer | planned | — |
+| LORE-031 | Gist watcher — poll, embed, and index public lore concepts | python-mcp-engineer | planned | — |
+| LORE-032 | LORE_SEMANTIC_URL routing in MCP server | python-mcp-engineer | planned | — |
+| LORE-036 | Graceful fallback — semantic server unreachable → Backend 2 | python-mcp-engineer | planned | — |
+
+### Notes
+- LORE-030 is foundational — LORE-031, LORE-032, and LORE-036 all depend on the server being up.
+- Implement order: LORE-030 → LORE-031 (parallel with LORE-032) → LORE-036 (needs LORE-032).
+- Consult ai-data-specialist + software-architect before LORE-030 implementation for schema and deployment decisions.
+- LORE-033, LORE-034, LORE-035 (ratings, auth, dedup) deferred to Sprint 8 — they require the core server.
+
+---
+
+## Sprint 8 — 2026-07-25 → 2026-08-08
+**Goal:** Harden the semantic server with auth, ratings aggregation, and deduplication — completing Phase 3.
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-033 | Server-side ratings aggregation | python-mcp-engineer | planned | — |
+| LORE-034 | API key auth — one key per GitHub user | python-mcp-engineer | planned | — |
+| LORE-035 | Deduplication — flag near-duplicate concepts on publish | python-mcp-engineer | planned | — |
+
+### Notes
+- All three stories depend on LORE-030 (core server) from Sprint 7.
+- LORE-034 (auth) should be implemented before LORE-033 and LORE-035 so write endpoints are protected from the start.
+- After Sprint 8: run LORE-029 (gists benchmark) to validate the full Phase 3 stack end-to-end.

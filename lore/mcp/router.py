@@ -7,6 +7,9 @@ Supported backends:
 
 - ``selfhosted``: delegates via httpx to the selfhosted FastAPI service.
 - ``gists``: delegates to the GitHub Gists backend (LORE-010/011).
+  When ``LORE_SEMANTIC_URL`` is set, ``search_concepts`` is further routed
+  to the semantic search server (Backend 3, LORE-030).  If the semantic
+  server is unreachable the call falls back to the gists backend gracefully.
 
 The router is instantiated once at server start-up; backends are validated
 lazily (inside each method) so that an unknown backend value raises
@@ -15,10 +18,21 @@ lazily (inside each method) so that an unknown backend value raises
 GistsClient is also lazy — it is not constructed until the first gists-backend
 call, allowing the server module to import without a valid ``LORE_GITHUB_TOKEN``
 when the gists backend is selected.
+
+Environment variables
+---------------------
+LORE_SEMANTIC_URL       Base URL of the semantic server (e.g.
+                        ``http://localhost:8766``).  When set and backend is
+                        ``"gists"``, ``search_concepts`` delegates to the
+                        semantic server instead of GitHub search.
+LORE_SEMANTIC_TIMEOUT   HTTP timeout in seconds for semantic server calls.
+                        Default: ``5.0``.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Optional
 
 import httpx
@@ -26,12 +40,19 @@ import httpx
 from lore.mcp.backends import gists as gists_backend
 from lore.mcp.backends.gists_client import GistsClient
 
+logger = logging.getLogger(__name__)
+
 
 class BackendRouter:
     """Routes MCP tool calls to the configured backend.
 
     The router delegates each MCP operation to either the selfhosted FastAPI
     service (via httpx) or the GitHub Gists backend module.
+
+    When the ``gists`` backend is active and ``LORE_SEMANTIC_URL`` is set,
+    ``search_concepts`` is further routed to the semantic search server
+    (Backend 3).  A connection failure or timeout falls back to the gists
+    backend transparently — the caller sees results either way.
 
     Args:
         backend: Backend name.  One of ``"selfhosted"``, ``"gists"``.
@@ -45,6 +66,10 @@ class BackendRouter:
     def __init__(self, backend: str, selfhosted_url: str) -> None:
         """Initialise the router.
 
+        Reads ``LORE_SEMANTIC_URL`` and ``LORE_SEMANTIC_TIMEOUT`` from the
+        environment at construction time so they are fixed for the lifetime of
+        this router instance.
+
         Args:
             backend: Backend selector string (e.g. ``"selfhosted"``).
             selfhosted_url: Base URL of the selfhosted FastAPI service.
@@ -52,6 +77,10 @@ class BackendRouter:
         self._backend = backend
         self._selfhosted_url = selfhosted_url
         self.__gists_client: Optional[GistsClient] = None
+        self._semantic_url: Optional[str] = os.environ.get("LORE_SEMANTIC_URL") or None
+        self._semantic_timeout: float = float(
+            os.environ.get("LORE_SEMANTIC_TIMEOUT", "5.0")
+        )
 
     # ------------------------------------------------------------------
     # Private helpers — selfhosted
@@ -82,6 +111,51 @@ class BackendRouter:
             raise RuntimeError(
                 f"Selfhosted API error {response.status_code}: {detail}"
             )
+
+    # ------------------------------------------------------------------
+    # Private helpers — semantic server (Backend 3)
+    # ------------------------------------------------------------------
+
+    def _semantic_search(
+        self,
+        problem: str,
+        type: Optional[str],
+        language: Optional[str],
+        limit: int,
+        min_rating: float,
+    ) -> dict:
+        """Call the semantic search server and return results.
+
+        Sends a ``GET {self._semantic_url}/search`` request with ``q`` and
+        ``k`` query parameters.  On connection error or timeout, logs a
+        warning and raises :class:`httpx.HTTPError` so the caller can fall
+        back to another backend.
+
+        Args:
+            problem: Natural-language query string.
+            type: Optional concept type filter (not forwarded — server-side
+                filtering is future work; callers should post-filter if needed).
+            language: Optional language filter (same caveat as ``type``).
+            limit: Maximum number of results to request from the server.
+            min_rating: Minimum average rating threshold (not forwarded —
+                Backend 3 stores ratings but search results include ``avg_rating``
+                so callers can post-filter).
+
+        Returns:
+            A dict with a ``"results"`` key as returned by the semantic server.
+
+        Raises:
+            httpx.HTTPError: On any transport-level failure (connection refused,
+                timeout, etc.) so the caller can apply a graceful fallback.
+        """
+        params = {"q": problem, "k": limit}
+        with httpx.Client(
+            base_url=self._semantic_url,  # type: ignore[arg-type]
+            timeout=self._semantic_timeout,
+        ) as client:
+            response = client.get("/search", params=params)
+            response.raise_for_status()
+            return response.json()
 
     # ------------------------------------------------------------------
     # Private helpers — gists
@@ -152,6 +226,14 @@ class BackendRouter:
                 return response.json()
 
         if self._backend == "gists":
+            if self._semantic_url:
+                try:
+                    return self._semantic_search(problem, type, language, limit, min_rating)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Semantic server call failed (%s) — falling back to gists backend.",
+                        exc,
+                    )
             return gists_backend.search_concepts(
                 self._gists_client,
                 problem,

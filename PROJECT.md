@@ -463,15 +463,15 @@ community sharing loop with tag-based search.
 Add the optional semantic server. GitHub Gists remain the source of
 truth. The server indexes the public corpus and serves vector search.
 
-- [ ] FastAPI + Qdrant semantic server (independently deployable)
+- [x] FastAPI + Qdrant semantic server (independently deployable)
 - [ ] Gist watcher: polls for new/updated `[lore-concept]` gists,
       embeds and indexes them
-- [ ] `LORE_SEMANTIC_URL` routing in MCP server — when set, overrides
+- [x] `LORE_SEMANTIC_URL` routing in MCP server — when set, overrides
       GitHub tag search with vector search against the server
 - [ ] Server-side ratings aggregation (outcome + hours_saved) across users
 - [ ] API key auth (one per GitHub user, issued on first gist publish)
 - [ ] Deduplication: flag near-duplicate concepts on publish
-- [ ] Graceful fallback: if server unreachable, fall back to Backend 2
+- [x] Graceful fallback: if server unreachable, fall back to Backend 2
 
 ### Phase 4 — Publishing
 

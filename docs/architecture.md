@@ -100,12 +100,12 @@ Full product spec: `PROJECT.md`.
 
 ```
 lore/
-├── mcp/            # MCP server + backend router
-├── selfhosted/     # Backend 1: FastAPI + SQLite + Qdrant
-├── semantic-server/ # Backend 3: FastAPI + Qdrant + gist watcher
-├── skills/         # Claude Code skill file + Stop hook
-├── seed/           # Seed concept graph (6 concepts, 5 links)
-└── tests/          # unit/ and integration/
+├── mcp/             # MCP server + backend router
+├── selfhosted/      # Backend 1: FastAPI + SQLite + Qdrant
+├── semantic_server/ # Backend 3: FastAPI + Qdrant (lore.semantic_server.api)
+├── skills/          # Claude Code skill file + Stop hook
+├── seed/            # Seed concept graph (6 concepts, 5 links)
+└── tests/           # unit/ and integration/
 ```
 
 ### 5.2 Level 2 — MCP Layer
@@ -120,7 +120,36 @@ lore/
 | `mcp/backends/gists.py` | Gists backend: `submit_concept`, `get_concept`, `search_concepts`, `link_concepts`, `rate_concept`; depth-1 link resolution and rating aggregation from gist comments; `LORE_FREELOADER=true` disables comment posting |
 | `core/scanner.py` | `scan_content()` — checks all concept text fields for credential patterns, long hex/base64, internal URLs, and `LORE_BLOCK_PATTERNS` custom blocklist before any write; returns structured violation list; cannot be bypassed |
 
-### 5.3 Level 2 — Self-hosted Backend
+### 5.3 Level 2 — Semantic Server (Backend 3)
+
+| Component | Responsibility |
+|-----------|---------------|
+| `semantic_server/api.py` | Standalone FastAPI service exposing `POST /concepts`, `GET /search`, `GET /health`; no SQLite — all concept metadata is stored denormalized in Qdrant payload |
+| `semantic_server/Dockerfile` | Multi-stage slim image; entrypoint downloads `all-MiniLM-L6-v2` on first start, caches in a named volume |
+| `docker-compose.semantic.yml` | Standalone compose stack: `semantic-server` + `qdrant` sidecar (no host port mapping on Qdrant to avoid collision with Backend 1) |
+
+#### Denormalized Qdrant payload
+
+Backend 3 has no SQLite, so each Qdrant point stores the full concept metadata:
+- External key: `gist_id` (string, not UUID) — used as the `concept_id` in search results
+- Point ID: `uuid5(NAMESPACE_URL, gist_id)` — deterministic, enables idempotent upserts
+- Payload fields: `gist_id`, `name`, `type`, `language`, `author`, `tags`, `when_to_use`, `dont_use_when`, `gist_updated_at`, `avg_outcome`, `avg_hours_saved`, `rating_count`, `usage_count`
+- `content` is NOT stored in payload (bloat in search hits; gist URL is the content pointer)
+- Payload indexes on `type`, `language`, `tags`, `author` — supports server-side filtering in future work
+
+#### Idempotent upsert
+
+`POST /concepts` checks the stored `gist_updated_at` before embedding. If unchanged, it returns `{"status": "skipped"}` without calling the embedding model. This allows the gist watcher (future work) to call upsert on every poll without redundant re-embedding.
+
+#### `GET /search` response shape
+
+Returns `{"results": [...]}` identical to `BackendRouter.search_concepts()` output for other backends. Each concept dict includes `score` (cosine similarity from Qdrant) and `links: []` (Backend 3 does not resolve graph links in search results).
+
+#### BackendRouter fork for semantic search
+
+When `LORE_BACKEND=gists` and `LORE_SEMANTIC_URL` is set, `BackendRouter.search_concepts()` delegates to `_semantic_search()` (a short-lived `httpx.Client` call to `GET {LORE_SEMANTIC_URL}/search`). On any transport failure (connection refused, timeout), the exception is caught, a warning is logged, and the call falls through to the gists backend — satisfying the graceful degradation quality goal (QS-4).
+
+### 5.4 Level 2 — Self-hosted Backend
 
 | Component | Responsibility |
 |-----------|---------------|
@@ -153,7 +182,7 @@ Re-indexing path (future work, tracked as R-5): a
 `POST /v1/concepts/{concept_id}/reindex` endpoint or a background task that
 reconciles SQLite concept_ids against Qdrant point IDs.
 
-### 5.4 Level 2 — Skill Layer
+### 5.5 Level 2 — Skill Layer
 
 | Component | Responsibility |
 |-----------|---------------|
@@ -163,7 +192,7 @@ reconciles SQLite concept_ids against Qdrant point IDs.
 | `.claude/hooks/lore-stop.sh` | Stop hook: reads session.json, resolves concept names via selfhosted API, emits batch rating + reflection prompts, clears session file; always exits 0 |
 | `hooks/hooks.json` | Registers lore-stop.sh as a Claude Code Stop hook via the plugin system |
 
-### 5.5 Level 2 — Seed Layer
+### 5.6 Level 2 — Seed Layer
 
 | Component | Responsibility |
 |-----------|---------------|
@@ -194,7 +223,31 @@ MCP server
 Agent  ← full concept graph in one call (no N+1 fetches)
 ```
 
-### 6.2 Session Rating (Stop Hook)
+### 6.2 Concept Search (Backend 3 — semantic server)
+
+```
+Agent
+  │  invoke search_concepts(problem="...")
+  ▼
+MCP server (server.py)
+  │  validate inputs; LORE_BACKEND=gists, LORE_SEMANTIC_URL set
+  │  BackendRouter._semantic_search(problem, limit)
+  │  GET {LORE_SEMANTIC_URL}/search?q=...&k=...  (httpx, timeout=5s)
+  ▼
+semantic_server/api.py
+  │  embed problem → all-MiniLM-L6-v2 (loaded at startup)
+  │  query Qdrant lore_concepts collection → top-k by cosine similarity
+  │  map Qdrant payloads → canonical concept dicts (links=[])
+  │  return {"results": [...]} with score field
+  ▼
+BackendRouter
+  │  return result to MCP server
+  ▼
+Agent  ← ranked concept list in one call
+                 (fallback to gists backend if semantic server unreachable)
+```
+
+### 6.3 Session Rating (Stop Hook)
 
 ```
 Session ends
@@ -257,16 +310,33 @@ No deployment. Requires `LORE_GITHUB_TOKEN` env var only.
 ### Backend 3 (semantic server)
 
 ```
-docker run lore/semantic-server   # independently deployable
-  └── FastAPI + Qdrant + gist watcher   :8766
+docker compose -f docker-compose.semantic.yml up -d
+  ├── semantic-server  (FastAPI + sentence-transformers)  :8766 (host)
+  └── qdrant           (vector store)                     internal only
 ```
 
 MCP server configured via:
 ```
 LORE_BACKEND=gists
 LORE_GITHUB_TOKEN=ghp_...
-LORE_SEMANTIC_URL=https://search.lore.dev   # optional
+LORE_SEMANTIC_URL=http://localhost:8766   # or public URL
+LORE_SEMANTIC_TIMEOUT=5.0                 # optional; default 5.0s
 ```
+
+#### Docker image — `lore/semantic-server`
+
+| Property | Value |
+|----------|-------|
+| Build | Multi-stage (builder + runtime) — `lore/semantic_server/Dockerfile` |
+| Base image | `python:3.14-slim` |
+| Cached model | `all-MiniLM-L6-v2` — downloaded on first start via `entrypoint.sh`, cached in `semantic-model-cache` volume |
+| Runtime user | `lore` (uid 1000, non-root) |
+| Exposed port | `8766` |
+| Healthcheck | `python -c "import urllib.request; urllib.request.urlopen('http://localhost:8766/health')"` |
+| Qdrant sidecar | Required — defined in `docker-compose.semantic.yml`; **no host port mapping** (avoids collision with Backend 1 Qdrant on :6333) |
+| Collection | `lore_concepts` — created idempotently at startup |
+
+The Qdrant sidecar in `docker-compose.semantic.yml` has **no host port mapping** (`expose` only), so it is only reachable within the compose network as `qdrant:6333`. This avoids port collision with Backend 1's Qdrant which binds `6333:6333` on the host.
 
 ---
 
@@ -315,6 +385,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-006 | SQLite-first write ordering in submit_concept — no rollback on Qdrant failure | accepted | 2026-05-29 |
 | ADR-007 | Content scanner in MCP layer, not FastAPI layer — scan before any network call | accepted | 2026-06-01 |
 | ADR-008 | Link responses enriched with `name`, `type`, `when_to_use` — no second round-trip for graph traversal | accepted | 2026-06-04 |
+| ADR-009 | Backend 3 uses denormalized Qdrant payload (no SQLite) — full concept metadata stored per Qdrant point; `gist_id` as external key; `uuid5(NAMESPACE_URL, gist_id)` as deterministic point ID | accepted | 2026-07-11 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 
