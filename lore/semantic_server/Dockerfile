@@ -45,7 +45,8 @@ FROM python:3.14-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/app/.cache \
-    TRANSFORMERS_CACHE=/app/.cache
+    TRANSFORMERS_CACHE=/app/.cache \
+    LORE_STORAGE_BACKEND=gist_qdrant
 
 # Create a non-root user before copying files so chown is cheap.
 RUN groupadd --gid 1000 lore && \

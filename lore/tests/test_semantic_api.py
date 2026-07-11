@@ -1,4 +1,5 @@
-"""Tests for lore.semantic_server.api and BackendRouter semantic routing (LORE-030).
+"""Tests for the unified Lore API with gist_qdrant backend and BackendRouter
+semantic routing (LORE-030).
 
 Strategy
 --------
@@ -45,7 +46,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from lore.semantic_server.api import app, COLLECTION_NAME
+from lore.server.api import app
+from lore.server.storage.gist_qdrant import COLLECTION_NAME
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +98,99 @@ def _make_mock_model(vector: list[float] | None = None) -> MagicMock:
     return mock
 
 
+class _MockGistStorage:
+    """Thin mock that delegates to the mock QdrantClient and model.
+
+    Mirrors GistQdrantBackend's interface so the unified server's gist_qdrant
+    routes work correctly in tests without importing qdrant_client models.
+    """
+
+    def __init__(self, mock_qdrant, mock_model):
+        self._qdrant = mock_qdrant
+        self._model = mock_model
+        # Direct attribute access from the /concepts route
+        self.qdrant = mock_qdrant
+        self.model = mock_model
+
+    def health_check(self) -> dict:
+        return {"status": "ok"}
+
+    def upsert_concept(self, payload: dict) -> dict:
+        from lore.server.storage.gist_qdrant import _gist_id_to_point_id
+        gist_id = payload["gist_id"]
+        point_id = _gist_id_to_point_id(gist_id)
+
+        existing = self._qdrant.retrieve(
+            collection_name=COLLECTION_NAME,
+            ids=[point_id],
+            with_payload=True,
+        )
+        if existing:
+            stored_updated_at = existing[0].payload.get("gist_updated_at")
+            if stored_updated_at == payload.get("gist_updated_at"):
+                return {"status": "skipped", "gist_id": gist_id}
+
+        embed_text = payload["name"] + " " + payload["when_to_use"]
+        vector = self._model.embed(embed_text)
+
+        from qdrant_client.http import models as qmodels
+        qdrant_payload = {
+            "gist_id": gist_id,
+            "name": payload["name"],
+            "type": payload["type"],
+            "language": payload.get("language"),
+            "author": payload.get("author"),
+            "tags": payload.get("tags", []),
+            "when_to_use": payload["when_to_use"],
+            "dont_use_when": payload.get("dont_use_when"),
+            "gist_updated_at": payload.get("gist_updated_at", ""),
+            "avg_outcome": 0.0,
+            "avg_hours_saved": None,
+            "rating_count": 0,
+            "usage_count": 0,
+        }
+        self._qdrant.upsert(
+            collection_name=COLLECTION_NAME,
+            points=[qmodels.PointStruct(id=point_id, vector=vector, payload=qdrant_payload)],
+        )
+        return {"status": "upserted", "gist_id": gist_id}
+
+    def search_concepts(self, query_vector, limit, type_filter, language_filter, min_rating):
+        from lore.server.storage.gist_qdrant import _payload_to_result
+        try:
+            response = self._qdrant.query_points(
+                collection_name=COLLECTION_NAME,
+                query=query_vector,
+                limit=limit,
+                with_payload=True,
+            )
+            hits = response.points
+        except Exception as exc:  # noqa: BLE001
+            if "doesn't exist" in str(exc) or "Not found" in str(exc):
+                return []
+            raise
+        return [
+            _payload_to_result(hit.payload, hit.score)
+            for hit in hits
+            if hit.payload
+        ]
+
+    def get_concept(self, concept_id: str):
+        from lore.server.storage.gist_qdrant import _gist_id_to_point_id, _payload_to_result
+        point_id = _gist_id_to_point_id(concept_id)
+        results = self._qdrant.retrieve(
+            collection_name=COLLECTION_NAME,
+            ids=[point_id],
+            with_payload=True,
+        )
+        if not results or not results[0].payload:
+            return None
+        return _payload_to_result(results[0].payload, 1.0)
+
+    def rate_concept(self, concept_id, outcome, session_id, hours_saved, notes):
+        raise NotImplementedError("rate_concept not implemented for gist_qdrant")
+
+
 def _make_test_client(mock_qdrant=None, mock_model=None) -> TestClient:
     """Return a TestClient with patched lifespan and injected app.state."""
     if mock_qdrant is None:
@@ -103,12 +198,14 @@ def _make_test_client(mock_qdrant=None, mock_model=None) -> TestClient:
     if mock_model is None:
         mock_model = _make_mock_model()
 
-    with patch("lore.semantic_server.api.lifespan", _noop_lifespan):
+    storage = _MockGistStorage(mock_qdrant, mock_model)
+    with patch("lore.server.api.lifespan", _noop_lifespan):
         client = TestClient(app, raise_server_exceptions=True)
 
     # Inject state — the noop lifespan leaves app.state unpopulated.
-    app.state.qdrant = mock_qdrant
+    app.state.storage = storage
     app.state.model = mock_model
+    app.state.backend_name = "gist_qdrant"
     return client
 
 
@@ -132,10 +229,12 @@ def mock_model():
 @pytest.fixture()
 def client(mock_qdrant, mock_model):
     """Return a TestClient with mocked Qdrant and EmbeddingModel."""
-    with patch("lore.semantic_server.api.lifespan", _noop_lifespan):
+    storage = _MockGistStorage(mock_qdrant, mock_model)
+    with patch("lore.server.api.lifespan", _noop_lifespan):
         tc = TestClient(app, raise_server_exceptions=True)
-    app.state.qdrant = mock_qdrant
+    app.state.storage = storage
     app.state.model = mock_model
+    app.state.backend_name = "gist_qdrant"
     return tc
 
 
@@ -595,10 +694,12 @@ class TestSearchErrorPropagation:
     @pytest.fixture()
     def client_no_raise(self, mock_qdrant, mock_model):
         """TestClient that returns 500 instead of raising on server exceptions."""
-        with patch("lore.semantic_server.api.lifespan", _noop_lifespan):
+        storage = _MockGistStorage(mock_qdrant, mock_model)
+        with patch("lore.server.api.lifespan", _noop_lifespan):
             tc = TestClient(app, raise_server_exceptions=False)
-        app.state.qdrant = mock_qdrant
+        app.state.storage = storage
         app.state.model = mock_model
+        app.state.backend_name = "gist_qdrant"
         return tc
 
     def test_search_unexpected_qdrant_error_returns_500(

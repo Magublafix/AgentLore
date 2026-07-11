@@ -1,15 +1,14 @@
-"""Tests for lore.selfhosted.api (LORE-003).
+"""Tests for the unified Lore API with sqlite_qdrant backend (LORE-003).
 
 Strategy
 --------
 - All tests use an in-memory SQLite database (no filesystem artefacts).
-- ``QdrantClient`` and ``EmbeddingModel`` are always mocked — no running
-  Qdrant instance is required and no model is loaded.
-- ``indexer.index_concept`` and ``indexer.search_concepts`` are patched at the
-  module level so handlers never reach real Qdrant.
+- ``EmbeddingModel`` is always mocked — no model is loaded.
+- A ``MockSqliteQdrantBackend`` wraps a real in-memory SQLite connection so
+  all DB assertions work against real data, while Qdrant calls are intercepted.
 - The FastAPI lifespan is patched to a no-op, then ``app.state`` is injected
   INSIDE the ``TestClient`` context (i.e. after the patched lifespan runs).
-  This guarantees the test-supplied connection/mocks are what the handlers see.
+  This guarantees the test-supplied objects are what the handlers see.
 
 All tests are synchronous; ``fastapi.testclient.TestClient`` drives the ASGI
 app synchronously using ``httpx`` under the hood.
@@ -18,16 +17,17 @@ app synchronously using ``httpx`` under the hood.
 from __future__ import annotations
 
 import uuid
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from typing import Generator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from lore.mcp.models import Concept, Link
-from lore.selfhosted.api import app, COLLECTION_NAME
+from lore.server.api import app, VALID_LINK_RELS
+from lore.server.storage.sqlite_qdrant import COLLECTION_NAME, SqliteQdrantBackend
 from lore.selfhosted.db import init_db, insert_concept
 
 
@@ -64,6 +64,134 @@ def _noop_lifespan(app: FastAPI):
     async def _inner(app: FastAPI):
         yield
     return _inner(app)
+
+
+class _MockStorage:
+    """Thin wrapper that provides a SqliteQdrantBackend-like interface backed by
+    an in-memory SQLite connection and a mock QdrantClient.
+
+    Used in tests to inject controlled state without starting real services.
+    """
+
+    def __init__(self, conn, mock_qdrant, mock_model):
+        self._conn = conn
+        self._qdrant = mock_qdrant
+        self._model = mock_model
+        # Attributes that the HTTP layer accesses directly on the storage object.
+        self.db = conn
+        self.qdrant = mock_qdrant
+
+    def health_check(self) -> dict:
+        qdrant_ok = False
+        db_ok = False
+        try:
+            self._qdrant.get_collections()
+            qdrant_ok = True
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self._conn.execute("SELECT 1")
+            db_ok = True
+        except Exception:  # noqa: BLE001
+            pass
+        return {"status": "ok", "qdrant": qdrant_ok, "db": db_ok}
+
+    def find_near_duplicate(self, query_vector):
+        from lore.selfhosted.vector_store import find_near_duplicate
+        return find_near_duplicate(self._qdrant, COLLECTION_NAME, query_vector)
+
+    def upsert_concept(self, payload: dict) -> dict:
+        """Delegate to the real insert + mock index path."""
+        from lore.mcp.models import Concept
+        concept_id = str(uuid.uuid4())
+        concept = Concept(
+            concept_id=concept_id,
+            name=payload["name"],
+            type=payload["type"],
+            content=payload["content"],
+            language=payload.get("language"),
+            when_to_use=payload["when_to_use"],
+            dont_use_when=payload.get("dont_use_when"),
+            tags=payload.get("tags", []),
+            source_url=payload.get("source_url"),
+            author=payload.get("author"),
+        )
+        insert_concept(self._conn, concept)
+        # Call the module-level index_concept — tests can patch this
+        from lore.server.storage import sqlite_qdrant as _mod
+        _mod.index_concept(self._conn, self._qdrant, concept, self._model, COLLECTION_NAME)
+        return {"concept_id": concept_id, "name": payload["name"]}
+
+    def search_concepts(self, query_vector, limit, type_filter, language_filter, min_rating):
+        """Delegate to the patched module-level search function."""
+        from lore.server.storage import sqlite_qdrant as _mod
+        concept_ids = _mod.search_vectors(self._qdrant, COLLECTION_NAME, query_vector, limit=limit)
+        from lore.selfhosted.db import get_concept, get_links_for_concept
+        from lore.server.storage.sqlite_qdrant import _concept_to_dict, _link_to_dict
+        results = []
+        for cid in concept_ids:
+            concept = get_concept(self._conn, cid)
+            if concept is None:
+                continue
+            if type_filter and concept.type != type_filter:
+                continue
+            if language_filter and concept.language != language_filter:
+                continue
+            if (concept.avg_rating or 0.0) < min_rating:
+                continue
+            links = get_links_for_concept(self._conn, cid)
+            entry = _concept_to_dict(concept)
+            entry["links"] = [_link_to_dict(lnk, self._conn) for lnk in links]
+            results.append(entry)
+        return results
+
+    def get_concept(self, concept_id: str):
+        from lore.selfhosted.db import get_concept, get_links_for_concept
+        from lore.server.storage.sqlite_qdrant import _concept_to_dict, _link_to_dict
+        concept = get_concept(self._conn, concept_id)
+        if concept is None:
+            return None
+        links = get_links_for_concept(self._conn, concept_id)
+        result = _concept_to_dict(concept)
+        result["links"] = [_link_to_dict(lnk, self._conn) for lnk in links]
+        return result
+
+    def rate_concept(self, concept_id, outcome, session_id, hours_saved, notes):
+        from lore.selfhosted.db import get_concept, insert_rating
+        from lore.mcp.models import Rating
+        rating = Rating(
+            rating_id=str(uuid.uuid4()),
+            concept_id=concept_id,
+            session_id=session_id,
+            outcome=outcome,
+            hours_saved=hours_saved,
+            notes=notes,
+        )
+        insert_rating(self._conn, rating)
+        updated = get_concept(self._conn, concept_id)
+        return {
+            "avg_rating": updated.avg_rating if updated else 0.0,
+            "time_saved_avg_hours": updated.time_saved_avg_hours if updated else None,
+        }
+
+    def log_session_usage(self, session_id: str, concept_id: str) -> None:
+        from lore.selfhosted.db import log_session_usage
+        try:
+            log_session_usage(self._conn, session_id, concept_id)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def insert_link(self, from_id: str, to_id: str, rel: str, label) -> str:
+        from lore.selfhosted.db import insert_link
+        from lore.mcp.models import Link
+        link = Link(
+            link_id=str(uuid.uuid4()),
+            from_id=from_id,
+            to_id=to_id,
+            rel=rel,
+            label=label,
+        )
+        return insert_link(self._conn, link)
 
 
 # ---------------------------------------------------------------------------
@@ -106,12 +234,13 @@ def client(conn, mock_qdrant, mock_model) -> Generator[TestClient, None, None]:
     completes (inside the ``with TestClient`` block), so handlers see the
     test-supplied objects.
     """
-    with patch("lore.selfhosted.api.lifespan", _noop_lifespan):
+    storage = _MockStorage(conn, mock_qdrant, mock_model)
+    with patch("lore.server.api.lifespan", _noop_lifespan):
         with TestClient(app, raise_server_exceptions=True) as c:
             # Inject test state after (no-op) lifespan has run.
-            app.state.db = conn
-            app.state.qdrant = mock_qdrant
+            app.state.storage = storage
             app.state.model = mock_model
+            app.state.backend_name = "sqlite_qdrant"
             yield c
 
 
@@ -140,11 +269,12 @@ def test_health_qdrant_down_returns_false(client, mock_qdrant):
     assert data["db"] is True
 
 
-def test_health_db_down_returns_false(client):
+def test_health_db_down_returns_false(client, conn, mock_qdrant, mock_model):
     """If the SQLite connection raises, health returns db=False but still HTTP 200."""
     bad_db = MagicMock()
     bad_db.execute.side_effect = Exception("db gone")
-    with patch.object(app.state, "db", bad_db):
+    bad_storage = _MockStorage(bad_db, mock_qdrant, mock_model)
+    with patch.object(app.state, "storage", bad_storage):
         response = client.get("/v1/health")
     assert response.status_code == 200
     data = response.json()
@@ -172,7 +302,7 @@ VALID_BODY = {
 
 def test_submit_concept_returns_201(client):
     """POST /v1/concepts with valid body returns 201 and a concept_id."""
-    with patch("lore.selfhosted.api.index_concept") as mock_idx:
+    with patch("lore.server.storage.sqlite_qdrant.index_concept") as mock_idx:
         mock_idx.return_value = "fake-id"
         response = client.post("/v1/concepts", json=VALID_BODY)
 
@@ -194,7 +324,7 @@ def test_submit_concept_invalid_type_returns_422(client):
 def test_submit_concept_scanner_block_returns_422(client):
     """If scan_content returns matches, submit returns 422 with the matches."""
     matches = [{"field": "content", "reason": "credential detected"}]
-    with patch("lore.selfhosted.api.scan_content", return_value=matches):
+    with patch("lore.server.api.scan_content", return_value=matches):
         response = client.post("/v1/concepts", json=VALID_BODY)
     assert response.status_code == 422
     data = response.json()
@@ -204,7 +334,7 @@ def test_submit_concept_scanner_block_returns_422(client):
 
 def test_submit_concept_qdrant_failure_returns_503(client):
     """If index_concept raises, endpoint returns 503 with concept_id."""
-    with patch("lore.selfhosted.api.index_concept") as mock_idx:
+    with patch("lore.server.storage.sqlite_qdrant.index_concept") as mock_idx:
         mock_idx.side_effect = Exception("Qdrant is down")
         response = client.post("/v1/concepts", json=VALID_BODY)
 
@@ -226,7 +356,7 @@ def test_submit_concept_with_links_inserts_links(client, conn):
         **VALID_BODY,
         "links": [{"to_id": target.concept_id, "rel": "uses", "label": "depends on"}],
     }
-    with patch("lore.selfhosted.api.index_concept"):
+    with patch("lore.server.storage.sqlite_qdrant.index_concept"):
         response = client.post("/v1/concepts", json=body)
 
     assert response.status_code == 201
@@ -244,7 +374,7 @@ def test_submit_concept_invalid_inline_rel_is_skipped(client):
         **VALID_BODY,
         "links": [{"to_id": str(uuid.uuid4()), "rel": "owns", "label": None}],
     }
-    with patch("lore.selfhosted.api.index_concept"):
+    with patch("lore.server.storage.sqlite_qdrant.index_concept"):
         response = client.post("/v1/concepts", json=body)
 
     # Submission must succeed; the bad link is skipped.
@@ -310,11 +440,11 @@ def test_search_concepts_returns_results(client, conn):
     concept = _make_concept()
     insert_concept(conn, concept)
 
-    with patch("lore.selfhosted.api.search_concepts") as mock_search:
-        mock_search.return_value = [concept]
+    with patch("lore.server.storage.sqlite_qdrant.search_vectors") as mock_search:
+        mock_search.return_value = [concept.concept_id]
         response = client.post(
             "/v1/concepts/search",
-            json={"problem": "concurrent database writes", "limit": 5},
+            json={"problem": "concurrent database writes", "limit": 5, "min_rating": 0},
         )
 
     assert response.status_code == 200
@@ -327,7 +457,7 @@ def test_search_concepts_returns_results(client, conn):
 
 def test_search_concepts_empty_returns_200(client):
     """Empty results return {"results": []} with HTTP 200."""
-    with patch("lore.selfhosted.api.search_concepts") as mock_search:
+    with patch("lore.server.storage.sqlite_qdrant.search_vectors") as mock_search:
         mock_search.return_value = []
         response = client.post(
             "/v1/concepts/search",
@@ -344,11 +474,11 @@ def test_search_concepts_logs_session_usage(client, conn):
     insert_concept(conn, concept)
 
     session_id = "test-session-abc"
-    with patch("lore.selfhosted.api.search_concepts") as mock_search:
-        mock_search.return_value = [concept]
+    with patch("lore.server.storage.sqlite_qdrant.search_vectors") as mock_search:
+        mock_search.return_value = [concept.concept_id]
         response = client.post(
             "/v1/concepts/search",
-            json={"problem": "test query"},
+            json={"problem": "test query", "min_rating": 0},
             headers={"X-Session-ID": session_id},
         )
 

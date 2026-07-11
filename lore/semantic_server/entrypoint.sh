@@ -18,7 +18,7 @@ else
     export TRANSFORMERS_OFFLINE=1
 fi
 
-exec uvicorn lore.semantic_server.api:app \
+exec uvicorn lore.server.api:app \
     --host 0.0.0.0 \
     --port 8766 \
     --workers 1

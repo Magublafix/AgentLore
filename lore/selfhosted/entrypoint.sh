@@ -12,4 +12,4 @@ fi
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
-exec uvicorn lore.selfhosted.api:app --host 0.0.0.0 --port 8765
+exec uvicorn lore.server.api:app --host 0.0.0.0 --port 8765
