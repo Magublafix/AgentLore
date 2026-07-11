@@ -29,6 +29,37 @@ Story format:
 - [ ] pytest --cov=lore --cov-fail-under=80 passes
 -->
 
+## [LORE-029] Benchmark runner: gists backend support with series cleanup
+
+**Phase:** Benchmark
+**Priority:** medium
+**Effort:** M
+**Agent:** python-mcp-engineer
+**Phase item:** N/A — benchmark sprint
+**Depends on:** Phase 3 (LORE-semantic-server) complete
+
+**As a** Lore developer
+**I want to be able to** run the stlgen benchmark against the gists backend with automatic cleanup
+**So that** the gists + semantic server stack is validated with the same benchmark methodology as the selfhosted backend
+
+**Context:**
+The stlgen benchmark currently runs against the selfhosted backend (SQLite + Qdrant). Once Phase 3 (semantic search server) is complete, the gists backend is equivalent in search quality. This story adds gists support to the benchmark runner, including series-level cleanup so test concepts don't persist on the contributor's GitHub account.
+
+**Acceptance Criteria:**
+- [ ] `samples/stlgen/benchmarks/run.py` accepts `--backend gists` flag; defaults to `selfhosted` (no regression)
+- [ ] With `--backend gists`, the runner sets `LORE_BACKEND=gists` and `LORE_SEMANTIC_URL` (from env); requires `LORE_GITHUB_TOKEN`
+- [ ] Benchmark runner tracks all gist IDs created during a series (from `submit_concept` responses)
+- [ ] At series end (after wrapup), all created gists are deleted via `GistsClient.delete_gist`; failures are logged but do not abort the run
+- [ ] Result files (`runN.md`, `aggregate.json`) include `backend` field so selfhosted and gists runs are distinguishable
+- [ ] A deleted-gist during a run (e.g. manual cleanup mid-run) is handled gracefully — logged, not crashed
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
 ## [LORE-028] Extended stlgen benchmark — 30 series for statistical confidence
 
 **Phase:** Benchmark

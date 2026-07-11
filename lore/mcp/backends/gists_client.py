@@ -304,6 +304,20 @@ class GistsClient:
         )
         return str(resp.json()["id"])
 
+    def delete_gist(self, gist_id: str) -> None:
+        """Delete a gist by id.
+
+        Args:
+            gist_id: The gist identifier.
+
+        Raises:
+            GistNotFoundError: If the gist does not exist (404).
+            GistAuthError: On 401/403.
+            GistRateLimitError: When the rate limit is exhausted.
+            GistAPIError: On unexpected errors.
+        """
+        self._request("DELETE", f"/gists/{gist_id}")
+
     def update_comment(self, gist_id: str, comment_id: str, body: str) -> None:
         """Edit an existing comment on a gist.
 

@@ -345,3 +345,26 @@ def test_auth_error_403(client: GistsClient):
     client._session.request.return_value = make_response(403)
     with pytest.raises(GistAuthError):
         client.create_gist({"f.md": "x"}, description="d", public=False)
+
+
+# ---------------------------------------------------------------------------
+# delete_gist
+# ---------------------------------------------------------------------------
+
+
+def test_delete_gist_happy_path(client: GistsClient):
+    """delete_gist issues DELETE to the correct path and returns None."""
+    client._session.request.return_value = make_response(204)
+    result = client.delete_gist("abc123")
+    assert result is None
+    client._session.request.assert_called_once_with(
+        "DELETE",
+        "https://api.github.com/gists/abc123",
+    )
+
+
+def test_delete_gist_not_found(client: GistsClient):
+    """delete_gist raises GistNotFoundError when the gist does not exist (404)."""
+    client._session.request.return_value = make_response(404)
+    with pytest.raises(GistNotFoundError):
+        client.delete_gist("missing")
