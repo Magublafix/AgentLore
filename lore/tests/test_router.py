@@ -452,3 +452,113 @@ class TestUnknownBackend:
         router = _unknown_router()
         with pytest.raises(ValueError, match="unknown"):
             router.rate_concept(concept_id="x", outcome=3, session_id="s")
+
+
+# ---------------------------------------------------------------------------
+# Semantic server routing (LORE-036)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchConceptsSemanticRouting:
+    """Tests for semantic server routing in search_concepts (LORE-036).
+
+    All tests use the gists backend.  ``_semantic_search`` is patched on the
+    router instance and ``gists_backend.search_concepts`` is patched at the
+    import location used by the router module.
+    """
+
+    def _gists_router_with_semantic_url(self) -> BackendRouter:
+        """Return a gists-backend router with LORE_SEMANTIC_URL set."""
+        import os
+        with patch.dict(os.environ, {"LORE_SEMANTIC_URL": "http://localhost:8766"}):
+            router = BackendRouter(backend="gists", selfhosted_url="http://localhost:8765")
+        return router
+
+    def test_semantic_url_set_calls_semantic_search(self):
+        """When semantic server succeeds on first attempt, _semantic_search is called once
+        and the result is returned directly without a fallback key."""
+        router = self._gists_router_with_semantic_url()
+        expected = {"results": [{"concept_id": "sem-001", "name": "Vector search"}]}
+
+        with patch.object(router, "_semantic_search", return_value=expected) as mock_sem, \
+             patch("lore.mcp.router.gists_backend.search_concepts") as mock_gists:
+            result = router.search_concepts(problem="semantic search pattern")
+
+        mock_sem.assert_called_once()
+        mock_gists.assert_not_called()
+        assert result is expected
+        assert "fallback" not in result
+
+    def test_semantic_server_down_retries_then_falls_back(self):
+        """When _semantic_search fails on both attempts (ConnectError), it is called
+        twice, the gists backend is called, and the result contains fallback=True."""
+        router = self._gists_router_with_semantic_url()
+        gists_result = {"results": [{"concept_id": "gist-001", "name": "WAL mode"}]}
+
+        with patch.object(
+            router, "_semantic_search", side_effect=httpx.ConnectError("refused")
+        ) as mock_sem, \
+             patch("lore.mcp.router.gists_backend.search_concepts", return_value=gists_result) as mock_gists, \
+             patch("lore.mcp.router.GistsClient"):
+            result = router.search_concepts(problem="sqlite concurrency")
+
+        assert mock_sem.call_count == 2
+        mock_gists.assert_called_once()
+        assert result["fallback"] is True
+        assert result["results"] == gists_result["results"]
+
+    def test_semantic_server_timeout_falls_back(self):
+        """When _semantic_search raises TimeoutException on both attempts, the gists
+        backend is called and the result contains fallback=True."""
+        router = self._gists_router_with_semantic_url()
+        gists_result = {"results": []}
+
+        with patch.object(
+            router, "_semantic_search", side_effect=httpx.TimeoutException("timed out")
+        ) as mock_sem, \
+             patch("lore.mcp.router.gists_backend.search_concepts", return_value=gists_result) as mock_gists, \
+             patch("lore.mcp.router.GistsClient"):
+            result = router.search_concepts(problem="timeout scenario")
+
+        assert mock_sem.call_count == 2
+        mock_gists.assert_called_once()
+        assert result["fallback"] is True
+
+    def test_semantic_url_not_set_skips_semantic_search(self):
+        """When LORE_SEMANTIC_URL is not set, _semantic_search is never called,
+        gists backend is called directly, and the result does NOT contain fallback."""
+        router = _gists_router()  # no LORE_SEMANTIC_URL in env
+        gists_result = {"results": [{"concept_id": "gist-002", "name": "Retry pattern"}]}
+
+        with patch.object(router, "_semantic_search") as mock_sem, \
+             patch("lore.mcp.router.gists_backend.search_concepts", return_value=gists_result) as mock_gists, \
+             patch("lore.mcp.router.GistsClient"):
+            result = router.search_concepts(problem="retry pattern")
+
+        mock_sem.assert_not_called()
+        mock_gists.assert_called_once()
+        assert "fallback" not in result
+
+    def test_semantic_retry_succeeds_on_second_attempt(self):
+        """When _semantic_search fails on attempt 1 and succeeds on attempt 2, the
+        result is returned without fallback=True and the gists backend is not called."""
+        router = self._gists_router_with_semantic_url()
+        sem_result = {"results": [{"concept_id": "sem-002", "name": "Backpressure"}]}
+
+        call_count = 0
+
+        def _flaky(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise httpx.ConnectError("transient error")
+            return sem_result
+
+        with patch.object(router, "_semantic_search", side_effect=_flaky) as mock_sem, \
+             patch("lore.mcp.router.gists_backend.search_concepts") as mock_gists:
+            result = router.search_concepts(problem="backpressure strategy")
+
+        assert mock_sem.call_count == 2
+        mock_gists.assert_not_called()
+        assert result is sem_result
+        assert "fallback" not in result

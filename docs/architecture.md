@@ -433,6 +433,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-007 | Content scanner in MCP layer, not FastAPI layer — scan before any network call | accepted | 2026-06-01 |
 | ADR-008 | Link responses enriched with `name`, `type`, `when_to_use` — no second round-trip for graph traversal | accepted | 2026-06-04 |
 | ADR-009 | Backend 3 uses denormalized Qdrant payload (no SQLite) — full concept metadata stored per Qdrant point; `gist_id` as external key; `uuid5(NAMESPACE_URL, gist_id)` as deterministic point ID | accepted | 2026-07-11 |
+| ADR-010 | `LORE_SEMANTIC_URL` retry-once before fallback — single retry keeps latency bounded while tolerating transient errors; after two consecutive failures the router falls back to gists backend transparently | accepted | 2026-07-11 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 

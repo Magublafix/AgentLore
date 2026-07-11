@@ -227,14 +227,22 @@ class BackendRouter:
 
         if self._backend == "gists":
             if self._semantic_url:
-                try:
-                    return self._semantic_search(problem, type, language, limit, min_rating)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Semantic server call failed (%s) — falling back to gists backend.",
-                        exc,
-                    )
-            return gists_backend.search_concepts(
+                for attempt in range(2):  # try up to twice before falling back
+                    try:
+                        return self._semantic_search(problem, type, language, limit, min_rating)
+                    except Exception as exc:  # noqa: BLE001
+                        if attempt == 0:
+                            logger.warning(
+                                "Semantic server attempt 1 failed (%s) — retrying once.",
+                                exc,
+                            )
+                            continue
+                        logger.warning(
+                            "Semantic server attempt 2 failed (%s) — falling back to gists.",
+                            exc,
+                        )
+                # fall through to gists below after retry exhaustion
+            result = gists_backend.search_concepts(
                 self._gists_client,
                 problem,
                 type=type,
@@ -242,6 +250,9 @@ class BackendRouter:
                 limit=limit,
                 min_rating=min_rating,
             )
+            if self._semantic_url:
+                result["fallback"] = True
+            return result
 
         raise ValueError(f"Unknown LORE_BACKEND: {self._backend!r}")
 

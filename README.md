@@ -148,8 +148,10 @@ If you prefer not to grant this permission, skip the allowlist entry and invoke 
 
 | Variable | Default | Description |
 |---|---|---|
-| `LORE_BACKEND` | `selfhosted` | Backend selector. Only `selfhosted` is implemented in Phase 1. |
+| `LORE_BACKEND` | `selfhosted` | Backend selector: `selfhosted`, `gists`. |
 | `LORE_SELFHOSTED_URL` | `http://localhost:8765` | Selfhosted backend URL |
+| `LORE_SEMANTIC_URL` | _(unset)_ | When set with `LORE_BACKEND=gists`, routes `search_concepts` to this semantic search server instead of GitHub tag search. Example: `http://localhost:8766` |
+| `LORE_SEMANTIC_TIMEOUT` | `5.0` | HTTP timeout in seconds for semantic server calls. Falls back to gists search on timeout. |
 | `LORE_CAPTURE_MODE` | `confirm` | `confirm` — shows concept and waits for approval before submitting. `auto` — submits directly without user confirmation. |
 | `LORE_BLOCK_PATTERNS` | _(empty)_ | Semicolon-separated regex patterns blocked at submit time. Use for team-specific sensitive strings: `LORE_BLOCK_PATTERNS=corp\.internal;secret-project` |
 
