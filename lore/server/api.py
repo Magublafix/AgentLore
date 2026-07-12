@@ -59,18 +59,12 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
+from lore.core.constants import VALID_CONCEPT_TYPES, VALID_LINK_RELS, embedding_text
 from lore.core.scanner import scan_content
 from lore.mcp.embeddings import EmbeddingModel
 from lore.server.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-VALID_CONCEPT_TYPES = {"project", "pattern", "tool", "testing", "architecture"}
-VALID_LINK_RELS = {"uses", "tested_by", "extends", "alternative_to", "requires"}
 
 # ---------------------------------------------------------------------------
 # Pydantic request/response models
@@ -450,8 +444,9 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
             from lore.server.storage.sqlite_qdrant import SqliteQdrantBackend
 
             sq_storage: SqliteQdrantBackend = storage
-            embed_text = (body.when_to_use or "") + " " + body.name
-            candidate_vector: list[float] = model.embed(embed_text)
+            candidate_vector: list[float] = model.embed(
+                embedding_text(body.when_to_use, body.name)
+            )
             dup = sq_storage.find_near_duplicate(candidate_vector)
             if dup is not None:
                 dup_id, dup_score = dup
@@ -465,7 +460,7 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
                 )
         else:
             candidate_vector = model.embed(
-                (body.when_to_use or "") + " " + body.name
+                embedding_text(body.when_to_use, body.name)
             )
 
         # --- Step 3: insert concept ---
@@ -484,10 +479,10 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
         try:
             result = storage.upsert_concept(payload)
         except Exception as exc:  # noqa: BLE001
-            logger.error("Qdrant indexing failed: %s", exc)
+            logger.error("Backend indexing failed: %s", exc)
             return JSONResponse(
                 status_code=503,
-                content={"error": "Qdrant unavailable — concept not saved"},
+                content={"error": "Backend unavailable — concept not saved"},
             )
 
         if result.pop("_qdrant_failed", False):
@@ -563,8 +558,6 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
         Returns:
             HTTP 200 ``{"results": [...]}`` with links attached per result.
         """
-        from fastapi import Header
-
         storage: StorageBackend = request.app.state.storage
         model: EmbeddingModel = request.app.state.model
 

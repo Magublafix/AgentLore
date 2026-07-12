@@ -25,8 +25,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from lore.core.constants import VALID_LINK_RELS
 from lore.mcp.models import Concept, Link
-from lore.server.api import app, VALID_LINK_RELS
+from lore.server.api import app
 from lore.server.storage.sqlite_qdrant import COLLECTION_NAME, SqliteQdrantBackend
 from lore.selfhosted.db import init_db, insert_concept
 

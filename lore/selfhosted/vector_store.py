@@ -14,13 +14,11 @@ UUID strings when the collection ``vector_size`` is fixed.
 
 from __future__ import annotations
 
-import hashlib
 import uuid
 from typing import Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
-from qdrant_client.http.exceptions import UnexpectedResponse
 
 
 # Vector configuration constants

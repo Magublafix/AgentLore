@@ -32,7 +32,17 @@ class StorageBackend(ABC):
                 ``gist_updated_at``.
 
         Returns:
-            ``{"concept_id": str, "status": "upserted" | "skipped"}``
+            ``{"concept_id": str, "status": "upserted" | "skipped"}`` in the
+            normal case.
+
+            When the primary store (SQLite) succeeds but the secondary index
+            (Qdrant) fails, a concrete implementation **may** return
+            ``{"concept_id": str, "_qdrant_failed": True}`` instead of
+            raising.  The HTTP layer interprets this as HTTP 503 and includes
+            the ``concept_id`` in the response body so the caller can
+            re-trigger indexing.  The primary store row is intentionally NOT
+            rolled back — this is a transitional contract until LORE-033
+            introduces a typed result class.
         """
 
     @abstractmethod

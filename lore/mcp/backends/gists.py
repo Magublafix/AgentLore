@@ -26,6 +26,7 @@ import os
 import sys
 from typing import Optional
 
+from lore.core.constants import VALID_LINK_RELS
 from lore.mcp.backends.gists_client import (
     GistNotFoundError,
     GistRateLimitError,
@@ -181,10 +182,8 @@ def link_concepts(
         GistRateLimitError: If the GitHub API rate limit is exhausted.
         GistAPIError: On unexpected GitHub API errors.
     """
-    _VALID_RELS = {"uses", "tested_by", "extends", "alternative_to", "requires"}
-
     # Step 1 — validate rel before any network call.
-    if rel not in _VALID_RELS:
+    if rel not in VALID_LINK_RELS:
         raise ValueError(
             f"Invalid rel: {rel!r}. Must be one of: uses, tested_by, extends, alternative_to, requires"
         )
@@ -368,7 +367,12 @@ def rate_concept(
 
     # Freeloader mode: skip all API calls when enabled.
     if os.environ.get("LORE_FREELOADER", "").lower() == "true":
-        return {"status": "no-op", "reason": "LORE_FREELOADER=true"}
+        return {
+            "status": "no-op",
+            "reason": "LORE_FREELOADER=true",
+            "avg_rating": None,
+            "time_saved_avg_hours": None,
+        }
 
     # Build comment body.
     payload: dict = {"outcome": outcome}
@@ -380,17 +384,30 @@ def rate_concept(
 
     # Find an existing rating comment by the authenticated user.
     existing_comments = client.list_comments(concept_id)
+    status: str = "created"
     for comment in existing_comments:
         if (
             comment.body.startswith(_LORE_RATING_PREFIX)
             and comment.author_login == client.authenticated_login
         ):
             client.update_comment(concept_id, comment.id, comment_body)
-            return {"status": "updated", "concept_id": concept_id}
+            status = "updated"
+            break
+    else:
+        # No existing rating — create a new comment.
+        client.create_comment(concept_id, comment_body)
 
-    # No existing rating — create a new comment.
-    client.create_comment(concept_id, comment_body)
-    return {"status": "created", "concept_id": concept_id}
+    # Fetch updated concept to compute aggregates.
+    updated = get_concept(client, concept_id)
+    avg_rating = updated["avg_rating"] if updated else None
+    time_saved_avg_hours = updated.get("avg_hours_saved") if updated else None
+
+    return {
+        "status": status,
+        "concept_id": concept_id,
+        "avg_rating": avg_rating,
+        "time_saved_avg_hours": time_saved_avg_hours,
+    }
 
 
 def search_concepts(

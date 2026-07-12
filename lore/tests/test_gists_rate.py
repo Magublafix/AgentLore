@@ -50,10 +50,18 @@ from lore.mcp.backends.gists_client import Comment, GistData, GistSummary
 
 
 def _make_client(login: str = "test-user") -> MagicMock:
-    """Return a MagicMock acting as a GistsClient with a known authenticated_login."""
+    """Return a MagicMock acting as a GistsClient with a known authenticated_login.
+
+    Provides a default ``get_gist`` return value so that ``rate_concept``'s
+    internal ``get_concept`` call (which fetches updated aggregates after
+    writing the rating comment) succeeds without extra per-test setup.
+    """
     client = MagicMock()
     client.authenticated_login = login
     client.list_comments.return_value = []
+    # Default get_gist returns a GistData parseable by get_concept so that
+    # rate_concept can fetch updated aggregates after writing the comment.
+    client.get_gist.return_value = _gist_data_for_concept()
     return client
 
 
@@ -140,7 +148,7 @@ class TestRateConceptCreate:
         assert args[0] == self.CONCEPT_ID
 
     def test_returns_created_status(self):
-        """Returns {'status': 'created', 'concept_id': ...} on new comment creation."""
+        """Returns {'status': 'created', 'concept_id': ..., 'avg_rating': ..., 'time_saved_avg_hours': ...} on new comment creation."""
         client = _make_client()
         client.list_comments.return_value = []
 
@@ -148,6 +156,8 @@ class TestRateConceptCreate:
 
         assert result["status"] == "created"
         assert result["concept_id"] == self.CONCEPT_ID
+        assert "avg_rating" in result
+        assert "time_saved_avg_hours" in result
 
     def test_update_comment_not_called_on_create(self):
         """update_comment must NOT be called when creating a new rating."""
@@ -192,7 +202,7 @@ class TestRateConceptEditIfExists:
         assert args[1] == "comment-99"
 
     def test_returns_updated_status(self):
-        """Returns {'status': 'updated', 'concept_id': ...} when updating."""
+        """Returns {'status': 'updated', 'concept_id': ..., 'avg_rating': ..., 'time_saved_avg_hours': ...} when updating."""
         client = _make_client()
         existing = _lore_rating_comment(outcome=2, comment_id="comment-77")
         client.list_comments.return_value = [existing]
@@ -201,6 +211,8 @@ class TestRateConceptEditIfExists:
 
         assert result["status"] == "updated"
         assert result["concept_id"] == self.CONCEPT_ID
+        assert "avg_rating" in result
+        assert "time_saved_avg_hours" in result
 
     def test_create_comment_not_called_on_update(self):
         """create_comment must NOT be called when updating an existing rating."""
@@ -340,7 +352,7 @@ class TestRateConceptFreeloader:
     CONCEPT_ID = "gist-abc"
 
     def test_freeloader_true_returns_no_op(self, monkeypatch):
-        """LORE_FREELOADER=true returns {'status': 'no-op', 'reason': 'LORE_FREELOADER=true'}."""
+        """LORE_FREELOADER=true returns {'status': 'no-op', 'reason': 'LORE_FREELOADER=true', 'avg_rating': None, 'time_saved_avg_hours': None}."""
         monkeypatch.setenv("LORE_FREELOADER", "true")
         client = _make_client()
 
@@ -348,6 +360,8 @@ class TestRateConceptFreeloader:
 
         assert result["status"] == "no-op"
         assert result["reason"] == "LORE_FREELOADER=true"
+        assert result["avg_rating"] is None
+        assert result["time_saved_avg_hours"] is None
 
     def test_freeloader_true_no_comment_calls(self, monkeypatch):
         """No API calls are made when LORE_FREELOADER=true."""
@@ -595,6 +609,8 @@ class TestRateConceptIntegration:
 
         assert rate_result["status"] == "created"
         assert rate_result["concept_id"] == self.GIST_ID
+        assert "avg_rating" in rate_result
+        assert "time_saved_avg_hours" in rate_result
 
         # Capture the comment body that was created.
         create_args, _ = client.create_comment.call_args

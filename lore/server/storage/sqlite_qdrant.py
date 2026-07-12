@@ -16,7 +16,6 @@ concurrent reads safe.
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 import uuid
 from pathlib import Path
@@ -35,15 +34,13 @@ from lore.selfhosted.db import (
     insert_rating,
     log_session_usage,
 )
-from lore.selfhosted.indexer import index_concept, search_concepts
+from lore.selfhosted.indexer import index_concept
 from lore.selfhosted.vector_store import find_near_duplicate, init_qdrant_collection, search_vectors
 from lore.server.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "concepts"
-
-VALID_LINK_RELS = {"uses", "tested_by", "extends", "alternative_to", "requires"}
 
 
 def _concept_to_dict(concept: Concept) -> dict:
@@ -176,11 +173,17 @@ class SqliteQdrantBackend(StorageBackend):
 
         Returns:
             ``{"concept_id": str, "name": str}`` on success.
+            ``{"concept_id": str, "name": str, "_qdrant_failed": True}`` when
+            Qdrant indexing fails after the SQLite insert has already
+            committed.  The HTTP layer treats this as HTTP 503 with the
+            ``concept_id`` included so the caller can re-index.  The SQLite
+            row is intentionally NOT rolled back — this is a deliberate Phase
+            1 trade-off.
 
         Raises:
-            Exception: If Qdrant indexing fails (SQLite insert is NOT rolled
-                back — deliberate Phase 1 trade-off; caller receives the
-                concept_id so re-indexing is possible).
+            Exception: Propagated only for unexpected errors before the SQLite
+                insert.  Qdrant failures after SQLite success are caught and
+                returned as the ``_qdrant_failed`` key.
         """
         concept_id = str(uuid.uuid4())
         concept = Concept(

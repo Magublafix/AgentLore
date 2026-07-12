@@ -22,11 +22,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
+from lore.core.constants import embedding_text
 from lore.mcp.embeddings import EmbeddingModel
 from lore.server.storage.base import StorageBackend
 
@@ -203,8 +203,7 @@ class GistQdrantBackend(StorageBackend):
                 return {"status": "skipped", "gist_id": gist_id}
 
         # Embed and upsert.
-        embed_text = payload["when_to_use"] + " " + payload["name"]
-        vector = self._model.embed(embed_text)
+        vector = self._model.embed(embedding_text(payload["when_to_use"], payload["name"]))
 
         qdrant_payload = {
             "gist_id": gist_id,
