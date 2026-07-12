@@ -71,7 +71,7 @@ Every story — in backlog, sprints, and features — uses this format:
 | Claude Code skill | Bash + markdown skill file |
 | Session tracking | JSON file (~/.lore/session.json) |
 
-Project structure: `lore/mcp/`, `lore/selfhosted/`, `lore/semantic-server/`, `lore/skills/`, `lore/seed/`, `lore/tests/`
+Project structure: `lore/mcp/`, `lore/selfhosted/`, `lore/semantic_server/`, `lore/server/`, `lore/seed/`, `lore/tests/`, `skills/`
 
 ---
 

@@ -7,6 +7,11 @@
 SESSION_FILE="${HOME}/.lore/session.json"
 SELFHOSTED_URL="${LORE_SELFHOSTED_URL:-http://localhost:8765}"
 
+VENV_PYTHON="$(dirname "$0")/../.venv/bin/python"
+if [ ! -x "$VENV_PYTHON" ]; then
+  VENV_PYTHON="python3"
+fi
+
 log() { printf '[lore-stop] %s\n' "$*" >&2; }
 
 read_session() {
@@ -16,7 +21,7 @@ read_session() {
   fi
   local content
   content=$(cat "${SESSION_FILE}" 2>/dev/null || echo "[]")
-  if ! echo "${content}" | python3 -c "import sys,json; d=json.load(sys.stdin); assert isinstance(d,list)" 2>/dev/null; then
+  if ! echo "${content}" | "$VENV_PYTHON" -c "import sys,json; d=json.load(sys.stdin); assert isinstance(d,list)" 2>/dev/null; then
     log "Session file is not a valid JSON array — treating as empty."
     echo "[]"
     return
@@ -34,7 +39,7 @@ lookup_concept_name() {
   # Returns "name (type)" or just the ID if the backend is unreachable
   local result
   result=$(curl -sf --max-time 2 "${SELFHOSTED_URL}/v1/concepts/${id}" 2>/dev/null) || { echo "${id}"; return; }
-  python3 -c "
+  "$VENV_PYTHON" -c "
 import sys, json
 try:
     d = json.loads('''${result}''')
@@ -49,7 +54,7 @@ main() {
   session_json=$(read_session)
 
   local concept_ids
-  mapfile -t concept_ids < <(python3 -c "
+  mapfile -t concept_ids < <("$VENV_PYTHON" -c "
 import sys, json
 ids = json.loads('''${session_json}''')
 for i in ids:

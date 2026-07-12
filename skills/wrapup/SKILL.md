@@ -67,6 +67,7 @@ For each concept in both groups, call:
 ```
 rate_concept(
   concept_id="<id>",
+  session_id="<current session id>",
   outcome=<1-5>,
   hours_saved=<float>   ← omit if zero or uncertain
 )

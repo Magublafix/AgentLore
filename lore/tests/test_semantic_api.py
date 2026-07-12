@@ -130,7 +130,7 @@ class _MockGistStorage:
             if stored_updated_at == payload.get("gist_updated_at"):
                 return {"status": "skipped", "gist_id": gist_id}
 
-        embed_text = payload["name"] + " " + payload["when_to_use"]
+        embed_text = payload["when_to_use"] + " " + payload["name"]
         vector = self._model.embed(embed_text)
 
         from qdrant_client.http import models as qmodels

@@ -24,6 +24,7 @@ from typing import Optional
 
 from qdrant_client import QdrantClient
 
+from lore.core.constants import embedding_text
 from lore.mcp.models import Concept
 from lore.mcp.embeddings import EmbeddingModel
 from lore.selfhosted.db import update_embedding, search_concepts_by_ids
@@ -77,7 +78,7 @@ def index_concept(
     Returns:
         The ``concept_id`` string (unchanged from ``concept.concept_id``).
     """
-    embed_text = concept.when_to_use + " " + concept.name
+    embed_text = embedding_text(concept.when_to_use, concept.name)
     vector: list[float] = model.embed(embed_text)
 
     # Write raw bytes to SQLite (idempotent — safe to retry).
@@ -158,6 +159,6 @@ def search_concepts(
     if min_rating > 0:
         # Unrated concepts (avg_rating None or 0.0) always pass through — only
         # actively low-rated ones are excluded.
-        concepts = [c for c in concepts if not c.avg_rating or c.avg_rating >= min_rating]
+        concepts = [c for c in concepts if c.avg_rating is None or c.avg_rating >= min_rating]
 
     return concepts[:limit]

@@ -50,7 +50,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Optional
@@ -624,10 +623,11 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
             )
             return JSONResponse(status_code=201, content={"link_id": link_id})
 
-        # gist_qdrant — no link storage, return a synthetic link_id
-        return JSONResponse(
-            status_code=201,
-            content={"link_id": str(uuid.uuid4())},
+        # gist_qdrant — link storage is not supported
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=501,
+            detail="Link storage is not supported by this backend.",
         )
 
     @app.post("/v1/concepts/{concept_id}/rate")
@@ -655,13 +655,20 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
                 content={"error": "not found", "concept_id": concept_id},
             )
 
-        result = storage.rate_concept(
-            concept_id=concept_id,
-            outcome=body.outcome,
-            session_id=body.session_id,
-            hours_saved=body.hours_saved,
-            notes=body.notes,
-        )
+        try:
+            result = storage.rate_concept(
+                concept_id=concept_id,
+                outcome=body.outcome,
+                session_id=body.session_id,
+                hours_saved=body.hours_saved,
+                notes=body.notes,
+            )
+        except NotImplementedError:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=501,
+                detail="Rating is not supported by this backend.",
+            )
         return result
 
 

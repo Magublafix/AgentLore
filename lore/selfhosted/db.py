@@ -55,7 +55,7 @@ def _concept_from_row(row: sqlite3.Row) -> Concept:
         tags=tags,
         source_url=row["source_url"],
         author=row["author"],
-        avg_rating=row["avg_rating"] or 0.0,
+        avg_rating=row["avg_rating"],
         usage_count=row["usage_count"] or 0,
         time_saved_avg_hours=row["time_saved_avg_hours"],
         created_at=row["created_at"] or "",

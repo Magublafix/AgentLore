@@ -178,20 +178,24 @@ lore/
 ├── mcp/server.py          # FastMCP server — MCP tool definitions
 ├── core/scanner.py        # Content scanner (called by submit_concept)
 ├── selfhosted/            # FastAPI service + SQLite + Qdrant
-│   ├── api.py             # HTTP endpoints (/v1/*)
 │   ├── db.py              # SQLite CRUD
 │   ├── indexer.py         # Embedding + vector upsert
 │   ├── vector_store.py    # Qdrant operations
 │   └── Dockerfile         # Two-container stack (lore-selfhosted + Qdrant); model cached in lore-model-cache volume
+├── server/                # Unified server with pluggable storage backends
+│   ├── api.py             # HTTP endpoints (/v1/*)
+│   └── storage/
+│       ├── sqlite_qdrant.py    # SQLite + Qdrant backend
+│       └── gist_qdrant.py      # GitHub Gists + Qdrant backend
 ├── seed/concepts.py       # REST CLI blueprint — 6 concepts, 5 links
 └── tests/                 # 208+ tests, ≥80% coverage enforced
 skills/
 ├── search-concepts/SKILL.md    # /search-concepts skill
 ├── capture-concept/SKILL.md    # /capture-concept skill
 └── wrapup/SKILL.md             # /wrapup skill
-.claude/
-├── hooks/lore-stop.sh          # Stop hook
-└── settings.json               # (empty — hook registered via hooks/hooks.json)
+hooks/
+├── lore-stop.sh                # Stop hook
+└── hooks.json                  # Hook registration
 docker-compose.yml              # lore-selfhosted + qdrant
 ```
 

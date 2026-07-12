@@ -641,3 +641,106 @@ def test_rate_concept_multiple_ratings_avg(client, conn):
     assert response.status_code == 200
     data = response.json()
     assert data["avg_rating"] == pytest.approx(3.0)
+
+
+# ---------------------------------------------------------------------------
+# Semantic dedup — 409 conflict
+# ---------------------------------------------------------------------------
+
+def test_submit_concept_dedup_returns_409(client):
+    """POST /v1/concepts returns 409 when find_near_duplicate finds a near-match."""
+    # The api calls sq_storage.find_near_duplicate which delegates to
+    # lore.selfhosted.vector_store.find_near_duplicate.  Patch there.
+    with patch("lore.selfhosted.vector_store.find_near_duplicate", return_value=("existing-id", 0.95)):
+        with patch("lore.server.storage.sqlite_qdrant.index_concept"):
+            response = client.post("/v1/concepts", json=VALID_BODY)
+
+    assert response.status_code == 409
+    data = response.json()
+    assert "existing_concept_id" in data
+    assert data["existing_concept_id"] == "existing-id"
+    assert data["similarity"] == pytest.approx(0.95, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Metrics endpoint
+# ---------------------------------------------------------------------------
+
+def test_metrics_returns_expected_fields(client, conn):
+    """GET /v1/metrics returns 200 with concept_count, rating_count, and avg_rating."""
+    # Seed one concept and one rating so the counts are non-trivial.
+    concept = _make_concept()
+    insert_concept(conn, concept)
+    from lore.selfhosted.db import insert_rating
+    from lore.mcp.models import Rating
+    rating = Rating(
+        rating_id=str(uuid.uuid4()),
+        concept_id=concept.concept_id,
+        session_id=None,
+        outcome=4,
+        hours_saved=None,
+        notes=None,
+    )
+    insert_rating(conn, rating)
+
+    response = client.get("/v1/metrics")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "concept_count" in data
+    assert "rating_count" in data
+    assert "avg_rating" in data
+    assert data["concept_count"] == 1
+    assert data["rating_count"] == 1
+    assert data["avg_rating"] == pytest.approx(4.0)
+
+
+def test_metrics_empty_db_returns_null_avg(client):
+    """GET /v1/metrics with no ratings returns avg_rating=null."""
+    response = client.get("/v1/metrics")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["concept_count"] == 0
+    assert data["rating_count"] == 0
+    assert data["avg_rating"] is None
+
+
+# ---------------------------------------------------------------------------
+# Admin reset endpoint — auth
+# ---------------------------------------------------------------------------
+
+def test_admin_reset_without_token_env_returns_403(client):
+    """DELETE /v1/admin/reset without LORE_ADMIN_TOKEN env var returns 403."""
+    # When LORE_ADMIN_TOKEN is not set (empty), the endpoint must reject the call.
+    with patch.dict("os.environ", {}, clear=False):
+        import os
+        os.environ.pop("LORE_ADMIN_TOKEN", None)
+        response = client.delete("/v1/admin/reset")
+
+    assert response.status_code == 403
+
+
+def test_admin_reset_wrong_token_returns_403(client):
+    """DELETE /v1/admin/reset with wrong X-Admin-Token header returns 403."""
+    with patch.dict("os.environ", {"LORE_ADMIN_TOKEN": "correct-token"}):
+        response = client.delete(
+            "/v1/admin/reset",
+            headers={"X-Admin-Token": "wrong-token"},
+        )
+
+    assert response.status_code == 403
+
+
+def test_admin_reset_correct_token_returns_200(client):
+    """DELETE /v1/admin/reset with correct X-Admin-Token returns 200."""
+    with patch.dict("os.environ", {"LORE_ADMIN_TOKEN": "secret-token"}):
+        response = client.delete(
+            "/v1/admin/reset",
+            headers={"X-Admin-Token": "secret-token"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "concepts_deleted" in data
+    assert "ratings_deleted" in data
