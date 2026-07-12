@@ -386,6 +386,25 @@ def test_submit_concept_invalid_inline_rel_is_skipped(client):
     assert response.status_code == 201
 
 
+def test_submit_concept_backend_exception_returns_503(client):
+    """If upsert_concept raises before returning, endpoint returns 503 with no concept_id.
+
+    This covers the outer except block (api.py ~line 480-484) which fires when
+    upsert_concept throws an unhandled exception — distinct from the
+    _qdrant_failed sentinel path which does return a concept_id.
+    """
+    with patch.object(app.state, "storage") as mock_storage:
+        mock_storage.find_near_duplicate.return_value = None
+        mock_storage.upsert_concept.side_effect = Exception("db crashed")
+        response = client.post("/v1/concepts", json=VALID_BODY)
+
+    assert response.status_code == 503
+    data = response.json()
+    assert "Backend unavailable" in data["error"]
+    # Unlike the _qdrant_failed path, no concept_id is returned.
+    assert "concept_id" not in data
+
+
 # ---------------------------------------------------------------------------
 # Get concept
 # ---------------------------------------------------------------------------

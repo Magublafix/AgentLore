@@ -77,6 +77,9 @@ def _payload_to_result(payload: dict, score: float) -> dict:
         "avg_rating": payload.get("avg_outcome", 0.0),
         "usage_count": payload.get("usage_count", 0),
         "time_saved_avg_hours": payload.get("avg_hours_saved"),
+        "content": None,
+        "source_url": None,
+        "created_at": None,
         "links": [],
         "score": round(score, 6),
     }

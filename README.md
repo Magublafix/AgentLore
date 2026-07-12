@@ -187,6 +187,7 @@ lore/
 │   └── storage/
 │       ├── sqlite_qdrant.py    # SQLite + Qdrant backend
 │       └── gist_qdrant.py      # GitHub Gists + Qdrant backend
+├── semantic_server/       # Semantic search server (Backend 3 HTTP API)
 ├── seed/concepts.py       # REST CLI blueprint — 6 concepts, 5 links
 └── tests/                 # 208+ tests, ≥80% coverage enforced
 skills/

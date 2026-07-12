@@ -10,6 +10,36 @@ VALID_CONCEPT_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _parse_name_from_description(description: str) -> str:
+    """Parse a lore-concept gist description: '[lore-concept] Name [tag1,tag2]'.
+
+    Input format: ``"[lore-concept] My Pattern [tag1, tag2]"``
+    Output: ``"My Pattern"``
+
+    Strips the leading ``"[lore-concept] "`` prefix, then strips the trailing
+    ``" [...]"`` suffix (everything from the last ``" ["`` onwards).  If
+    parsing fails for any reason the full description is returned as a fallback.
+
+    Args:
+        description: The raw gist description string.
+
+    Returns:
+        The extracted concept name, or the full description if parsing fails.
+    """
+    try:
+        prefix = "[lore-concept] "
+        if not description.startswith(prefix):
+            return description
+        remainder = description[len(prefix):]
+        # Strip trailing " [...]" tag section if present.
+        last_bracket = remainder.rfind(" [")
+        if last_bracket != -1:
+            remainder = remainder[:last_bracket]
+        return remainder
+    except Exception:  # noqa: BLE001
+        return description
+
+
 def embedding_text(when_to_use: str, name: str) -> str:
     """Return the canonical embedding input string for a concept.
 

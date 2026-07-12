@@ -391,7 +391,7 @@ def insert_rating(conn: sqlite3.Connection, rating: Rating) -> str:
         (rating.concept_id,),
     ).fetchone()
 
-    avg_rating = agg_row["avg_outcome"] or 0.0
+    avg_rating = float(agg_row["avg_outcome"])
     time_saved_avg = agg_row["avg_hours"]  # None if no rater provided hours_saved
 
     # Fetch current usage_count so we don't zero it out.

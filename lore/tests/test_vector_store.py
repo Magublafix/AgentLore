@@ -12,6 +12,7 @@ import pytest
 
 from lore.selfhosted.vector_store import (
     _concept_id_to_point_id,
+    find_near_duplicate,
     init_qdrant_collection,
     search_vectors,
     upsert_concept_vector,
@@ -217,3 +218,60 @@ class TestSearchVectors:
         search_vectors(client, "concepts", _fake_vector())
         call_kwargs = client.query_points.call_args.kwargs
         assert call_kwargs["limit"] == 5
+
+
+# ---------------------------------------------------------------------------
+# find_near_duplicate
+# ---------------------------------------------------------------------------
+
+class TestFindNearDuplicate:
+    def _mock_hit(self, concept_id: str, score: float) -> MagicMock:
+        hit = MagicMock()
+        hit.payload = {"concept_id": concept_id}
+        hit.score = score
+        return hit
+
+    def _mock_response(self, hits: list) -> MagicMock:
+        resp = MagicMock()
+        resp.points = hits
+        return resp
+
+    def test_returns_match_above_threshold(self) -> None:
+        """When Qdrant returns a hit above threshold, (concept_id, score) is returned."""
+        client = MagicMock()
+        client.query_points.return_value = self._mock_response([
+            self._mock_hit("cid-abc", 0.95),
+        ])
+
+        result = find_near_duplicate(client, "concepts", _fake_vector(), threshold=0.88)
+
+        assert result is not None
+        concept_id, score = result
+        assert concept_id == "cid-abc"
+        assert score == pytest.approx(0.95)
+
+    def test_returns_none_when_no_hits(self) -> None:
+        """When Qdrant returns no points, None is returned."""
+        client = MagicMock()
+        client.query_points.return_value = self._mock_response([])
+
+        result = find_near_duplicate(client, "concepts", _fake_vector())
+
+        assert result is None
+
+    def test_collection_not_found_returns_none(self) -> None:
+        """A 'Not found' exception from Qdrant is swallowed and returns None."""
+        client = MagicMock()
+        client.query_points.side_effect = Exception("Not found: collection doesn't exist")
+
+        result = find_near_duplicate(client, "concepts", _fake_vector())
+
+        assert result is None
+
+    def test_reraises_unexpected_error(self) -> None:
+        """An unexpected exception (e.g. disk failure) must propagate, not be swallowed."""
+        client = MagicMock()
+        client.query_points.side_effect = RuntimeError("disk failure")
+
+        with pytest.raises(RuntimeError, match="disk failure"):
+            find_near_duplicate(client, "concepts", _fake_vector())

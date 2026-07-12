@@ -211,6 +211,38 @@ class TestSeedQdrantUnavailable:
 
 
 # ---------------------------------------------------------------------------
+# Qdrant connectivity probe failure (Gap 5 — lines 354-371)
+# ---------------------------------------------------------------------------
+
+class TestSeedQdrantProbeFailure:
+    """seed() continues when the Qdrant connectivity probe (get_collections) fails."""
+
+    def test_seed_continues_if_qdrant_probe_fails(self, conn) -> None:
+        """When get_collections() raises after QdrantClient is built, seed still inserts."""
+        unreachable = MagicMock()
+        unreachable.get_collections.side_effect = ConnectionRefusedError("no qdrant")
+
+        with patch("qdrant_client.QdrantClient", return_value=unreachable):
+            result = seed(conn=conn, qdrant_client=None, embedding_model=None)
+
+        assert result.skipped is False
+        assert result.concepts_inserted == len(_CONCEPT_DEFS)
+        assert result.links_inserted == len(_LINK_DEFS)
+        assert result.concepts_indexed == 0
+
+    def test_seed_sqlite_rows_intact_when_qdrant_probe_fails(self, conn) -> None:
+        """All concepts must be queryable from SQLite even if Qdrant is unreachable."""
+        unreachable = MagicMock()
+        unreachable.get_collections.side_effect = ConnectionRefusedError("no qdrant")
+
+        with patch("qdrant_client.QdrantClient", return_value=unreachable):
+            seed(conn=conn, qdrant_client=None, embedding_model=None)
+
+        count = conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0]
+        assert count == len(_CONCEPT_DEFS)
+
+
+# ---------------------------------------------------------------------------
 # SeedResult dataclass
 # ---------------------------------------------------------------------------
 

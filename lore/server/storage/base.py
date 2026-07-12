@@ -2,9 +2,9 @@
 
 Every storage backend that the unified FastAPI server can route to must
 implement this interface.  The HTTP layer in ``lore.server.api`` calls these
-methods and expects the canonical shapes documented below — it never touches
-backend-specific objects (SQLite connections, QdrantClient instances, etc.)
-directly.
+methods and expects the canonical shapes documented below.  The HTTP layer
+never touches backend-specific objects on the common CRUD path.  Admin/metrics
+routes may access backend-specific accessors directly.
 """
 
 from __future__ import annotations
@@ -104,7 +104,9 @@ class StorageBackend(ABC):
             ``{"avg_rating": float, "time_saved_avg_hours": float | None}``
 
         Raises:
-            NotImplementedError: If this backend does not support ratings.
+            NotImplementedError: Subclasses that do not support ratings should
+                implement this method by raising ``NotImplementedError``.  The
+                HTTP layer translates that to HTTP 501.
         """
 
     @abstractmethod

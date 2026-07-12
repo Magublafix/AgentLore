@@ -37,6 +37,7 @@ from typing import Any
 
 import httpx
 
+from lore.core.constants import _parse_name_from_description
 from lore.server.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,10 @@ def _extract_payload(gist: dict[str, Any]) -> dict[str, Any] | None:
         description = gist.get("description", "")
         name = _parse_name_from_description(description)
 
+    if not when_to_use:
+        logger.warning("Skipping gist %s — missing 'when_to_use' field", gist_id)
+        return None
+
     return {
         "gist_id": gist_id,
         "name": name,
@@ -222,31 +227,6 @@ def _extract_payload(gist: dict[str, Any]) -> dict[str, Any] | None:
         "links": metadata.get("links", []),
         "gist_updated_at": gist.get("updated_at", ""),
     }
-
-
-def _parse_name_from_description(description: str) -> str:
-    """Extract the concept name from a gist description string.
-
-    Input format: ``"[lore-concept] My Pattern [tag1, tag2]"``
-    Returns: ``"My Pattern"``
-
-    Args:
-        description: The raw gist description string.
-
-    Returns:
-        The extracted concept name, or the full description as a fallback.
-    """
-    try:
-        prefix = "[lore-concept] "
-        if not description.startswith(prefix):
-            return description
-        remainder = description[len(prefix):]
-        last_bracket = remainder.rfind(" [")
-        if last_bracket != -1:
-            remainder = remainder[:last_bracket]
-        return remainder
-    except Exception:  # noqa: BLE001
-        return description
 
 
 # ---------------------------------------------------------------------------

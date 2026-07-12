@@ -39,14 +39,15 @@ lookup_concept_name() {
   # Returns "name (type)" or just the ID if the backend is unreachable
   local result
   result=$(curl -sf --max-time 2 "${SELFHOSTED_URL}/v1/concepts/${id}" 2>/dev/null) || { echo "${id}"; return; }
-  "$VENV_PYTHON" -c "
+  name=$(echo "${result}" | "$VENV_PYTHON" -c "
 import sys, json
 try:
-    d = json.loads('''${result}''')
-    print(d.get('name', '${id}') + ' (' + d.get('type', '?') + ')')
+    d = json.loads(sys.stdin.read())
+    print(d.get('name', '') + ' (' + d.get('type', '?') + ')')
 except Exception:
-    print('${id}')
-" 2>/dev/null || echo "${id}"
+    print('')
+" 2>/dev/null)
+  echo "${name:-${id}}"
 }
 
 main() {

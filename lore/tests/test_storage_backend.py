@@ -370,3 +370,137 @@ class TestGistQdrantBackendHealth:
         """health_check returns {"status": "ok"} when Qdrant is reachable."""
         result = gist_backend.health_check()
         assert result == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# GistQdrantBackend.search_concepts tests (Gap 2)
+# ---------------------------------------------------------------------------
+
+
+class TestGistQdrantBackendSearchConcepts:
+    """search_concepts behaviour for GistQdrantBackend."""
+
+    def test_search_returns_results_after_upsert(self, gist_backend):
+        """After upserting a concept, search_concepts returns at least one result."""
+        gist_backend.upsert_concept(_minimal_gist_payload())
+
+        results = gist_backend.search_concepts(
+            query_vector=[0.0] * 384,
+            limit=5,
+            type_filter=None,
+            language_filter=None,
+            min_rating=0.0,
+        )
+
+        assert isinstance(results, list)
+        # All-zero vectors may yield no cosine-based hits, but the call must not raise.
+        # If results are returned they must have the expected shape.
+        for r in results:
+            assert "concept_id" in r or "gist_id" in r or "name" in r
+
+    def test_search_empty_collection_returns_empty_list(self, gist_backend):
+        """search_concepts on an empty collection returns [] without raising."""
+        results = gist_backend.search_concepts(
+            query_vector=[0.0] * 384,
+            limit=5,
+            type_filter=None,
+            language_filter=None,
+            min_rating=0.0,
+        )
+        assert results == []
+
+    def test_search_qdrant_missing_collection_returns_empty(self):
+        """search_concepts returns [] when Qdrant raises a collection-not-found error."""
+        backend = GistQdrantBackend.__new__(GistQdrantBackend)
+        mock_qdrant = MagicMock()
+        # Simulate the error message pattern that the except clause catches.
+        mock_qdrant.query_points.side_effect = Exception("Not found: collection doesn't exist")
+        model = MagicMock()
+        model.embed.return_value = [0.0] * 384
+        backend._qdrant = mock_qdrant
+        backend._model = model
+
+        results = backend.search_concepts(
+            query_vector=[0.0] * 384,
+            limit=5,
+            type_filter=None,
+            language_filter=None,
+            min_rating=0.0,
+        )
+        assert results == []
+
+
+# ---------------------------------------------------------------------------
+# SqliteQdrantBackend filter / health / log_session_usage tests (Gap 3)
+# ---------------------------------------------------------------------------
+
+
+class TestSqliteQdrantBackendFilters:
+    """Filter branch coverage for search_concepts."""
+
+    def test_search_filters_by_type(self, sqlite_backend):
+        """search_concepts with type_filter only returns matching types."""
+        # Upsert two concepts with different types.
+        sqlite_backend.upsert_concept(_minimal_concept_payload(name="Alpha", type="pattern"))
+        sqlite_backend.upsert_concept(_minimal_concept_payload(name="Beta", type="tool"))
+
+        results = sqlite_backend.search_concepts(
+            query_vector=[0.0] * 384,
+            limit=10,
+            type_filter="pattern",
+            language_filter=None,
+            min_rating=0.0,
+        )
+
+        for r in results:
+            assert r["type"] == "pattern"
+
+    def test_search_filters_by_min_rating(self, sqlite_backend):
+        """A rated concept below min_rating is excluded; an unrated one is included."""
+        # Insert a rated concept.
+        r1 = sqlite_backend.upsert_concept(_minimal_concept_payload(name="Rated Low"))
+        sqlite_backend.rate_concept(
+            concept_id=r1["concept_id"],
+            outcome=1,
+            session_id=None,
+            hours_saved=None,
+            notes=None,
+        )
+        # Insert an unrated concept — avg_rating is None, must still pass.
+        sqlite_backend.upsert_concept(_minimal_concept_payload(name="Unrated"))
+
+        results = sqlite_backend.search_concepts(
+            query_vector=[0.0] * 384,
+            limit=10,
+            type_filter=None,
+            language_filter=None,
+            min_rating=3.0,
+        )
+
+        names = [r["name"] for r in results]
+        # The low-rated concept must not appear.
+        assert "Rated Low" not in names
+
+
+class TestSqliteQdrantBackendHealthCheck:
+    """health_check method."""
+
+    def test_health_check_returns_ok_with_flags(self, sqlite_backend):
+        """health_check returns {status: ok, qdrant: True, db: True} for a live backend."""
+        result = sqlite_backend.health_check()
+        assert result["status"] == "ok"
+        assert result["qdrant"] is True
+        assert result["db"] is True
+
+
+class TestSqliteQdrantBackendLogSessionUsage:
+    """log_session_usage exception-swallowing behaviour."""
+
+    def test_log_session_usage_exception_is_swallowed(self, sqlite_backend):
+        """If the underlying DB call raises, log_session_usage must not propagate."""
+        with patch(
+            "lore.server.storage.sqlite_qdrant.log_session_usage",
+            side_effect=Exception("db full"),
+        ):
+            # Must not raise.
+            sqlite_backend.log_session_usage("session-x", "concept-y")

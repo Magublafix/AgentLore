@@ -22,11 +22,13 @@ raising.
 from __future__ import annotations
 
 import json
+import logging
 import os
-import sys
 from typing import Optional
 
-from lore.core.constants import VALID_LINK_RELS
+logger = logging.getLogger(__name__)
+
+from lore.core.constants import VALID_LINK_RELS, _parse_name_from_description
 from lore.mcp.backends.gists_client import (
     GistNotFoundError,
     GistRateLimitError,
@@ -38,36 +40,6 @@ from lore.mcp.backends.gists_client import (
 # ---------------------------------------------------------------------------
 
 _LORE_RATING_PREFIX = "[lore-rating]"
-
-
-def _parse_name_from_description(description: str) -> str:
-    """Parse concept name from gist description.
-
-    Input format: ``"[lore-concept] My Pattern [tag1, tag2]"``
-    Output: ``"My Pattern"``
-
-    Strips the leading ``"[lore-concept] "`` prefix, then strips the trailing
-    ``" [...]"`` suffix (everything from the last ``" ["`` onwards).  If
-    parsing fails for any reason the full description is returned as a fallback.
-
-    Args:
-        description: The raw gist description string.
-
-    Returns:
-        The extracted concept name, or the full description if parsing fails.
-    """
-    try:
-        prefix = "[lore-concept] "
-        if not description.startswith(prefix):
-            return description
-        remainder = description[len(prefix):]
-        # Strip trailing " [...]" tag section if present.
-        last_bracket = remainder.rfind(" [")
-        if last_bracket != -1:
-            remainder = remainder[:last_bracket]
-        return remainder
-    except Exception:
-        return description
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +231,8 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
                 "name": _parse_name_from_description(linked_gist.description),
                 "when_to_use": linked_lore_json.get("when_to_use"),
             })
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to resolve link %s: %s", linked_gist_id, exc)
             resolved_links.append({"gist_id": linked_gist_id, "status": "unavailable"})
 
     # ---------------------------------------------------------------------------
@@ -270,7 +243,8 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
 
     try:
         comments = client.list_comments(concept_id)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to fetch comments for gist %s: %s", concept_id, exc)
         comments = []
 
     outcomes: list[float] = []
@@ -286,10 +260,7 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
             if "hours_saved" in rating_data and rating_data["hours_saved"] is not None:
                 hours_list.append(float(rating_data["hours_saved"]))
         except Exception as exc:
-            print(
-                f"[lore] Skipping malformed rating comment on gist {concept_id}: {exc}",
-                file=sys.stderr,
-            )
+            logger.warning("Skipping malformed rating comment on gist %s: %s", concept_id, exc)
 
     if outcomes:
         avg_rating = sum(outcomes) / len(outcomes)
@@ -307,6 +278,7 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
         "tags": lore_json.get("tags", []),
         "source_url": f"https://gist.github.com/{concept_id}",
         "avg_rating": avg_rating,
+        "time_saved_avg_hours": avg_hours_saved,
         "avg_hours_saved": avg_hours_saved,
         "links": resolved_links,
     }
@@ -400,7 +372,7 @@ def rate_concept(
     # Fetch updated concept to compute aggregates.
     updated = get_concept(client, concept_id)
     avg_rating = updated["avg_rating"] if updated else None
-    time_saved_avg_hours = updated.get("avg_hours_saved") if updated else None
+    time_saved_avg_hours = updated.get("time_saved_avg_hours") if updated else None
 
     return {
         "status": status,

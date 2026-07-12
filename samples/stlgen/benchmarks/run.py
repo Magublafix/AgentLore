@@ -38,6 +38,8 @@ from pathlib import Path
 
 import anthropic
 
+from lore.core.constants import VALID_CONCEPT_TYPES as _VALID_CONCEPT_TYPES
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -423,9 +425,6 @@ def handle_search_concepts(inputs: dict) -> str:
     if "error" not in result:
         _update_session(r["concept_id"] for r in result.get("results", []))
     return json.dumps(result)
-
-
-_VALID_CONCEPT_TYPES = {"project", "pattern", "tool", "testing", "architecture"}
 
 
 def handle_submit_concept(inputs: dict) -> str:
