@@ -220,7 +220,7 @@ def link_concepts(
     return {"link_id": f"{from_id}:{to_id}:{rel}", "status": "created"}
 
 
-def get_concept(client: GistsClient, concept_id: str) -> dict:
+def get_concept(client: GistsClient, concept_id: str) -> dict | None:
     """Fetch and return a concept from a GitHub Gist.
 
     Retrieves the gist by ``concept_id``, parses ``lore.json``, resolves
@@ -234,15 +234,13 @@ def get_concept(client: GistsClient, concept_id: str) -> dict:
         A dict with keys: ``concept_id``, ``name``, ``type``, ``language``,
         ``content``, ``when_to_use``, ``dont_use_when``, ``tags``,
         ``source_url``, ``avg_rating``, ``avg_hours_saved``, and ``links``.
-
-        If the gist is not found, returns:
-        ``{"error": "Concept <id> not found", "code": "not_found"}``.
+        Returns ``None`` if the gist is not found.
     """
     # Fetch the primary gist.
     try:
         gist_data = client.get_gist(concept_id)
     except GistNotFoundError:
-        return {"error": f"Concept {concept_id} not found", "code": "not_found"}
+        return None
 
     lore_json: dict = json.loads(gist_data.files["lore.json"])
 
@@ -472,7 +470,7 @@ def search_concepts(
             except GistRateLimitError as exc:
                 raise RuntimeError(f"GitHub rate limit reached: {exc}") from exc
 
-            if "error" in concept:
+            if concept is None:
                 # Gist not found or unavailable — skip silently.
                 continue
 

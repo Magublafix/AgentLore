@@ -485,15 +485,17 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
             result = storage.upsert_concept(payload)
         except Exception as exc:  # noqa: BLE001
             logger.error("Qdrant indexing failed: %s", exc)
-            # For sqlite_qdrant, concept_id was assigned inside upsert_concept
-            # but the exception propagated before we captured it.  We cannot
-            # surface a concept_id here without restructuring the backend
-            # significantly — instead we generate a sentinel to signal failure.
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Qdrant unavailable — concept not saved"},
+            )
+
+        if result.pop("_qdrant_failed", False):
             return JSONResponse(
                 status_code=503,
                 content={
                     "error": "Qdrant unavailable — concept saved but not indexed",
-                    "concept_id": str(uuid.uuid4()),
+                    "concept_id": result["concept_id"],
                 },
             )
 

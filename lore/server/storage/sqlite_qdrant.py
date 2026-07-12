@@ -197,7 +197,11 @@ class SqliteQdrantBackend(StorageBackend):
         )
 
         insert_concept(self._conn, concept)
-        index_concept(self._conn, self._qdrant, concept, self._model, COLLECTION_NAME)
+        try:
+            index_concept(self._conn, self._qdrant, concept, self._model, COLLECTION_NAME)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Qdrant indexing failed for concept %s: %s", concept_id, exc)
+            return {"concept_id": concept_id, "name": payload["name"], "_qdrant_failed": True}
 
         return {"concept_id": concept_id, "name": payload["name"]}
 
@@ -239,7 +243,7 @@ class SqliteQdrantBackend(StorageBackend):
                 continue
             if language_filter and concept.language != language_filter:
                 continue
-            if (concept.avg_rating or 0.0) < min_rating:
+            if concept.avg_rating is not None and concept.avg_rating < min_rating:
                 continue
             links = get_links_for_concept(self._conn, cid)
             entry = _concept_to_dict(concept)

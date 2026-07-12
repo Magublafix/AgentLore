@@ -20,7 +20,7 @@ submit_concept
 get_concept
     - Happy path: all fields present, links resolved (depth 1), ratings aggregated
     - ``avg_hours_saved`` computed from comments with hours_saved field
-    - Not found: returns ``{"error": "...", "code": "not_found"}``
+    - Not found: returns ``None``
     - Unavailable linked concept: ``{"gist_id": "...", "status": "unavailable"}``
     - Max 10 links: only first 10 resolved even when 12 exist in lore_json
     - Malformed rating comment: skipped without crash; valid ratings still computed
@@ -346,14 +346,14 @@ class TestGetConcept:
 
         assert result["name"] == "My Pattern"
 
-    def test_not_found_returns_error_dict(self):
-        """GistNotFoundError becomes a structured error dict."""
+    def test_not_found_returns_none(self):
+        """GistNotFoundError returns None (uniform not-found contract)."""
         client = _make_client()
         client.get_gist.side_effect = GistNotFoundError("not found")
 
         result = get_concept(client, "missing-gist")
 
-        assert result == {"error": "Concept missing-gist not found", "code": "not_found"}
+        assert result is None
 
     def test_links_resolved_at_depth_1(self):
         """Linked concepts are resolved inline (depth 1) — not just IDs."""

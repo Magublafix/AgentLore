@@ -372,7 +372,9 @@ async def _run_poll_cycle(storage: StorageBackend, github_token: str) -> None:
                 logger.info(
                     "Gist %s (%s): %s.", gist_id, payload.get("name", ""), status
                 )
-                processed_updated_ats.append(full_gist.get("updated_at", ""))
+                updated_at = full_gist.get("updated_at", "")
+                if updated_at:
+                    processed_updated_ats.append(updated_at)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "upsert_concept failed for gist %s: %s", gist_id, exc

@@ -117,9 +117,13 @@ class _MockStorage:
             author=payload.get("author"),
         )
         insert_concept(self._conn, concept)
-        # Call the module-level index_concept — tests can patch this
+        # Call the module-level index_concept — tests can patch this.
+        # Mirror SqliteQdrantBackend: catch Qdrant failure and return _qdrant_failed.
         from lore.server.storage import sqlite_qdrant as _mod
-        _mod.index_concept(self._conn, self._qdrant, concept, self._model, COLLECTION_NAME)
+        try:
+            _mod.index_concept(self._conn, self._qdrant, concept, self._model, COLLECTION_NAME)
+        except Exception:  # noqa: BLE001
+            return {"concept_id": concept_id, "name": payload["name"], "_qdrant_failed": True}
         return {"concept_id": concept_id, "name": payload["name"]}
 
     def search_concepts(self, query_vector, limit, type_filter, language_filter, min_rating):
@@ -333,7 +337,7 @@ def test_submit_concept_scanner_block_returns_422(client):
 
 
 def test_submit_concept_qdrant_failure_returns_503(client):
-    """If index_concept raises, endpoint returns 503 with concept_id."""
+    """If index_concept raises, endpoint returns 503 with the real concept_id."""
     with patch("lore.server.storage.sqlite_qdrant.index_concept") as mock_idx:
         mock_idx.side_effect = Exception("Qdrant is down")
         response = client.post("/v1/concepts", json=VALID_BODY)
@@ -342,7 +346,7 @@ def test_submit_concept_qdrant_failure_returns_503(client):
     data = response.json()
     assert "concept_id" in data
     assert "Qdrant unavailable" in data["error"]
-    # The concept_id must be a valid UUID even on failure.
+    # concept_id is the real SQLite-persisted UUID, not a fabricated sentinel.
     uuid.UUID(data["concept_id"])
 
 

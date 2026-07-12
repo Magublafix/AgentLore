@@ -203,7 +203,7 @@ class GistQdrantBackend(StorageBackend):
                 return {"status": "skipped", "gist_id": gist_id}
 
         # Embed and upsert.
-        embed_text = payload["name"] + " " + payload["when_to_use"]
+        embed_text = payload["when_to_use"] + " " + payload["name"]
         vector = self._model.embed(embed_text)
 
         qdrant_payload = {

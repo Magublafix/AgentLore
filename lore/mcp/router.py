@@ -277,7 +277,10 @@ class BackendRouter:
                 return response.json()
 
         if self._backend == "gists":
-            return gists_backend.get_concept(self._gists_client, concept_id)
+            result = gists_backend.get_concept(self._gists_client, concept_id)
+            if result is None:
+                raise RuntimeError(f"Concept {concept_id} not found")
+            return result
 
         raise ValueError(f"Unknown LORE_BACKEND: {self._backend!r}")
 
