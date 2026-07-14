@@ -54,3 +54,9 @@ def embedding_text(when_to_use: str, name: str) -> str:
         A single string ready to pass to the embedding model.
     """
     return (when_to_use or "") + " " + (name or "")
+
+
+#: Cosine-similarity threshold above which two concepts are considered
+#: near-duplicates.  Can be overridden at request time via the
+#: ``LORE_DEDUP_THRESHOLD`` environment variable.
+LORE_DEDUP_THRESHOLD: float = 0.92

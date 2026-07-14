@@ -43,7 +43,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from lore.mcp.router import BackendRouter
+from lore.mcp.router import BackendRouter, DuplicateConceptError
 
 
 # ---------------------------------------------------------------------------
@@ -189,24 +189,23 @@ class TestSelfhostedBackend:
         mock_client.post.assert_called_once()
         assert f"/v1/concepts/{cid}/rate" in mock_client.post.call_args[0][0]
 
-    def test_submit_concept_409_returns_body(self):
-        """submit_concept returns the body dict on a 409 (semantic duplicate)."""
+    def test_submit_concept_409_raises_duplicate_concept_error(self):
+        """submit_concept raises DuplicateConceptError on a 409 (semantic duplicate)."""
         body = {
-            "error": "semantic_duplicate",
-            "existing_concept_id": "old-id",
-            "similarity": 0.95,
+            "duplicate": True,
+            "similar": [{"id": "old-id", "title": "Existing Concept", "score": 0.95}],
         }
         response = _make_httpx_response(409, body)
         mock_client = _mock_httpx_client(response)
         router = _selfhosted_router()
 
         with patch.object(router, "_client", return_value=mock_client):
-            result = router.submit_concept(
-                name="X", type="pattern", content="c", when_to_use="w", tags=[]
-            )
+            with pytest.raises(DuplicateConceptError) as exc_info:
+                router.submit_concept(
+                    name="X", type="pattern", content="c", when_to_use="w", tags=[]
+                )
 
-        assert result["error"] == "semantic_duplicate"
-        assert result["existing_concept_id"] == "old-id"
+        assert exc_info.value.similar[0]["id"] == "old-id"
 
     def test_submit_concept_422_raises_value_error(self):
         """submit_concept raises ValueError on a 422 backend scanner rejection."""

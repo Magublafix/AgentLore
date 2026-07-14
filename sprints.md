@@ -497,14 +497,14 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 8 — 2026-07-25 → 2026-08-08
 **Goal:** Harden the semantic server with auth, ratings aggregation, and deduplication — completing Phase 3.
-**Status:** planned
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-033 | Server-side ratings aggregation | python-mcp-engineer | planned | — |
-| LORE-034 | API key auth — one key per GitHub user | python-mcp-engineer | planned | — |
-| LORE-035 | Deduplication — flag near-duplicate concepts on publish | python-mcp-engineer | planned | — |
+| LORE-033 | Server-side ratings aggregation | python-mcp-engineer | done | — |
+| LORE-034 | API key auth — one key per GitHub user | python-mcp-engineer | done | 102,957 |
+| LORE-035 | Deduplication — flag near-duplicate concepts on publish | python-mcp-engineer | done | — |
 
 ### Notes
 - All three stories depend on LORE-030 (core server) from Sprint 7.

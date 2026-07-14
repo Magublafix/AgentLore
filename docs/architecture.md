@@ -434,6 +434,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-008 | Link responses enriched with `name`, `type`, `when_to_use` — no second round-trip for graph traversal | accepted | 2026-06-04 |
 | ADR-009 | Backend 3 uses denormalized Qdrant payload (no SQLite) — full concept metadata stored per Qdrant point; `gist_id` as external key; `uuid5(NAMESPACE_URL, gist_id)` as deterministic point ID | accepted | 2026-07-11 |
 | ADR-010 | `LORE_SEMANTIC_URL` retry-once before fallback — single retry keeps latency bounded while tolerating transient errors; after two consecutive failures the router falls back to gists backend transparently | accepted | 2026-07-11 |
+| ADR-011 | API key auth for Backend 3 writes — one key per GitHub user, issued via /auth/register; key stored in ~/.lore/semantic-keys.db (SQLite); read endpoints remain unauthenticated; auth is a no-op for Backend 1 (sqlite_qdrant) | accepted | 2026-07-14 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 

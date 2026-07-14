@@ -187,6 +187,15 @@ class _MockGistStorage:
             return None
         return _payload_to_result(results[0].payload, 1.0)
 
+    def search_similar(
+        self,
+        vector: list,
+        top_k: int = 3,
+        exclude_id: str | None = None,
+    ) -> list:
+        """Return no duplicates by default — dedup is not under test here."""
+        return []
+
     def rate_concept(self, concept_id, outcome, session_id, hours_saved, notes):
         raise NotImplementedError("rate_concept not implemented for gist_qdrant")
 
@@ -206,6 +215,8 @@ def _make_test_client(mock_qdrant=None, mock_model=None) -> TestClient:
     app.state.storage = storage
     app.state.model = mock_model
     app.state.backend_name = "gist_qdrant"
+    # Disable auth for these tests (no key_store → _require_api_key is a no-op).
+    app.state.key_store = None
     return client
 
 
@@ -235,6 +246,8 @@ def client(mock_qdrant, mock_model):
     app.state.storage = storage
     app.state.model = mock_model
     app.state.backend_name = "gist_qdrant"
+    # Disable auth for these tests (no key_store → _require_api_key is a no-op).
+    app.state.key_store = None
     return tc
 
 
@@ -290,16 +303,19 @@ class TestUpsertConceptNew:
         assert data["gist_id"] == "abc123"
 
     def test_new_concept_calls_embed(self, client, mock_qdrant, mock_model):
-        """A new concept causes EmbeddingModel.embed() to be called once."""
+        """A new concept causes EmbeddingModel.embed() to be called (dedup + upsert)."""
         mock_qdrant.retrieve.return_value = []
 
         client.post("/concepts", json=_concept_body())
 
-        mock_model.embed.assert_called_once()
-        # Embedding target is name + " " + when_to_use
-        call_arg = mock_model.embed.call_args[0][0]
-        assert "SQLite WAL mode" in call_arg
-        assert "crash-safe" in call_arg
+        # embed is called at least once: once for the dedup check and once inside
+        # upsert_concept for the actual upsert embedding.
+        assert mock_model.embed.called
+        # All calls target the same content (name + when_to_use).
+        for call in mock_model.embed.call_args_list:
+            arg = call[0][0]
+            assert "SQLite WAL mode" in arg
+            assert "crash-safe" in arg
 
     def test_new_concept_calls_qdrant_upsert(self, client, mock_qdrant, mock_model):
         """A new concept calls qdrant.upsert() once."""
@@ -372,12 +388,19 @@ class TestUpsertConceptIdempotent:
         assert data["gist_id"] == "abc123"
 
     def test_same_timestamp_does_not_embed(self, client, mock_qdrant, mock_model):
-        """Same gist_updated_at must NOT call EmbeddingModel.embed()."""
+        """Same gist_updated_at skips the upsert embed, but dedup check still embeds.
+
+        The dedup check in the endpoint always calls embed() once to build the
+        query vector.  The _MockGistStorage.upsert_concept returns early on a
+        timestamp match, so embed() is called exactly once total (dedup only).
+        """
         mock_qdrant.retrieve.return_value = [self._make_existing_point()]
 
         client.post("/concepts", json=_concept_body())
 
-        mock_model.embed.assert_not_called()
+        # embed is called once for the dedup check; upsert_concept returns early
+        # without embedding again.
+        mock_model.embed.assert_called_once()
 
     def test_same_timestamp_does_not_upsert(self, client, mock_qdrant, mock_model):
         """Same gist_updated_at must NOT call qdrant.upsert()."""
@@ -414,12 +437,13 @@ class TestUpsertConceptUpdate:
         assert response.json()["status"] == "upserted"
 
     def test_different_timestamp_calls_embed(self, client, mock_qdrant, mock_model):
-        """Different gist_updated_at calls EmbeddingModel.embed() once."""
+        """Different gist_updated_at calls EmbeddingModel.embed() (dedup + upsert)."""
         mock_qdrant.retrieve.return_value = [self._make_existing_point("2026-01-01T00:00:00Z")]
 
         client.post("/concepts", json=_concept_body(gist_updated_at="2026-07-11T00:00:00Z"))
 
-        mock_model.embed.assert_called_once()
+        # embed is called at least once: once for dedup check and once for upsert.
+        assert mock_model.embed.called
 
     def test_different_timestamp_calls_upsert(self, client, mock_qdrant, mock_model):
         """Different gist_updated_at calls qdrant.upsert() once."""
@@ -700,6 +724,8 @@ class TestSearchErrorPropagation:
         app.state.storage = storage
         app.state.model = mock_model
         app.state.backend_name = "gist_qdrant"
+        # Disable auth for these tests (no key_store → _require_api_key is a no-op).
+        app.state.key_store = None
         return tc
 
     def test_search_unexpected_qdrant_error_returns_500(

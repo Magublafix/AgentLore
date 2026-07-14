@@ -110,6 +110,24 @@ class StorageBackend(ABC):
         """
 
     @abstractmethod
+    def add_rating(self, concept_id: str, outcome: int, hours_saved: float | None) -> dict:
+        """Append a rating to a concept and return updated aggregates.
+
+        Args:
+            concept_id: The concept identifier (treated as gist_id on Backend 3).
+            outcome: Rating value (1–5 inclusive).
+            hours_saved: Optional hours saved estimate; None if omitted.
+
+        Returns:
+            ``{"avg_outcome": float, "avg_hours_saved": float | None}``
+
+        Raises:
+            NotImplementedError: Subclasses that do not support this method
+                should raise NotImplementedError. The HTTP layer maps this to HTTP 501.
+            KeyError: If the concept does not exist.
+        """
+
+    @abstractmethod
     def health_check(self) -> dict:
         """Check the health of the storage backend.
 

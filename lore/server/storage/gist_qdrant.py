@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
+from statistics import mean
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
@@ -74,9 +76,11 @@ def _payload_to_result(payload: dict, score: float) -> dict:
         "tags": payload.get("tags", []),
         "when_to_use": payload.get("when_to_use", ""),
         "dont_use_when": payload.get("dont_use_when"),
-        "avg_rating": payload.get("avg_outcome", 0.0),
+        "avg_rating": payload.get("avg_outcome"),
         "usage_count": payload.get("usage_count", 0),
         "time_saved_avg_hours": payload.get("avg_hours_saved"),
+        "avg_outcome": payload.get("avg_outcome"),
+        "avg_hours_saved": payload.get("avg_hours_saved"),
         "content": None,
         "source_url": None,
         "created_at": None,
@@ -218,7 +222,7 @@ class GistQdrantBackend(StorageBackend):
             "when_to_use": payload["when_to_use"],
             "dont_use_when": payload.get("dont_use_when"),
             "gist_updated_at": payload.get("gist_updated_at", ""),
-            "avg_outcome": 0.0,
+            "avg_outcome": None,
             "avg_hours_saved": None,
             "rating_count": 0,
             "usage_count": 0,
@@ -301,6 +305,66 @@ class GistQdrantBackend(StorageBackend):
             return None
         return _payload_to_result(results[0].payload, 1.0)
 
+    def add_rating(self, concept_id: str, outcome: int, hours_saved: float | None) -> dict:
+        """Append a rating to a concept's Qdrant payload and return updated aggregates.
+
+        Looks up the Qdrant point by gist_id, appends the new rating entry to the
+        ``ratings`` list in the payload, recomputes ``avg_outcome`` and
+        ``avg_hours_saved``, then writes the updated fields back with
+        ``set_payload``.
+
+        Args:
+            concept_id: The gist ID string to look up.
+            outcome: Rating value (1–5 inclusive).
+            hours_saved: Optional hours saved estimate; None if omitted.
+
+        Returns:
+            ``{"avg_outcome": float, "avg_hours_saved": float | None}``
+
+        Raises:
+            KeyError: If no Qdrant point exists for the given concept_id.
+        """
+        point_id = _gist_id_to_point_id(concept_id)
+        results = self._qdrant.retrieve(
+            collection_name=COLLECTION_NAME,
+            ids=[point_id],
+            with_payload=True,
+        )
+        if not results or not results[0].payload:
+            raise KeyError(concept_id)
+
+        existing_payload = results[0].payload
+        ratings: list[dict] = list(existing_payload.get("ratings", []))
+        ratings.append(
+            {
+                "outcome": outcome,
+                "hours_saved": hours_saved,
+                "ts": datetime.utcnow().isoformat() + "Z",
+            }
+        )
+
+        avg_outcome = sum(r["outcome"] for r in ratings) / len(ratings)
+        hours_values = [r["hours_saved"] for r in ratings if r["hours_saved"] is not None]
+        avg_hours_saved: float | None = mean(hours_values) if hours_values else None
+
+        self._qdrant.set_payload(
+            collection_name=COLLECTION_NAME,
+            payload={
+                "ratings": ratings,
+                "avg_outcome": avg_outcome,
+                "avg_hours_saved": avg_hours_saved,
+                "rating_count": len(ratings),
+            },
+            points=[point_id],
+        )
+        logger.info(
+            "Rated concept gist_id=%s outcome=%d avg_outcome=%.3f",
+            concept_id,
+            outcome,
+            avg_outcome,
+        )
+        return {"avg_outcome": avg_outcome, "avg_hours_saved": avg_hours_saved}
+
     def rate_concept(
         self,
         concept_id: str,
@@ -309,15 +373,28 @@ class GistQdrantBackend(StorageBackend):
         hours_saved: float | None,
         notes: str | None,
     ) -> dict:
-        """Rate a concept — not yet implemented for Backend 3.
+        """Rate a concept by delegating to :meth:`add_rating`.
+
+        ``session_id`` and ``notes`` are accepted for interface compatibility
+        but are not stored — Backend 3 uses the aggregated payload model.
+
+        Args:
+            concept_id: The gist ID string of the concept to rate.
+            outcome: Rating value (1–5 inclusive).
+            session_id: Accepted but not stored.
+            hours_saved: Optional hours saved estimate.
+            notes: Accepted but not stored.
+
+        Returns:
+            ``{"avg_outcome": float, "avg_hours_saved": float | None}``
 
         Raises:
-            NotImplementedError: Always.  LORE-033 will implement this.
+            KeyError: If the concept does not exist.
         """
-        raise NotImplementedError(
-            "rate_concept is not yet implemented for the gist_qdrant backend "
-            "(tracked in LORE-033)."
-        )
+        try:
+            return self.add_rating(concept_id, outcome, hours_saved)
+        except KeyError:
+            raise  # let the HTTP layer handle 404
 
     def health_check(self) -> dict:
         """Check Qdrant connectivity.
@@ -331,3 +408,53 @@ class GistQdrantBackend(StorageBackend):
         # Lightweight check — just verify the connection responds.
         self._qdrant.get_collections()
         return {"status": "ok"}
+
+    def search_similar(
+        self,
+        vector: list[float],
+        top_k: int = 3,
+        exclude_id: str | None = None,
+    ) -> list[dict]:
+        """Find concepts with high vector similarity to the given embedding.
+
+        Used by the dedup check in the POST /concepts route to detect near-
+        duplicates before upserting.
+
+        Args:
+            vector: Pre-computed embedding to compare against the collection.
+            top_k: Maximum number of similar points to return.
+            exclude_id: Optional gist_id (concept_id) to exclude from results —
+                used to skip the concept being updated if its id is already known.
+
+        Returns:
+            List of dicts with ``id``, ``title``, and ``score`` keys, sorted
+            descending by score.  Returns ``[]`` if the collection is empty or
+            Qdrant is unreachable.
+        """
+        try:
+            response = self._qdrant.query_points(
+                collection_name=COLLECTION_NAME,
+                query=vector,
+                limit=top_k,
+                with_payload=True,
+            )
+            hits = response.points
+        except Exception as exc:  # noqa: BLE001
+            if "doesn't exist" in str(exc) or "Not found" in str(exc):
+                return []
+            logger.warning("search_similar failed: %s", exc)
+            return []
+
+        results = []
+        for hit in hits:
+            if not hit.payload:
+                continue
+            gist_id = hit.payload.get("gist_id", "")
+            if exclude_id and gist_id == exclude_id:
+                continue
+            results.append({
+                "id": gist_id,
+                "title": hit.payload.get("name", ""),
+                "score": round(hit.score, 6),
+            })
+        return results

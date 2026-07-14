@@ -31,8 +31,10 @@ LORE_SEMANTIC_TIMEOUT   HTTP timeout in seconds for semantic server calls.
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -41,6 +43,25 @@ from lore.mcp.backends import gists as gists_backend
 from lore.mcp.backends.gists_client import GistsClient
 
 logger = logging.getLogger(__name__)
+
+
+class DuplicateConceptError(Exception):
+    """Raised when the semantic server detects a near-duplicate concept.
+
+    Attributes:
+        similar: List of similar concept dicts, each with ``id``, ``title``,
+            and ``score`` keys.
+    """
+
+    def __init__(self, similar: list[dict]) -> None:
+        self.similar = similar
+        titles = ", ".join(
+            f"'{s['title']}' (score={s['score']:.3f})" for s in similar
+        )
+        super().__init__(
+            f"Near-duplicate concept detected — similar existing concepts: {titles}. "
+            "Link to an existing concept or resubmit with force=True to override."
+        )
 
 
 class BackendRouter:
@@ -80,6 +101,12 @@ class BackendRouter:
         self._semantic_url: Optional[str] = os.environ.get("LORE_SEMANTIC_URL") or None
         self._semantic_timeout: float = float(
             os.environ.get("LORE_SEMANTIC_TIMEOUT", "5.0")
+        )
+        self._semantic_api_key: Optional[str] = None
+        self._semantic_key_cache_path: Optional[Path] = (
+            Path("~/.lore/semantic-api-key.json").expanduser()
+            if self._semantic_url
+            else None
         )
 
     # ------------------------------------------------------------------
@@ -174,6 +201,68 @@ class BackendRouter:
         if self.__gists_client is None:
             self.__gists_client = GistsClient()
         return self.__gists_client
+
+    # ------------------------------------------------------------------
+    # Private helpers — semantic server API key
+    # ------------------------------------------------------------------
+
+    def _ensure_semantic_api_key(self) -> Optional[str]:
+        """Auto-register with the semantic server and cache the API key.
+
+        On first call: checks ~/.lore/semantic-api-key.json; if not found,
+        calls POST /auth/register using LORE_GITHUB_TOKEN. Subsequent calls
+        return the in-memory cached key without I/O.
+
+        Returns:
+            The API key string, or None if unavailable (no token, registration
+            failed, or no semantic URL configured).
+        """
+        if self._semantic_url is None:
+            return None
+
+        github_token = os.environ.get("LORE_GITHUB_TOKEN")
+        if not github_token:
+            return None
+
+        # In-memory cache hit.
+        if self._semantic_api_key is not None:
+            return self._semantic_api_key
+
+        # Disk cache hit.
+        cache_path = self._semantic_key_cache_path
+        if cache_path and cache_path.exists():
+            try:
+                data = _json.loads(cache_path.read_text())
+                if "api_key" in data:
+                    self._semantic_api_key = data["api_key"]
+                    return self._semantic_api_key
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to read semantic API key cache: %s", exc)
+
+        # Register with the semantic server.
+        try:
+            with httpx.Client(
+                base_url=self._semantic_url,
+                timeout=15.0,
+            ) as client:
+                response = client.post(
+                    "/auth/register",
+                    json={"github_token": github_token},
+                )
+                response.raise_for_status()
+                data = response.json()
+                api_key = data["api_key"]
+
+            self._semantic_api_key = api_key
+            if cache_path:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(_json.dumps({"api_key": api_key}))
+            return api_key
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to register with semantic server (writes will fail with 401): %s", exc
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Routed tool methods
@@ -295,6 +384,7 @@ class BackendRouter:
         dont_use_when: Optional[str] = None,
         source_url: Optional[str] = None,
         links: Optional[list[dict]] = None,
+        force: bool = False,
     ) -> dict:
         """Route ``submit_concept`` to the configured backend.
 
@@ -308,12 +398,15 @@ class BackendRouter:
             dont_use_when: Known anti-cases / counter-indications.  Optional.
             source_url: Origin URL.  Optional.
             links: Optional list of initial link dicts.
+            force: When ``True``, bypass the dedup check and upsert regardless
+                of similarity to existing concepts.
 
         Returns:
             On success: a dict with at least ``concept_id`` and ``name``.
-            On semantic duplicate (selfhosted only): the 409 response body.
 
         Raises:
+            DuplicateConceptError: When the backend detects a near-duplicate
+                concept and ``force`` is ``False``.
             ValueError: On 422 from selfhosted (backend scanner rejection),
                 or for unknown backend values.
             RuntimeError: On unexpected selfhosted HTTP errors.
@@ -333,13 +426,14 @@ class BackendRouter:
                 payload["dont_use_when"] = dont_use_when
             if source_url is not None:
                 payload["source_url"] = source_url
+            if force:
+                payload["force"] = True
 
             with self._client() as client:
                 response = client.post("/v1/concepts", json=payload)
                 if response.status_code == 409:
-                    # Semantic duplicate — return structured response so callers
-                    # can track the existing_concept_id for rating.
-                    return response.json()
+                    data = response.json()
+                    raise DuplicateConceptError(data.get("similar", []))
                 if response.status_code == 422:
                     data = response.json()
                     raise ValueError(
@@ -351,6 +445,9 @@ class BackendRouter:
                 return response.json()
 
         if self._backend == "gists":
+            # Eagerly register/cache the semantic API key when configured.
+            if self._semantic_url:
+                self._ensure_semantic_api_key()
             return gists_backend.submit_concept(
                 self._gists_client,
                 name=name,
@@ -444,6 +541,27 @@ class BackendRouter:
                 return response.json()
 
         if self._backend == "gists":
+            if self._semantic_url:
+                api_key = self._ensure_semantic_api_key()
+                payload: dict = {"concept_id": concept_id, "outcome": outcome}
+                if hours_saved is not None:
+                    payload["hours_saved"] = hours_saved
+                headers: dict = {}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                try:
+                    with httpx.Client(
+                        base_url=self._semantic_url,
+                        timeout=self._semantic_timeout,
+                    ) as client:
+                        response = client.post("/ratings", json=payload, headers=headers)
+                        response.raise_for_status()
+                        return response.json()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Semantic server rate_concept failed: %s", exc)
+                    raise RuntimeError(
+                        f"Failed to rate concept via semantic server: {exc}"
+                    ) from exc
             return gists_backend.rate_concept(
                 self._gists_client,
                 concept_id,

@@ -351,11 +351,11 @@ class TestGistQdrantBackendGetConcept:
 class TestGistQdrantBackendRate:
     """rate_concept behaviour."""
 
-    def test_rate_concept_raises_not_implemented(self, gist_backend):
-        """rate_concept raises NotImplementedError for GistQdrantBackend."""
-        with pytest.raises(NotImplementedError):
+    def test_rate_concept_raises_key_error_for_missing_concept(self, gist_backend):
+        """rate_concept raises KeyError when the concept_id does not exist in Qdrant."""
+        with pytest.raises(KeyError):
             gist_backend.rate_concept(
-                concept_id="test-gist-001",
+                concept_id="nonexistent-gist-id",
                 outcome=3,
                 session_id=None,
                 hours_saved=None,

@@ -94,6 +94,7 @@ from lore.mcp.server import (
     link_concepts,
     rate_concept,
 )
+from lore.mcp.router import DuplicateConceptError
 
 
 # ---------------------------------------------------------------------------
@@ -368,17 +369,17 @@ class TestSubmitConcept:
             with pytest.raises(httpx.ConnectError):
                 submit_concept(**self._VALID_ARGS)
 
-    def test_backend_409_returns_body(self):
-        """A 409 from the backend (semantic duplicate) returns the body dict for caller use."""
-        body = {"error": "semantic_duplicate", "existing_concept_id": "abc-123", "similarity": 0.95}
+    def test_backend_409_raises_duplicate_concept_error(self):
+        """A 409 from the backend (semantic duplicate) raises DuplicateConceptError."""
+        body = {"duplicate": True, "similar": [{"id": "abc-123", "title": "Existing", "score": 0.95}]}
         api_response = _make_response(409, body)
         mock_client = _mock_client(api_response)
 
         with patch("lore.mcp.router.BackendRouter._client", return_value=mock_client):
-            result = submit_concept(**self._VALID_ARGS)
+            with pytest.raises(DuplicateConceptError) as exc_info:
+                submit_concept(**self._VALID_ARGS)
 
-        assert result["error"] == "semantic_duplicate"
-        assert result["existing_concept_id"] == "abc-123"
+        assert exc_info.value.similar[0]["id"] == "abc-123"
 
     def test_local_scan_rejects_credential_in_name(self):
         """Credential pattern in the name field triggers local scan rejection."""

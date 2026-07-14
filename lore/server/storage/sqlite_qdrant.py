@@ -308,6 +308,19 @@ class SqliteQdrantBackend(StorageBackend):
             "time_saved_avg_hours": updated.time_saved_avg_hours if updated else None,
         }
 
+    def add_rating(self, concept_id: str, outcome: int, hours_saved: float | None) -> dict:
+        """Not applicable to sqlite_qdrant — raises NotImplementedError.
+
+        Args:
+            concept_id: Unused.
+            outcome: Unused.
+            hours_saved: Unused.
+
+        Raises:
+            NotImplementedError: Always.  Use ``rate_concept`` for Backend 1.
+        """
+        raise NotImplementedError("add_rating is not used by the sqlite_qdrant backend.")
+
     def log_session_usage(self, session_id: str, concept_id: str) -> None:
         """Log a session-concept usage event in SQLite.
 

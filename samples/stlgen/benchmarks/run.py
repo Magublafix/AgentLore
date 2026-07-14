@@ -1356,18 +1356,21 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-turns", type=int, default=MAX_TURNS, metavar="N",
                         help=f"Turn budget for the main coding loop (default: {MAX_TURNS})")
+    parser.add_argument("--start-series", type=int, default=1, metavar="N",
+                        help="First series number (default: 1). Use to avoid overwriting existing series.")
     args = parser.parse_args()
 
     if args.series is not None:
         # Multi-series mode: run N complete 10-run series.
         # Each series gets its own results/series_NNN/ subdirectory.
         n_series = args.series
+        start_series = args.start_series
         all_series_results: list[list[dict]] = []
 
-        for series_num in range(1, n_series + 1):
+        for series_num in range(start_series, start_series + n_series):
             series_dir = RESULTS_DIR / f"series_{series_num:03d}"
             print(f"\n{'#'*60}")
-            print(f"  SERIES {series_num}/{n_series}")
+            print(f"  SERIES {series_num}/{start_series + n_series - 1}")
             print(f"  Output dir: {series_dir}")
             print(f"{'#'*60}")
 

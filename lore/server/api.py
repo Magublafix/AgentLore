@@ -54,13 +54,16 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query, Request
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, field_validator
 
 from lore.core.constants import VALID_CONCEPT_TYPES, VALID_LINK_RELS, embedding_text
 from lore.core.scanner import scan_content
 from lore.mcp.embeddings import EmbeddingModel
+from lore.server.auth import KeyStore
 from lore.server.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -159,6 +162,30 @@ class RateRequest(BaseModel):
         return v
 
 
+class RatingSubmitRequest(BaseModel):
+    """Request body for POST /ratings (gist_qdrant backend only)."""
+
+    concept_id: str
+    outcome: int
+    hours_saved: Optional[float] = None
+
+    @field_validator("outcome")
+    @classmethod
+    def validate_outcome(cls, v: int) -> int:
+        """Reject outcome values outside the 1-5 range."""
+        if not 1 <= v <= 5:
+            raise ValueError("outcome must be between 1 and 5 inclusive")
+        return v
+
+    @field_validator("hours_saved")
+    @classmethod
+    def validate_hours_saved(cls, v: Optional[float]) -> Optional[float]:
+        """Reject negative hours_saved values."""
+        if v is not None and v < 0:
+            raise ValueError("hours_saved must be non-negative")
+        return v
+
+
 class ConceptUpsertRequest(BaseModel):
     """Request body for POST /concepts (gist_qdrant backend only).
 
@@ -174,6 +201,13 @@ class ConceptUpsertRequest(BaseModel):
     when_to_use: str
     dont_use_when: Optional[str] = None
     gist_updated_at: str
+    force: bool = False
+
+
+class RegisterRequest(BaseModel):
+    """Request body for POST /auth/register."""
+
+    github_token: str
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +259,43 @@ def _create_backend(model: EmbeddingModel, backend_name: str) -> StorageBackend:
 
 
 # ---------------------------------------------------------------------------
+# Auth dependency
+# ---------------------------------------------------------------------------
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def _require_api_key(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+) -> str:
+    """FastAPI dependency that enforces Bearer API key on gist_qdrant write endpoints.
+
+    Only enforces auth when backend is gist_qdrant. Returns the api_key string
+    on success, raises HTTPException 401 otherwise.
+
+    Args:
+        request: FastAPI request (injected automatically).
+        credentials: Optional Bearer credentials from Authorization header.
+
+    Returns:
+        The validated API key string, or "" when auth is disabled.
+
+    Raises:
+        HTTPException: 401 if auth is required but credentials are missing or invalid.
+    """
+    key_store = getattr(request.app.state, "key_store", None)
+    if key_store is None:
+        # sqlite_qdrant backend — auth is disabled
+        return ""
+    if credentials is None or credentials.scheme != "Bearer":
+        raise HTTPException(status_code=401, detail="API key required")
+    if not key_store.validate(credentials.credentials):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return credentials.credentials
+
+
+# ---------------------------------------------------------------------------
 # App factory + lifespan
 # ---------------------------------------------------------------------------
 
@@ -253,6 +324,12 @@ async def lifespan(app: FastAPI):
     app.state.model = model
     app.state.backend_name = backend_name
 
+    # Initialize KeyStore for gist_qdrant backend.
+    if backend_name == "gist_qdrant":
+        app.state.key_store = KeyStore()
+    else:
+        app.state.key_store = None
+
     # Start background Gist watcher when using the gist_qdrant backend.
     watcher_task: asyncio.Task | None = None
     if backend_name == "gist_qdrant":
@@ -271,6 +348,11 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await watcher_task
         logger.info("Gist watcher task stopped.")
+
+    # Close KeyStore if it was initialized.
+    key_store = getattr(app.state, "key_store", None)
+    if key_store is not None:
+        key_store.close()
 
     # Close SQLite connection if backend supports it.
     if hasattr(storage, "close"):
@@ -402,7 +484,11 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
         }
 
     @app.post("/v1/concepts", status_code=201)
-    async def submit_concept(body: ConceptSubmitRequest, request: Request):
+    async def submit_concept(
+        body: ConceptSubmitRequest,
+        request: Request,
+        _: str = Depends(_require_api_key),
+    ):
         """Submit a new concept to the knowledge graph.
 
         Steps:
@@ -581,7 +667,11 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
         return {"results": results}
 
     @app.post("/v1/links", status_code=201)
-    async def link_concepts_endpoint(body: LinkRequest, request: Request):
+    async def link_concepts_endpoint(
+        body: LinkRequest,
+        request: Request,
+        _: str = Depends(_require_api_key),
+    ):
         """Create a directed link between two existing concepts.
 
         Only available for the ``sqlite_qdrant`` backend.
@@ -632,7 +722,10 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
 
     @app.post("/v1/concepts/{concept_id}/rate")
     async def rate_concept_endpoint(
-        concept_id: str, body: RateRequest, request: Request
+        concept_id: str,
+        body: RateRequest,
+        request: Request,
+        _: str = Depends(_require_api_key),
     ):
         """Rate a concept and return updated aggregate statistics.
 
@@ -703,7 +796,11 @@ def _register_gist_routes(app: FastAPI) -> None:
         return {"status": "ok"}
 
     @app.post("/concepts", status_code=200)
-    async def gist_upsert_concept(body: ConceptUpsertRequest, request: Request):
+    async def gist_upsert_concept(
+        body: ConceptUpsertRequest,
+        request: Request,
+        _: str = Depends(_require_api_key),
+    ):
         """Upsert a concept into the gist_qdrant backend (gist_qdrant only).
 
         Args:
@@ -721,6 +818,8 @@ def _register_gist_routes(app: FastAPI) -> None:
             )
 
         storage: StorageBackend = request.app.state.storage
+        model: EmbeddingModel = request.app.state.model
+
         payload = {
             "gist_id": body.gist_id,
             "name": body.name,
@@ -732,6 +831,27 @@ def _register_gist_routes(app: FastAPI) -> None:
             "dont_use_when": body.dont_use_when,
             "gist_updated_at": body.gist_updated_at,
         }
+
+        # --- Semantic dedup check (skipped when force=True) ---
+        if not body.force:
+            from lore.core.constants import LORE_DEDUP_THRESHOLD
+
+            threshold = float(os.environ.get("LORE_DEDUP_THRESHOLD", str(LORE_DEDUP_THRESHOLD)))
+            from lore.core.constants import embedding_text as _embedding_text
+
+            embedding_vector: list[float] = model.embed(
+                _embedding_text(body.when_to_use, body.name)
+            )
+            similar = storage.search_similar(  # type: ignore[attr-defined]
+                embedding_vector, exclude_id=body.gist_id, top_k=3
+            )
+            hits_above_threshold = [s for s in similar if s["score"] >= threshold]
+            if hits_above_threshold:
+                return JSONResponse(
+                    status_code=409,
+                    content={"duplicate": True, "similar": hits_above_threshold},
+                )
+
         return storage.upsert_concept(payload)
 
     @app.get("/search")
@@ -768,6 +888,90 @@ def _register_gist_routes(app: FastAPI) -> None:
             min_rating=0.0,
         )
         return {"results": results}
+
+    @app.post("/auth/register", status_code=201)
+    async def register(body: RegisterRequest, request: Request):
+        """Register a GitHub user and issue an API key. gist_qdrant backend only.
+
+        Verifies the provided GitHub token with the GitHub REST API, then
+        issues (or retrieves) a Lore API key for that user.
+
+        Args:
+            body: Contains the GitHub personal access token.
+            request: FastAPI request.
+
+        Returns:
+            HTTP 201 ``{"api_key": str, "github_login": str}`` on success.
+            HTTP 401 if the GitHub token is invalid.
+            HTTP 404 if this backend does not support auth.
+            HTTP 502 if the GitHub API is unreachable.
+        """
+        if request.app.state.backend_name != "gist_qdrant":
+            return JSONResponse(
+                status_code=404,
+                content={"error": "auth not available for this backend"},
+            )
+
+        from lore.server.auth import verify_github_token as _verify_github_token
+
+        try:
+            user = _verify_github_token(body.github_token)
+        except httpx.HTTPStatusError:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "GitHub token invalid or insufficient permissions"},
+            )
+        except httpx.HTTPError:
+            return JSONResponse(
+                status_code=502,
+                content={"error": "GitHub API unreachable"},
+            )
+
+        api_key = request.app.state.key_store.get_or_create(
+            str(user["id"]), user["login"]
+        )
+        return JSONResponse(
+            status_code=201,
+            content={"api_key": api_key, "github_login": user["login"]},
+        )
+
+    @app.post("/ratings", status_code=200)
+    async def post_rating(
+        body: RatingSubmitRequest,
+        request: Request,
+        _: str = Depends(_require_api_key),
+    ):
+        """Append a rating to a concept and return updated aggregates (gist_qdrant only).
+
+        Args:
+            body: Validated :class:`RatingSubmitRequest`.
+            request: FastAPI request.
+
+        Returns:
+            HTTP 200 ``{"avg_outcome": float, "avg_hours_saved": float | None}`` on success.
+            HTTP 404 if the backend is not gist_qdrant or the concept does not exist.
+            HTTP 501 if the backend does not support this operation.
+        """
+        if request.app.state.backend_name != "gist_qdrant":
+            return JSONResponse(
+                status_code=404,
+                content={"error": "route not active for this backend"},
+            )
+
+        storage: StorageBackend = request.app.state.storage
+        try:
+            result = storage.add_rating(body.concept_id, body.outcome, body.hours_saved)
+        except KeyError:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "not found", "concept_id": body.concept_id},
+            )
+        except NotImplementedError:
+            return JSONResponse(
+                status_code=501,
+                content={"error": "Rating is not supported by this backend."},
+            )
+        return result
 
 
 # ---------------------------------------------------------------------------

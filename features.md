@@ -451,3 +451,45 @@ Feature format:
 **What changed:** search_concepts retries _semantic_search once before falling back (retry-once policy). Fallback result carries {"fallback": true} so callers can detect the degraded path. LORE_SEMANTIC_TIMEOUT configurable (default 5s). WARNING logged on each failed attempt.
 
 **Implementation notes:** Retry-once chosen over immediate fallback to tolerate transient connection blips without adding meaningful latency on sustained outages. Known gap: if the gists fallback itself fails (rate limit, auth error), the exception propagates uncaught — acceptable at this scale, deferred to Sprint 8+ if needed.
+
+---
+
+## [LORE-034] API key auth — one key per GitHub user
+
+**Sprint:** 8   **Shipped:** 2026-07-14   **Phase:** 3   **Tokens:** 102,957
+
+**As a** Lore operator
+**I want to be able to** require API key authentication for writes to the semantic server
+**So that** only verified GitHub users can publish or rate concepts, preventing spam
+
+**What changed:** `lore/server/auth.py` — `KeyStore` (SQLite at `~/.lore/semantic-keys.db`) + `verify_github_token()`. `POST /auth/register` endpoint (gist_qdrant only): verifies GitHub token, returns idempotent API key. `_require_api_key` FastAPI dependency wired to all write endpoints (`POST /v1/concepts`, `POST /v1/concepts/{id}/rate`, `POST /concepts`, `POST /v1/links`); no-op on sqlite_qdrant. `lore/mcp/router.py` — `_ensure_semantic_api_key()` auto-registers on first use, caches in memory + `~/.lore/semantic-api-key.json`.
+
+**Implementation notes:** Auth is gist_qdrant-only — Backend 1 (selfhosted) is local and requires no auth. Key storage is SQLite (not Qdrant) for isolation from concept data. INSERT OR IGNORE ensures idempotency. 29 tests in test_auth.py; also caught missing auth dependency on `POST /v1/links` (genuine production defect fixed). 517 total tests, 96.94% coverage.
+
+---
+
+## [LORE-033] Server-side ratings aggregation
+
+**Sprint:** 8   **Shipped:** 2026-07-14   **Phase:** 3   **Tokens:** —
+
+**As a** Lore concept author
+**I want to be able to** see aggregated ratings (outcome, hours_saved) from all users who used my concept
+**So that** high-quality community concepts surface to the top of search results over time
+
+**What changed:** `POST /ratings` endpoint (gist_qdrant only, auth required): appends `{outcome, hours_saved, ts}` to Qdrant point's `ratings` list payload field. `GET /search` response now includes `avg_outcome` and `avg_hours_saved` (null when no ratings). `BackendRouter.rate_concept()` posts to `/ratings` when `LORE_SEMANTIC_URL` is set, attaching Bearer key via `_ensure_semantic_api_key()`.
+
+**Implementation notes:** Aggregation at query time from stored rating lists — no materialized view. `hours_saved` averages filter out None values (partial ratings allowed). 43 tests in test_ratings.py; 588 total tests, 97.14% coverage.
+
+---
+
+## [LORE-035] Deduplication — flag near-duplicate concepts on publish
+
+**Sprint:** 8   **Shipped:** 2026-07-14   **Phase:** 3   **Tokens:** —
+
+**As a** Lore agent user
+**I want to be able to** be warned when a concept I'm submitting is very similar to one that already exists
+**So that** the knowledge graph stays non-redundant and I can link to the existing concept instead of creating a duplicate
+
+**What changed:** `gist_upsert_concept` handler: before upsert, embeds incoming concept and calls `storage.search_similar()`; if any hit scores >= `LORE_DEDUP_THRESHOLD` (default 0.92, runtime-configurable via env var), returns 409 `{"duplicate": True, "similar": [{id, title, score}]}`. `force=True` in request body bypasses check. `DuplicateConceptError` in router catches 409 and surfaces `.similar` list to agent. `GistQdrantBackend.search_similar()` performs Qdrant vector search with `exclude_id` support.
+
+**Implementation notes:** Threshold read at request time via `os.environ.get("LORE_DEDUP_THRESHOLD")` — no restart needed to tune. `>=` comparison so boundary score equals duplicate. 33 tests in test_dedup.py; 593 total tests, 97.17% coverage. Production defect caught during review: initial implementation had `search_similar` implemented but not wired into the endpoint handler — fixed before story close.
