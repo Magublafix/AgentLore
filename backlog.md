@@ -60,6 +60,38 @@ The stlgen benchmark currently runs against the selfhosted backend (SQLite + Qdr
 
 ---
 
+## [LORE-036] Benchmark series: noise resilience — polluted graph with medium-rated wrong concepts
+
+**Phase:** Benchmark
+**Priority:** medium
+**Effort:** M
+**Agent:** python-mcp-engineer
+**Phase item:** N/A — benchmark sprint
+**Depends on:** LORE-029 (gists benchmark support)
+
+**As a** Lore developer
+**I want to be able to** run the stlgen benchmark against a graph pre-seeded with intentionally wrong concepts at medium ratings
+**So that** I can verify the system still achieves passing results despite concept-level noise pollution
+
+**Context:**
+The benchmark currently tests learning from correct concepts. This story tests resilience: if a contributor submits wrong or misleading concepts (e.g. incorrect STL generation guidance) and rates them a medium 3/5, does the agent still succeed? Medium ratings are the dangerous case — high ratings for bad concepts would dominate search; low ratings would be filtered. Medium-rated wrong concepts blend into the graph and are the hardest noise to recover from.
+
+**Acceptance Criteria:**
+- [ ] Benchmark runner supports `--inject-noise N` flag: injects N wrong concepts (pre-authored, stored in `samples/stlgen/benchmarks/noise_concepts.json`) before series start
+- [ ] Injected concepts are submitted via `submit_concept` and immediately rated 3/5 with no `hours_saved`
+- [ ] Wrong concepts are plausibly related to STL generation but contain factually incorrect guidance (e.g. wrong vertex winding order, incorrect unit assumptions, bad normals advice)
+- [ ] Series runs normally after injection; results include `noise_injected: N` field in `runN.md` and `aggregate.json`
+- [ ] At series end, injected concepts are deleted/cleaned up (same as LORE-029 gist cleanup)
+- [ ] Benchmark achieves the same pass threshold as clean runs (≥ baseline from LORE-028/029 aggregate) — a meaningful degradation is flagged in the results but does not fail the runner itself
+- [ ] A comparison summary (clean vs noisy pass rates) is appended to `aggregate.md`
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
 ## [LORE-028] Extended stlgen benchmark — 30 series for statistical confidence
 
 **Phase:** Benchmark
