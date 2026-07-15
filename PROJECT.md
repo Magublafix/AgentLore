@@ -477,7 +477,6 @@ truth. The server indexes the public corpus and serves vector search.
 
 - [ ] Publish MCP server to PyPI as `lore-mcp`
 - [ ] Publish self-hosted Docker image to Docker Hub as `lore/selfhosted`
-- [ ] Hosted public semantic search instance
 - [ ] Concept graph browser (read-only web UI)
 - [ ] Flip `LORE_CAPTURE_MODE` default to `auto` — agent-autonomous publishing
       without user confirmation (Phase 1 capture-concept skill supports both modes;

@@ -68,6 +68,5 @@ Required test coverage of 80% reached. Total coverage: 97.15%
 
 - Publish MCP server to PyPI as `lore-mcp`
 - Publish self-hosted Docker image to Docker Hub as `lore/selfhosted`
-- Host a public semantic search instance
 - Concept graph browser (read-only web UI)
 - Flip `LORE_CAPTURE_MODE` default to `auto`
