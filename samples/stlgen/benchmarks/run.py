@@ -35,6 +35,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote as _quote
 
 import anthropic
 
@@ -99,6 +100,34 @@ CONFTEST_FILE = SAMPLES_DIR / "tests" / "conftest.py"
 # right after each run — useful for manually checking generated code/output.
 _ALL_WORKDIRS: list[Path] = []
 _CURRENT_SESSION_ID: str | None = None  # set per-run so search calls carry X-Session-ID
+
+# ---------------------------------------------------------------------------
+# Backend selection — set by --backend flag in main(), read by handlers.
+# ---------------------------------------------------------------------------
+
+# Active backend: "selfhosted" (default) or "gists".
+_ACTIVE_BACKEND: str = "selfhosted"
+
+# Accumulates gist IDs created during a series so they can be deleted at end.
+_SERIES_GIST_IDS: list[str] = []
+
+# Lazily initialised GistsClient — created on first gists-backend call.
+_gists_client_instance = None
+
+
+def _get_gists_client():
+    """Return a lazily-initialised GistsClient.
+
+    Requires LORE_GITHUB_TOKEN to be set in the environment.
+
+    Returns:
+        An authenticated GistsClient instance.
+    """
+    global _gists_client_instance
+    if _gists_client_instance is None:
+        from lore.mcp.backends.gists_client import GistsClient
+        _gists_client_instance = GistsClient()
+    return _gists_client_instance
 
 # ---------------------------------------------------------------------------
 # Skill loader
@@ -414,6 +443,14 @@ def _lore_api(method: str, path: str, session_id: str | None = None,
 
 
 def handle_search_concepts(inputs: dict) -> str:
+    """Dispatch search_concepts to the active backend."""
+    if _ACTIVE_BACKEND == "gists":
+        return _handle_search_concepts_gists(inputs)
+    return _handle_search_concepts_selfhosted(inputs)
+
+
+def _handle_search_concepts_selfhosted(inputs: dict) -> str:
+    """Search concepts via the selfhosted Lore API."""
     payload: dict = {"problem": inputs["problem"]}
     if inputs.get("limit"):
         payload["limit"] = inputs["limit"]
@@ -427,7 +464,52 @@ def handle_search_concepts(inputs: dict) -> str:
     return json.dumps(result)
 
 
+def _handle_search_concepts_gists(inputs: dict) -> str:
+    """Search concepts via the gists backend (or semantic server if LORE_SEMANTIC_URL is set)."""
+    problem = inputs.get("problem", "")
+    limit = inputs.get("limit") or 5
+    ctype = inputs.get("type")
+    language = inputs.get("language")
+
+    semantic_url = os.environ.get("LORE_SEMANTIC_URL")
+    if semantic_url:
+        # Try the semantic search server first.
+        try:
+            import urllib.request as _ur
+            params = f"q={_quote(problem)}&k={limit}"
+            req = _ur.Request(f"{semantic_url.rstrip('/')}/search?{params}")
+            with _ur.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read())
+            _update_session(r["concept_id"] for r in result.get("results", []))
+            return json.dumps(result)
+        except Exception as exc:
+            print(f"  [gists-search] semantic server failed ({exc}), falling back to gists.", flush=True)
+
+    # Fall back to GitHub tag search.
+    from lore.mcp.backends import gists as gists_backend
+    try:
+        result = gists_backend.search_concepts(
+            _get_gists_client(),
+            problem=problem,
+            type=ctype,
+            language=language,
+            limit=limit,
+        )
+        _update_session(r["concept_id"] for r in result.get("results", []))
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc), "results": []})
+
+
 def handle_submit_concept(inputs: dict) -> str:
+    """Dispatch submit_concept to the active backend."""
+    if _ACTIVE_BACKEND == "gists":
+        return _handle_submit_concept_gists(inputs)
+    return _handle_submit_concept_selfhosted(inputs)
+
+
+def _handle_submit_concept_selfhosted(inputs: dict) -> str:
+    """Submit a concept via the selfhosted Lore API."""
     name    = (inputs.get("name") or inputs.get("title") or "").strip()
     content = (inputs.get("content") or inputs.get("body") or "").strip()
     if not name:
@@ -462,7 +544,50 @@ def handle_submit_concept(inputs: dict) -> str:
     return json.dumps(result)
 
 
+def _handle_submit_concept_gists(inputs: dict) -> str:
+    """Submit a concept via the gists backend and track the created gist ID."""
+    name    = (inputs.get("name") or inputs.get("title") or "").strip()
+    content = (inputs.get("content") or inputs.get("body") or "").strip()
+    if not name:
+        return json.dumps({"error": "name is required — provide a short descriptive title"})
+    if not content or len(content) < 20:
+        return json.dumps({"error": "content is required — describe the concept in detail (at least 20 chars)"})
+    raw_type = inputs.get("type") or inputs.get("kind") or ""
+    ctype = raw_type if raw_type in _VALID_CONCEPT_TYPES else "pattern"
+
+    from lore.mcp.backends import gists as gists_backend
+    try:
+        result = gists_backend.submit_concept(
+            _get_gists_client(),
+            name=name,
+            type=ctype,
+            content=content,
+            when_to_use=inputs.get("when_to_use", ""),
+            tags=inputs.get("tags", []),
+            language=inputs.get("language"),
+            dont_use_when=inputs.get("dont_use_when"),
+        )
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+    if "concept_id" in result:
+        gist_id = result["concept_id"]
+        _update_session([gist_id])
+        # Track gist ID for series-end cleanup.
+        if gist_id not in _SERIES_GIST_IDS:
+            _SERIES_GIST_IDS.append(gist_id)
+    return json.dumps(result)
+
+
 def handle_rate_concept(inputs: dict) -> str:
+    """Dispatch rate_concept to the active backend."""
+    if _ACTIVE_BACKEND == "gists":
+        return _handle_rate_concept_gists(inputs)
+    return _handle_rate_concept_selfhosted(inputs)
+
+
+def _handle_rate_concept_selfhosted(inputs: dict) -> str:
+    """Rate a concept via the selfhosted Lore API."""
     concept_id = inputs.get("concept_id") or inputs.get("id")
     if not concept_id:
         return json.dumps({"error": "concept_id required"})
@@ -477,6 +602,40 @@ def handle_rate_concept(inputs: dict) -> str:
         payload["notes"] = inputs["notes"]
     result = _lore_api("POST", f"/v1/concepts/{concept_id}/rate", json=payload)
     return json.dumps(result)
+
+
+def _handle_rate_concept_gists(inputs: dict) -> str:
+    """Rate a concept stored as a GitHub Gist.
+
+    Gracefully handles the case where the gist has been deleted mid-run
+    (e.g. by manual cleanup): logs the error and returns a no-op result.
+    """
+    concept_id = inputs.get("concept_id") or inputs.get("id")
+    if not concept_id:
+        return json.dumps({"error": "concept_id required"})
+    outcome_raw = inputs.get("outcome") or inputs.get("score") or inputs.get("rating")
+    if outcome_raw is None:
+        return json.dumps({"error": "outcome required (1-5)"})
+    outcome = int(outcome_raw)
+
+    from lore.mcp.backends import gists as gists_backend
+    from lore.mcp.backends.gists_client import GistNotFoundError
+    try:
+        result = gists_backend.rate_concept(
+            _get_gists_client(),
+            concept_id=concept_id,
+            outcome=outcome,
+            session_id="benchmark-run",
+            hours_saved=inputs.get("hours_saved"),
+            notes=inputs.get("notes"),
+        )
+        return json.dumps(result)
+    except GistNotFoundError:
+        print(f"  [gists-rate] gist {concept_id!r} not found (deleted mid-run) — skipping.", flush=True)
+        return json.dumps({"status": "skipped", "reason": "gist_not_found", "concept_id": concept_id})
+    except Exception as exc:
+        print(f"  [gists-rate] rate_concept failed for {concept_id!r}: {exc}", flush=True)
+        return json.dumps({"error": str(exc), "concept_id": concept_id})
 
 
 def handle_web_search(inputs: dict) -> str:
@@ -1031,6 +1190,7 @@ def step_run(
 
     result = {
         "run": run_num,
+        "backend": _ACTIVE_BACKEND,
         "lore_active": lore_active,
         "concepts_available": concepts_in_db,
         "concepts_captured": concepts_captured,
@@ -1060,12 +1220,31 @@ def _cleanup_all_workdirs() -> None:
 # ---------------------------------------------------------------------------
 
 def _count_concepts() -> int:
+    """Return the number of concepts in the active backend.
+
+    For the selfhosted backend this queries the /v1/metrics endpoint.
+    For the gists backend, returning a meaningful count would require a
+    GitHub search API call — return 0 instead (the field is informational only).
+    """
+    if _ACTIVE_BACKEND == "gists":
+        return 0
     result = _lore_api("GET", "/v1/metrics")
     return result.get("concept_count", 0)
 
 
 def _clear_db() -> None:
-    """Drop all concepts, ratings, and Qdrant vectors via the selfhosted API."""
+    """Reset concept storage at the start of a new series.
+
+    For the selfhosted backend: drops all concepts, ratings, and Qdrant vectors
+    via the admin API.
+
+    For the gists backend: deletes all gist IDs accumulated in
+    ``_SERIES_GIST_IDS`` (from previous series runs in this process), then
+    clears the tracking list.  Failures are logged but do not abort the run.
+    """
+    if _ACTIVE_BACKEND == "gists":
+        _cleanup_series_gists()
+        return
     result = _lore_api("DELETE", "/v1/admin/reset",
                        admin_token=os.environ.get("LORE_ADMIN_TOKEN", ""))
     if SESSION_FILE.exists():
@@ -1073,6 +1252,33 @@ def _clear_db() -> None:
     deleted = result.get("concepts_deleted", "?")
     print(f"  [reset] concept DB cleared — {deleted} concepts removed.")
     print("  [reset] Qdrant collection wiped — will recreate on first index.")
+
+
+def _cleanup_series_gists() -> None:
+    """Delete all gists tracked in ``_SERIES_GIST_IDS`` and clear the list.
+
+    Failures for individual gists are logged but do not abort the cleanup loop.
+    A gist that was already deleted (e.g. by manual cleanup) is handled
+    gracefully via GistNotFoundError.
+    """
+    global _SERIES_GIST_IDS
+    if not _SERIES_GIST_IDS:
+        print("  [gists-cleanup] no gists to delete.", flush=True)
+        return
+    from lore.mcp.backends.gists_client import GistNotFoundError
+    client = _get_gists_client()
+    total = len(_SERIES_GIST_IDS)
+    deleted = 0
+    for gist_id in list(_SERIES_GIST_IDS):
+        try:
+            client.delete_gist(gist_id)
+            deleted += 1
+        except GistNotFoundError:
+            print(f"  [gists-cleanup] {gist_id} already gone — skipping.", flush=True)
+        except Exception as exc:
+            print(f"  [gists-cleanup] failed to delete {gist_id}: {exc}", flush=True)
+    _SERIES_GIST_IDS.clear()
+    print(f"  [gists-cleanup] deleted {deleted}/{total} gists.", flush=True)
 
 
 def _seed_concepts() -> None:
@@ -1130,10 +1336,12 @@ def _write_run_md(r: dict, test_out: str, output_dir: Path | None = None) -> Non
     out_dir.mkdir(parents=True, exist_ok=True)
     run_n = r["run"]
     lore = f"yes ({r['concepts_available']} concepts)" if r["lore_active"] else "no"
+    backend = r.get("backend", "selfhosted")
     (out_dir / f"run{run_n}.md").write_text(
         f"# Benchmark — Run {run_n}\n\n"
         f"| Field | Value |\n|-------|-------|\n"
         f"| Date | {datetime.now().strftime('%Y-%m-%d %H:%M')} |\n"
+        f"| Backend | {backend} |\n"
         f"| Model | {LOCAL_MODEL if PROVIDER == 'local' else MODEL} |\n"
         f"| Lore search active | {lore} |\n"
         f"| Web search active | yes |\n"
@@ -1247,6 +1455,7 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
         "runs": [
             {
                 "run": r["run"],
+                "backend": r.get("backend", "selfhosted"),
                 "lore_active": r["lore_active"],
                 "concepts_available": r["concepts_available"],
                 "concepts_captured": r["concepts_captured"],
@@ -1358,7 +1567,13 @@ def main() -> None:
                         help=f"Turn budget for the main coding loop (default: {MAX_TURNS})")
     parser.add_argument("--start-series", type=int, default=1, metavar="N",
                         help="First series number (default: 1). Use to avoid overwriting existing series.")
+    parser.add_argument("--backend", choices=["selfhosted", "gists"], default="selfhosted",
+                        help="Backend to use for concept operations (default: selfhosted).")
     args = parser.parse_args()
+
+    global _ACTIVE_BACKEND, _gists_client_instance
+    _ACTIVE_BACKEND = args.backend
+    _gists_client_instance = None  # reset so lazy init picks up correct env
 
     if args.series is not None:
         # Multi-series mode: run N complete 10-run series.
@@ -1408,6 +1623,8 @@ def main() -> None:
             _print_series_summary(all_series_results)
 
         _cleanup_all_workdirs()
+        if _ACTIVE_BACKEND == "gists":
+            _cleanup_series_gists()
 
     else:
         # Single-series mode (--all or --run): unchanged behaviour.
@@ -1423,6 +1640,8 @@ def main() -> None:
             _write_comparison(results)
 
         _cleanup_all_workdirs()
+        if _ACTIVE_BACKEND == "gists":
+            _cleanup_series_gists()
 
 
 if __name__ == "__main__":

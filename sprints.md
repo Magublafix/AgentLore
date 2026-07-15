@@ -495,6 +495,24 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
+## Sprint 9 — 2026-07-14 → 2026-07-21
+**Goal:** Validate the full Phase 3 stack end-to-end with the gists benchmark, then seal Phase 3 with a completion summary.
+**Status:** in-progress
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-029 | Gists benchmark support with series cleanup | python-mcp-engineer | planned | — |
+| LORE-038 | Phase 3 completion summary | general-purpose | planned | — |
+
+### Notes
+- LORE-029 first — the benchmark is the end-to-end validation gate for Phase 3.
+- LORE-038 runs after LORE-029 completes; the Phase 3 summary captures benchmark results as part of the delivery record.
+- DoD Gates 3 and 4 for LORE-029: pytest --cov passes (benchmark runner code is in lore/); no architecture doc change needed (no new component).
+- Phase 3 is otherwise complete — PROJECT.md Phase 3 checklist fully checked as of Sprint 8.
+
+---
+
 ## Sprint 8 — 2026-07-25 → 2026-08-08
 **Goal:** Harden the semantic server with auth, ratings aggregation, and deduplication — completing Phase 3.
 **Status:** done

@@ -468,9 +468,9 @@ truth. The server indexes the public corpus and serves vector search.
       embeds and indexes them
 - [x] `LORE_SEMANTIC_URL` routing in MCP server — when set, overrides
       GitHub tag search with vector search against the server
-- [ ] Server-side ratings aggregation (outcome + hours_saved) across users
+- [x] Server-side ratings aggregation (outcome + hours_saved) across users
 - [x] API key auth (one per GitHub user, issued on first gist publish)
-- [ ] Deduplication: flag near-duplicate concepts on publish
+- [x] Deduplication: flag near-duplicate concepts on publish
 - [x] Graceful fallback: if server unreachable, fall back to Backend 2
 
 ### Phase 4 — Publishing
