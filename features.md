@@ -493,3 +493,31 @@ Feature format:
 **What changed:** `gist_upsert_concept` handler: before upsert, embeds incoming concept and calls `storage.search_similar()`; if any hit scores >= `LORE_DEDUP_THRESHOLD` (default 0.92, runtime-configurable via env var), returns 409 `{"duplicate": True, "similar": [{id, title, score}]}`. `force=True` in request body bypasses check. `DuplicateConceptError` in router catches 409 and surfaces `.similar` list to agent. `GistQdrantBackend.search_similar()` performs Qdrant vector search with `exclude_id` support.
 
 **Implementation notes:** Threshold read at request time via `os.environ.get("LORE_DEDUP_THRESHOLD")` — no restart needed to tune. `>=` comparison so boundary score equals duplicate. 33 tests in test_dedup.py; 593 total tests, 97.17% coverage. Production defect caught during review: initial implementation had `search_similar` implemented but not wired into the endpoint handler — fixed before story close.
+
+---
+
+## [LORE-029] Benchmark runner: gists backend support with series cleanup
+
+**Sprint:** 9   **Shipped:** 2026-07-15   **Phase:** Benchmark   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** run the stlgen benchmark against the gists backend with automatic cleanup
+**So that** the gists + semantic server stack is validated with the same benchmark methodology as the selfhosted backend
+
+**What changed:** `samples/stlgen/benchmarks/run.py` now accepts `--backend {selfhosted,gists}` (default `selfhosted`). With `--backend gists` the runner uses `GistsClient` directly for concept operations, tracks all created gist IDs in `_SERIES_GIST_IDS`, and deletes them at series end via `_cleanup_series_gists()`. `backend` field added to result dicts, `runN.md`, and `aggregate.json`. Semantic search falls through to `LORE_SEMANTIC_URL` if set, with GitHub tag-search fallback.
+
+**Implementation notes:** `_count_concepts()` returns 0 for gists backend (GitHub search API call not worth it for an informational field). `_clear_db()` for gists calls `_cleanup_series_gists()` rather than the admin reset endpoint. Gracefully handles deleted-mid-run gists via `GistNotFoundError`. 18 new tests in `lore/tests/test_benchmark_gists.py`; 611 total tests, 97.15% coverage.
+
+---
+
+## [LORE-038] Phase 3 completion summary
+
+**Sprint:** 9   **Shipped:** 2026-07-15   **Phase:** 3   **Tokens:** —
+
+**As a** Lore developer
+**I want to be able to** see a written summary of what Phase 3 delivered, its test coverage, and what comes next
+**So that** the phase is formally closed and the record is preserved
+
+**What changed:** `docs/phases/phase-3-summary.md` created. Phase 3 is formally closed.
+
+**Implementation notes:** All Phase 3 PROJECT.md checklist items confirmed checked. Coverage at close: 97.15%, 611 tests. Known gap: Phase 2 manual live test (submit/search/star/rate against real GitHub API) not recorded — unit/integration tests cover the same paths.

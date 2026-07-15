@@ -495,15 +495,15 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ---
 
-## Sprint 9 — 2026-07-14 → 2026-07-21
+## Sprint 9 — 2026-07-14 → 2026-07-15
 **Goal:** Validate the full Phase 3 stack end-to-end with the gists benchmark, then seal Phase 3 with a completion summary.
-**Status:** in-progress
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-029 | Gists benchmark support with series cleanup | python-mcp-engineer | planned | — |
-| LORE-038 | Phase 3 completion summary | general-purpose | planned | — |
+| LORE-029 | Gists benchmark support with series cleanup | python-mcp-engineer | done | — |
+| LORE-038 | Phase 3 completion summary | general-purpose | done | — |
 
 ### Notes
 - LORE-029 first — the benchmark is the end-to-end validation gate for Phase 3.
