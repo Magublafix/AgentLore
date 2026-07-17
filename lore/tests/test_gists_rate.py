@@ -99,7 +99,7 @@ def _gist_data_for_concept(
     """Build a GistData as the gist backend would create it for submit_concept."""
     if tags is None:
         tags = ["test"]
-    description = f"[lore-concept] {name} [{', '.join(tags)}]"
+    description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
     lore_json: dict = {
         "schema_version": "1",
         "type": lore_extras.get("type", "pattern"),

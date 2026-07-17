@@ -192,12 +192,13 @@ capture-concept mechanics, rate_concept, etc.).
 When all 13 tests pass, call `submit`.
 """
 
-# Simplified version for local models — no skill docs, defers capture to after tests pass.
+# Simplified version for local models — capture as you go, not just on success.
 _CAPTURE_SUFFIX_LOCAL = """
-Focus on getting the tests to pass first.
-Once all 13 tests pass, capture what you learned with submit_concept — which
-libraries worked, what failed and why, non-obvious packaging steps.
-Then call `submit`.
+Focus on getting the tests to pass. As you work, capture domain insights with
+submit_concept whenever you discover something non-obvious — which libraries work
+for 3D text generation, what failed and why, gotchas with STL mesh validity or
+packaging. Do NOT wait for tests to pass before capturing.
+When all 13 tests pass, call `submit`.
 """
 
 _SEARCH_SUFFIX = """
@@ -216,8 +217,8 @@ When all 13 tests pass, call `submit`.
 # Simplified version for local models.
 _SEARCH_SUFFIX_LOCAL = """
 Before writing any code, call search_concepts once to find relevant patterns.
-Focus on implementation. Once all 13 tests pass, capture new insights with
-submit_concept, then call `submit`.
+Focus on implementation. Capture domain insights with submit_concept as you
+discover them — do NOT wait for tests to pass. When all 13 tests pass, call `submit`.
 """
 
 TASK_PROMPT_NO_LORE   = _TASK + (_CAPTURE_SUFFIX_LOCAL if PROVIDER == "local" else _CAPTURE_SUFFIX)
@@ -265,7 +266,17 @@ TOOL_READ_FILE = {
 
 TOOL_SUBMIT = {
     "name": "submit",
-    "description": "Signal that the task (or capture phase) is complete.",
+    "description": "Signal that all tests pass and the coding task is complete. Only call this after all 13 tests pass.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"summary": {"type": "string"}},
+        "required": ["summary"],
+    },
+}
+
+TOOL_FINISH_WRAPUP = {
+    "name": "finish_wrapup",
+    "description": "Signal that you have finished capturing and rating all concepts and have nothing more to add. Call this when your capture and rating work is done.",
     "input_schema": {
         "type": "object",
         "properties": {"summary": {"type": "string"}},
@@ -346,7 +357,7 @@ TOOL_WEB_SEARCH = {
 
 TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
 TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
-TOOLS_WRAPUP    = [TOOL_READ_FILE, TOOL_RATE_CONCEPT, TOOL_SUBMIT_CONCEPT, TOOL_SUBMIT]
+TOOLS_WRAPUP    = [TOOL_READ_FILE, TOOL_RATE_CONCEPT, TOOL_SUBMIT_CONCEPT, TOOL_FINISH_WRAPUP]
 
 # ---------------------------------------------------------------------------
 # System prompt builders
@@ -389,12 +400,16 @@ def build_system_wrapup() -> str:
         f"# Lore Skill: wrapup\n\n{wrapup_skill}\n\n"
         f"# Lore Skill: capture-concept\n\n{capture_skill}\n"
         "---\n\n"
-        "Follow the wrapup skill steps in order. Step 2 (reflection gate) is MANDATORY — "
-        "you must enumerate 3-6 implementation areas and evaluate each before calling submit, "
-        "even if Group A is empty. Do not call submit until step 2 is complete.\n"
+        "Follow the wrapup skill steps in order.\n"
+        "Step 1: rate every concept ID listed below (use rate_concept).\n"
+        "Step 2 (reflection gate) is MANDATORY — enumerate 3-6 implementation areas "
+        "and evaluate each for Lore-worthy insights, even if the session was short.\n"
+        "Step 3: call submit_concept for each insight identified in Step 2 that is not "
+        "already in Lore. You MUST call submit_concept at least once if you learned anything new.\n"
+        "Step 4: call finish_wrapup only after Steps 1-3 are complete.\n"
         "When the skill says to invoke capture-concept, call submit_concept directly.\n"
         "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts.\n"
-        "Call submit only after completing steps 2 and 3."
+        "Do NOT call finish_wrapup until you have completed Steps 2 and 3."
     )
 
 
@@ -735,6 +750,9 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
             )
         return "Phase complete."
 
+    if name == "finish_wrapup":
+        return "Wrapup complete — concepts captured and rated."
+
     if name == "search_concepts":
         return handle_search_concepts(inputs)
 
@@ -1031,6 +1049,8 @@ def _run_agent_anthropic(
             if name == "submit":
                 if workdir is None or "✓ all tests passed" in result:
                     submitted = True
+            if name == "finish_wrapup":
+                submitted = True
             if verbose:
                 print(f"    ← {str(result)[:120].replace(chr(10), ' ')}", flush=True)
             tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": result})
@@ -1081,6 +1101,12 @@ def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple
     tail = messages[-(WRAPUP_HISTORY_TURNS * 2):] if len(messages) > WRAPUP_HISTORY_TURNS * 2 else list(messages)
 
     wrapup_prompt = "The coding session above is now complete. Follow the wrapup skill from step 1."
+    if session_ids:
+        wrapup_prompt += (
+            f"\n\nThe following concept IDs were retrieved from Lore during this session "
+            f"and MUST be rated with rate_concept before calling finish_wrapup:\n"
+            + "\n".join(f"  - {cid}" for cid in session_ids)
+        )
 
     wrapup_messages = tail + [{"role": "user", "content": wrapup_prompt}]
 
@@ -1096,7 +1122,8 @@ def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple
     )
 
     SESSION_FILE.write_text("[]")
-    print(f"  [wrapup] done — {_count_concepts()} total concepts in DB "
+    total_concepts = len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else _count_concepts()
+    print(f"  [wrapup] done — {total_concepts} total concepts in DB "
           f"({turns} turns, {in_tok + out_tok:,} tokens) — session cleared.", flush=True)
     return in_tok, out_tok, turns
 
@@ -1105,15 +1132,25 @@ def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple
 # ---------------------------------------------------------------------------
 
 def run_tests(workdir: Path) -> tuple[bool, str]:
+    # Auto-install so tests can find the `text2stl` entry point regardless of
+    # whether the agent remembered to run `pip install -e .` themselves.
+    install_header = ""
+    if (workdir / "pyproject.toml").exists() or (workdir / "setup.py").exists():
+        install = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-e", ".", "-q"],
+            cwd=workdir, capture_output=True, text=True, timeout=120,
+        )
+        if install.returncode != 0:
+            install_header = f"[pip install -e . failed]\n{install.stdout}{install.stderr}\n"
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/test_text2stl_cli.py", "-v", "--tb=short", "--timeout=60"],
             cwd=workdir, capture_output=True, text=True, timeout=600,
         )
-        return result.returncode == 0, result.stdout + result.stderr
+        return result.returncode == 0, install_header + result.stdout + result.stderr
     except subprocess.TimeoutExpired as e:
         out = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        return False, f"[test suite timed out after 600s]\n{out}"
+        return False, f"[test suite timed out after 600s]\n{install_header}{out}"
 
 # ---------------------------------------------------------------------------
 # Core step function — all runs share this logic
@@ -1141,7 +1178,7 @@ def step_run(
     if run_num == 1:
         _clear_db()
 
-    concepts_in_db = _count_concepts()
+    concepts_in_db = len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else _count_concepts()
 
     lore_label = f"Lore ON ({concepts_in_db} concepts)" if lore_active else "no Lore"
     model_name = LOCAL_MODEL if PROVIDER == "local" else MODEL
@@ -1157,6 +1194,7 @@ def step_run(
     SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.write_text("[]")
     concepts_before = concepts_in_db
+    gists_before = len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else 0
 
     system      = build_system_with_lore() if lore_active else build_system_no_lore()
     if PROVIDER == "local":
@@ -1186,7 +1224,10 @@ def step_run(
     in_tok  += w_in
     out_tok += w_out
 
-    concepts_captured = _count_concepts() - concepts_before
+    if _ACTIVE_BACKEND == "gists":
+        concepts_captured = len(_SERIES_GIST_IDS) - gists_before
+    else:
+        concepts_captured = _count_concepts() - concepts_before
 
     result = {
         "run": run_num,
@@ -1238,12 +1279,12 @@ def _clear_db() -> None:
     For the selfhosted backend: drops all concepts, ratings, and Qdrant vectors
     via the admin API.
 
-    For the gists backend: deletes all gist IDs accumulated in
-    ``_SERIES_GIST_IDS`` (from previous series runs in this process), then
-    clears the tracking list.  Failures are logged but do not abort the run.
+    For the gists backend: deletes ALL [agentlore-concept] gists owned by the
+    authenticated user (not just those tracked in _SERIES_GIST_IDS), ensuring a
+    clean slate even when restarting after a killed run.
     """
     if _ACTIVE_BACKEND == "gists":
-        _cleanup_series_gists()
+        _cleanup_all_agentlore_gists()
         return
     result = _lore_api("DELETE", "/v1/admin/reset",
                        admin_token=os.environ.get("LORE_ADMIN_TOKEN", ""))
@@ -1252,6 +1293,58 @@ def _clear_db() -> None:
     deleted = result.get("concepts_deleted", "?")
     print(f"  [reset] concept DB cleared — {deleted} concepts removed.")
     print("  [reset] Qdrant collection wiped — will recreate on first index.")
+
+
+def _cleanup_all_agentlore_gists() -> None:
+    """Delete ALL [agentlore-concept] gists owned by the authenticated user.
+
+    Used at the start of Run 1 to ensure a clean slate, including gists left
+    over from a previously killed benchmark run that were never tracked in
+    _SERIES_GIST_IDS.
+    """
+    from lore.mcp.backends.gists_client import GistNotFoundError
+    import requests as _req
+    client = _get_gists_client()
+    token = os.environ.get("LORE_GITHUB_TOKEN", "")
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+    page, deleted, total = 1, 0, 0
+    while True:
+        resp = _req.get(
+            "https://api.github.com/gists",
+            params={"per_page": 100, "page": page},
+            headers=headers, timeout=15,
+        )
+        gists = resp.json() if resp.ok else []
+        if not gists:
+            break
+        for g in gists:
+            if "[agentlore-concept]" in (g.get("description") or ""):
+                total += 1
+                try:
+                    client.delete_gist(g["id"])
+                    deleted += 1
+                except GistNotFoundError:
+                    pass
+                except Exception as exc:
+                    print(f"  [reset] failed to delete {g['id']}: {exc}", flush=True)
+        page += 1
+    _SERIES_GIST_IDS.clear()
+    if total:
+        print(f"  [reset] deleted {deleted}/{total} [agentlore-concept] gists.", flush=True)
+    else:
+        print("  [reset] no [agentlore-concept] gists to delete.", flush=True)
+    # Flush Qdrant so stale vectors from deleted gists don't pollute search results.
+    semantic_url = os.environ.get("LORE_SEMANTIC_URL", "").rstrip("/")
+    if semantic_url:
+        try:
+            import urllib.request as _ur
+            req = _ur.Request(f"{semantic_url}/admin/flush", method="POST",
+                              headers={"Content-Type": "application/json"})
+            with _ur.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read())
+            print(f"  [reset] Qdrant flushed — {body}", flush=True)
+        except Exception as exc:
+            print(f"  [reset] Qdrant flush failed (non-fatal): {exc}", flush=True)
 
 
 def _cleanup_series_gists() -> None:
@@ -1640,7 +1733,10 @@ def main() -> None:
             _write_comparison(results)
 
         _cleanup_all_workdirs()
-        if _ACTIVE_BACKEND == "gists":
+        # Only wipe gists when the full series (--all) completes. A single
+        # --run N invocation must leave gists in place so a subsequent
+        # --run N+1 (separate process) can still search them.
+        if _ACTIVE_BACKEND == "gists" and args.all:
             _cleanup_series_gists()
 
 

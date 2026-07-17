@@ -89,7 +89,7 @@ def submit_concept(
         GistRateLimitError: If the GitHub API rate limit is exhausted.
         GistAPIError: On unexpected GitHub API errors.
     """
-    description = f"[lore-concept] {name} [{', '.join(tags)}]"
+    description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
 
     lore_metadata: dict = {
         "schema_version": "1",
@@ -162,7 +162,7 @@ def link_concepts(
 
     # Step 2 — validate to_id is a lore concept (GistNotFoundError propagates).
     to_gist = client.get_gist(to_id)
-    if "[lore-concept]" not in to_gist.description:
+    if "[agentlore-concept]" not in to_gist.description:
         raise ValueError(f"to_id {to_id!r} is not a valid lore concept gist")
 
     # Step 3 — fetch source gist (GistNotFoundError propagates).
@@ -429,7 +429,7 @@ def search_concepts(
     _MAX_PAGES = 3
     _PER_PAGE = 30
 
-    query = f"[lore-concept] {problem}"
+    query = f"[agentlore-concept] {problem}"
     seen_ids: set[str] = set()
     results: list[dict] = []
 

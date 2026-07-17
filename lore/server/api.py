@@ -336,8 +336,11 @@ async def lifespan(app: FastAPI):
         from lore.server.watcher import watch_loop
 
         interval = int(os.environ.get("LORE_WATCH_INTERVAL", "300"))
+        min_rating = float(os.environ.get("LORE_MIN_RATING", "1.0"))
         token = os.environ.get("LORE_GITHUB_TOKEN", "")
-        watcher_task = asyncio.create_task(watch_loop(storage, token, interval))
+        watcher_task = asyncio.create_task(
+            watch_loop(storage, token, interval, min_rating=min_rating)
+        )
         logger.info("Gist watcher task started (interval=%ds).", interval)
 
     yield
@@ -794,6 +797,34 @@ def _register_gist_routes(app: FastAPI) -> None:
                 content={"error": "route not active for this backend"},
             )
         return {"status": "ok"}
+
+    @app.post("/admin/flush", status_code=200)
+    async def gist_flush(request: Request):
+        """Delete and recreate the Qdrant collection, removing all indexed vectors.
+
+        Used by the benchmark runner at the start of a new series to ensure
+        stale vectors from deleted gists do not pollute search results.
+
+        Returns:
+            ``{"status": "flushed", "backend": "gist_qdrant"}`` on success.
+        """
+        if request.app.state.backend_name != "gist_qdrant":
+            return JSONResponse(
+                status_code=404,
+                content={"error": "route not active for this backend"},
+            )
+        from lore.server.storage.gist_qdrant import (
+            COLLECTION_NAME,
+            GistQdrantBackend,
+            _init_collection,
+        )
+        storage: GistQdrantBackend = request.app.state.storage
+        try:
+            storage._qdrant.delete_collection(COLLECTION_NAME)
+        except Exception:  # noqa: BLE001
+            pass
+        _init_collection(storage._qdrant)
+        return {"status": "flushed", "backend": "gist_qdrant"}
 
     @app.post("/concepts", status_code=200)
     async def gist_upsert_concept(

@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 _CURSOR_PATH = Path("~/.lore/watcher_cursor.json").expanduser()
 _GITHUB_API_BASE = "https://api.github.com"
-_LORE_CONCEPT_MARKER = "[lore-concept]"
+_LORE_CONCEPT_MARKER = "[agentlore-concept]"
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +86,37 @@ def _save_cursor(timestamp: str) -> None:
 # ---------------------------------------------------------------------------
 # GitHub API helpers
 # ---------------------------------------------------------------------------
+
+
+async def _fetch_authenticated_gists(
+    client: httpx.AsyncClient,
+) -> list[dict[str, Any]]:
+    """Fetch all gists owned by the authenticated user, following pagination.
+
+    Calls ``GET /gists`` (the authenticated user's own gists, not the public
+    feed) with ``per_page=100`` and follows ``Link: rel="next"`` headers until
+    all pages are exhausted.
+
+    Args:
+        client: An authenticated :class:`httpx.AsyncClient` instance.
+
+    Returns:
+        List of gist summary dicts from the GitHub API.
+    """
+    all_gists: list[dict[str, Any]] = []
+    url: str | None = f"{_GITHUB_API_BASE}/gists?per_page=100&page=1"
+
+    while url:
+        response = await client.get(url)
+        response.raise_for_status()
+        page = response.json()
+        if not page:
+            break
+        all_gists.extend(page)
+        link_header = response.headers.get("Link", "")
+        url = _parse_next_link(link_header)
+
+    return all_gists
 
 
 async def _fetch_public_gists(
@@ -230,6 +261,176 @@ def _extract_payload(gist: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
+# Bootstrap phase
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_all_public_gists(
+    client: httpx.AsyncClient,
+) -> list[dict[str, Any]]:
+    """Fetch all public gists (no ``since`` filter), following pagination.
+
+    Calls ``GET /gists/public?per_page=100&page=N`` starting at page 1 and
+    stops when an empty page is returned or the ``Link: rel="next"`` header
+    is absent.
+
+    Args:
+        client: An authenticated :class:`httpx.AsyncClient` instance.
+
+    Returns:
+        List of all public gist summary dicts from the GitHub API.
+    """
+    all_gists: list[dict[str, Any]] = []
+    url: str | None = f"{_GITHUB_API_BASE}/gists/public?per_page=100&page=1"
+
+    while url:
+        response = await client.get(url)
+        response.raise_for_status()
+        page = response.json()
+        if not page:
+            break
+        all_gists.extend(page)
+        link_header = response.headers.get("Link", "")
+        url = _parse_next_link(link_header)
+
+    return all_gists
+
+
+async def _run_bootstrap(
+    storage: StorageBackend,
+    github_token: str,
+    min_rating: float,
+) -> None:
+    """Bootstrap the Qdrant index from all public gists.
+
+    Runs once at startup before the polling loop begins.  Fetches all public
+    gists (paginated, no ``since`` filter), filters to those tagged with
+    ``[lore-concept]``, optionally skips gists whose average ``outcome`` rating
+    is below ``min_rating``, and upserts the remainder into storage.
+
+    This is a full one-time scan — it is not cursor-based.  Running it when
+    a cursor already exists is safe; ``upsert_concept`` handles idempotency.
+
+    Unrated gists (empty or missing ``ratings`` list) are always indexed,
+    regardless of ``min_rating``.
+
+    Args:
+        storage: Active storage backend.
+        github_token: GitHub personal access token.  If empty, the bootstrap
+            is skipped and a WARNING is logged.
+        min_rating: Minimum average ``outcome`` score (1–5).  Gists with a
+            computed average below this threshold are skipped.  Pass ``0.0``
+            (the default) to index all gists regardless of rating.
+    """
+    if not github_token:
+        logger.warning(
+            "LORE_GITHUB_TOKEN is not set — skipping bootstrap phase."
+        )
+        return
+
+    logger.info("Bootstrap: fetching all public gists…")
+
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        async with httpx.AsyncClient(headers=headers) as client:
+            try:
+                summaries = await _fetch_all_public_gists(client)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Bootstrap: failed to fetch public gists: %s", exc)
+                return
+
+            # Filter to [lore-concept] gists.
+            candidates = [
+                g for g in summaries
+                if _LORE_CONCEPT_MARKER in (g.get("description") or "")
+            ]
+            logger.info(
+                "Bootstrap: found %d [lore-concept] gist(s) out of %d total.",
+                len(candidates),
+                len(summaries),
+            )
+
+            indexed = 0
+            skipped = 0
+
+            for summary in candidates:
+                gist_id: str = summary["id"]
+
+                # Fetch full gist for lore.json content and ratings.
+                try:
+                    full_gist = await _fetch_full_gist(client, gist_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Bootstrap: failed to fetch full gist %s: %s", gist_id, exc
+                    )
+                    continue
+
+                # --- Rating filter ---
+                if min_rating > 0:
+                    lore_json_file = full_gist.get("files", {}).get("lore.json")
+                    ratings: list[dict[str, Any]] = []
+                    if lore_json_file:
+                        try:
+                            metadata = json.loads(lore_json_file.get("content", ""))
+                            ratings = metadata.get("ratings", [])
+                        except (json.JSONDecodeError, AttributeError):
+                            pass  # Treat as unrated — will be indexed.
+
+                    if ratings:
+                        outcomes = [
+                            r["outcome"] for r in ratings
+                            if isinstance(r.get("outcome"), (int, float))
+                        ]
+                        if outcomes:
+                            avg = sum(outcomes) / len(outcomes)
+                            if avg < min_rating:
+                                logger.info(
+                                    "Skipping gist %s — avg rating %.1f below threshold %s",
+                                    gist_id,
+                                    avg,
+                                    min_rating,
+                                )
+                                skipped += 1
+                                continue
+
+                payload = _extract_payload(full_gist)
+                if payload is None:
+                    continue
+
+                try:
+                    result = storage.upsert_concept(payload)
+                    status = result.get("status", "unknown")
+                    logger.info(
+                        "Bootstrap: gist %s (%s): %s.",
+                        gist_id,
+                        payload.get("name", ""),
+                        status,
+                    )
+                    indexed += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Bootstrap: upsert_concept failed for gist %s: %s",
+                        gist_id,
+                        exc,
+                    )
+
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Bootstrap phase failed unexpectedly: %s", exc)
+        return
+
+    logger.info(
+        "Bootstrap complete: %d indexed, %d skipped (rating filter).",
+        indexed,
+        skipped,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main watch loop
 # ---------------------------------------------------------------------------
 
@@ -238,14 +439,23 @@ async def watch_loop(
     storage: StorageBackend,
     github_token: str,
     interval: int,
+    *,
+    min_rating: float = 0.0,
 ) -> None:
     """Poll GitHub public gists API and index ``[lore-concept]`` entries.
 
-    This coroutine runs indefinitely, sleeping for ``interval`` seconds between
-    poll cycles.  It is designed to be started with ``asyncio.create_task`` and
-    cancelled cleanly on server shutdown via :class:`asyncio.CancelledError`.
+    Runs a one-time bootstrap phase first (see :func:`_run_bootstrap`), then
+    enters an indefinite polling loop that sleeps for ``interval`` seconds
+    between cycles.  It is designed to be started with ``asyncio.create_task``
+    and cancelled cleanly on server shutdown via :class:`asyncio.CancelledError`.
 
-    Each cycle:
+    Bootstrap phase (once at startup):
+        Fetches all gists owned by the authenticated user and indexes those
+        tagged with ``[lore-concept]``.  Gists whose average ``outcome``
+        rating is below ``min_rating`` are skipped.  Unrated gists are always
+        indexed.
+
+    Each subsequent poll cycle:
 
     1. Loads the cursor timestamp from ``~/.lore/watcher_cursor.json``.
     2. Fetches public gists updated since the cursor timestamp.
@@ -261,14 +471,25 @@ async def watch_loop(
         storage: Active storage backend.  Must implement
             :meth:`~lore.server.storage.base.StorageBackend.upsert_concept`.
         github_token: GitHub personal access token for authenticated API calls.
-            If empty, the poll step is skipped and the loop sleeps until the
-            next cycle.
+            If empty, the bootstrap and poll steps are skipped.
         interval: Seconds to sleep between poll cycles.
+        min_rating: Minimum average ``outcome`` score for the bootstrap filter.
+            Pass ``0.0`` (default) to index all concepts regardless of rating.
 
     Raises:
         asyncio.CancelledError: Propagated cleanly when the task is cancelled.
     """
     logger.info("Gist watcher starting (interval=%ds).", interval)
+
+    # --- Bootstrap phase: one-time full sync before entering the poll loop ---
+    try:
+        await _run_bootstrap(storage, github_token, min_rating)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Bootstrap phase failed: %s", exc)
+
+    logger.info("Bootstrap complete — entering poll loop.")
 
     while True:
         try:

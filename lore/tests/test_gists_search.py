@@ -85,7 +85,7 @@ def _make_gist_data(
     links: list[dict] | None = None,
 ) -> GistData:
     """Build a GistData as the gist backend would create it."""
-    description = f"[lore-concept] {name} [{', '.join(tags)}]"
+    description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
     lore_json: dict = {
         "schema_version": "1",
         "type": type,
@@ -108,7 +108,7 @@ def _summary(gist_id: str, name: str = "A Concept") -> GistSummary:
     """Build a GistSummary as returned by search_gists."""
     return GistSummary(
         gist_id=gist_id,
-        description=f"[lore-concept] {name} []",
+        description=f"[agentlore-concept] {name} []",
     )
 
 
@@ -551,7 +551,7 @@ class TestQueryConstruction:
     """The search query is constructed correctly from the problem argument."""
 
     def test_query_includes_lore_concept_marker_and_problem(self):
-        """search_gists is called with '[lore-concept] <problem>' as the query."""
+        """search_gists is called with '[agentlore-concept] <problem>' as the query."""
         client = _make_client()
         client.search_gists.return_value = []
 
@@ -559,11 +559,11 @@ class TestQueryConstruction:
 
         args, kwargs = client.search_gists.call_args
         query = args[0] if args else kwargs.get("query", "")
-        assert "[lore-concept]" in query
+        assert "[agentlore-concept]" in query
         assert "sqlite WAL mode" in query
 
     def test_problem_is_appended_after_marker(self):
-        """The problem text appears after the [lore-concept] marker in the query."""
+        """The problem text appears after the [agentlore-concept] marker in the query."""
         client = _make_client()
         client.search_gists.return_value = []
 
@@ -571,4 +571,4 @@ class TestQueryConstruction:
 
         args, kwargs = client.search_gists.call_args
         query = args[0] if args else kwargs.get("query", "")
-        assert query == "[lore-concept] my specific problem"
+        assert query == "[agentlore-concept] my specific problem"

@@ -11,8 +11,8 @@ Strategy
 
 Test coverage
 -------------
-1.  Happy path — two ``[lore-concept]`` gists indexed; ``upsert_concept`` called twice.
-2.  Filter — gist without ``[lore-concept]`` in description is skipped.
+1.  Happy path — two ``[agentlore-concept]`` gists indexed; ``upsert_concept`` called twice.
+2.  Filter — gist without ``[agentlore-concept]`` in description is skipped.
 3.  Missing ``lore.json`` — logs WARNING; watcher continues; no upsert.
 4.  Malformed JSON — ``lore.json`` is not valid JSON; logs WARNING; continues.
 5.  Upsert error — ``upsert_concept`` raises; logs WARNING; remaining gists processed.
@@ -53,7 +53,7 @@ from lore.server.watcher import (
 
 def _make_gist_summary(
     gist_id: str = "abc123",
-    description: str = "[lore-concept] My Pattern [tag1]",
+    description: str = "[agentlore-concept] My Pattern [tag1]",
     updated_at: str = "2024-01-15T12:00:00Z",
 ) -> dict:
     """Build a minimal public-gist-list entry."""
@@ -66,7 +66,7 @@ def _make_gist_summary(
 
 def _make_full_gist(
     gist_id: str = "abc123",
-    description: str = "[lore-concept] My Pattern [tag1]",
+    description: str = "[agentlore-concept] My Pattern [tag1]",
     updated_at: str = "2024-01-15T12:00:00Z",
     lore_json_content: str | None = None,
 ) -> dict:
@@ -179,7 +179,7 @@ def test_extract_payload_happy_path():
 def test_extract_payload_missing_lore_json_returns_none(caplog):
     gist = {
         "id": "abc123",
-        "description": "[lore-concept] My Pattern [tag1]",
+        "description": "[agentlore-concept] My Pattern [tag1]",
         "updated_at": "2024-01-15T12:00:00Z",
         "files": {},
     }
@@ -296,7 +296,7 @@ async def test_cursor_loaded_on_startup_uses_existing_timestamp(tmp_path):
 
 
 async def test_happy_path_two_gists_indexed(tmp_path):
-    """Test 1 — two [lore-concept] gists returned; upsert_concept called once per gist."""
+    """Test 1 — two [agentlore-concept] gists returned; upsert_concept called once per gist."""
     cursor_file = tmp_path / "cursor.json"
     storage = MagicMock()
     storage.upsert_concept.return_value = {"status": "upserted", "gist_id": "g1"}
@@ -328,13 +328,13 @@ async def test_happy_path_two_gists_indexed(tmp_path):
 
 
 async def test_filter_non_lore_concept_gist(tmp_path):
-    """Test 2 — gist without [lore-concept] in description is skipped."""
+    """Test 2 — gist without [agentlore-concept] in description is skipped."""
     cursor_file = tmp_path / "cursor.json"
     storage = MagicMock()
 
     summaries = [
         _make_gist_summary(gist_id="notlore", description="just a random gist"),
-        _make_gist_summary(gist_id="islore", description="[lore-concept] Pattern [t1]"),
+        _make_gist_summary(gist_id="islore", description="[agentlore-concept] Pattern [t1]"),
     ]
     gist_islore = _make_full_gist(gist_id="islore")
     client_mock = _mock_httpx_client(
@@ -366,7 +366,7 @@ async def test_missing_lore_json_logs_warning_and_continues(tmp_path, caplog):
     ]
     bad_gist = {
         "id": "bad",
-        "description": "[lore-concept] Bad [t1]",
+        "description": "[agentlore-concept] Bad [t1]",
         "updated_at": "2024-01-15T10:00:00Z",
         "files": {},  # no lore.json
     }

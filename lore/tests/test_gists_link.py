@@ -17,7 +17,7 @@ Test coverage areas
 - Idempotency: same (to_id, rel) pair → already_exists, update_gist not called
 - Idempotency only fires on exact (to_id, rel) match: same to_id, different rel → creates
 - Invalid rel raises ValueError before any network call
-- to_id description missing [lore-concept] → ValueError containing to_id
+- to_id description missing [agentlore-concept] → ValueError containing to_id
 - to_id GistNotFoundError propagates
 - from_id GistNotFoundError propagates (to_id valid)
 - Max 20 links exceeded → max_links_exceeded dict, update_gist not called
@@ -51,7 +51,7 @@ def _make_client() -> MagicMock:
 
 def _make_gist_data(name: str, tags: list[str], **lore_extras) -> GistData:
     """Build a GistData as the gist backend would create it."""
-    description = f"[lore-concept] {name} [{', '.join(tags)}]"
+    description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
     lore_json: dict = {
         "schema_version": "1",
         "type": lore_extras.get("type", "pattern"),
@@ -68,7 +68,7 @@ def _make_gist_data(name: str, tags: list[str], **lore_extras) -> GistData:
 
 
 def _make_non_lore_gist() -> GistData:
-    """Return a GistData whose description does NOT contain [lore-concept]."""
+    """Return a GistData whose description does NOT contain [agentlore-concept]."""
     return GistData(
         files={"README.md": "# Not a lore concept"},
         description="Some random public gist",
@@ -105,7 +105,7 @@ class TestLinkConcepts:
     def _standard_client(
         self,
         from_links: list[dict] | None = None,
-        to_description_marker: str = "[lore-concept]",
+        to_description_marker: str = "[agentlore-concept]",
     ) -> MagicMock:
         """Return a wired mock client for the standard (from_id, to_id) scenario."""
         to_gist = GistData(
@@ -239,7 +239,7 @@ class TestLinkConcepts:
     # ------------------------------------------------------------------
 
     def test_to_id_not_lore_concept_raises_value_error(self):
-        """to_id description missing [lore-concept] → ValueError."""
+        """to_id description missing [agentlore-concept] → ValueError."""
         client = self._standard_client(to_description_marker="NOT_LORE")
 
         with pytest.raises(ValueError, match=self.TO_ID):
@@ -275,7 +275,7 @@ class TestLinkConcepts:
         """GistNotFoundError from client.get_gist(from_id) propagates unmodified."""
         to_gist = GistData(
             files={"concept.md": "# Target"},
-            description="[lore-concept] Target [t1]",
+            description="[agentlore-concept] Target [t1]",
         )
 
         def _get_gist(gist_id: str) -> GistData:

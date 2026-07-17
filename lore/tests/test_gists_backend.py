@@ -59,7 +59,7 @@ def _make_client() -> MagicMock:
 
 def _make_gist_data(name: str, tags: list[str], **lore_extras) -> GistData:
     """Build a GistData as the gist backend would create it."""
-    description = f"[lore-concept] {name} [{', '.join(tags)}]"
+    description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
     lore_json: dict = {
         "schema_version": "1",
         "type": lore_extras.get("type", "pattern"),
@@ -100,16 +100,16 @@ class TestParseNameFromDescription:
 
     def test_full_format_with_tags(self):
         """Standard format with name and tags parses correctly."""
-        result = _parse_name_from_description("[lore-concept] My Pattern [tag1, tag2]")
+        result = _parse_name_from_description("[agentlore-concept] My Pattern [tag1, tag2]")
         assert result == "My Pattern"
 
     def test_name_without_trailing_tags(self):
         """A description with no tag suffix returns the bare name."""
-        result = _parse_name_from_description("[lore-concept] Simple Name")
+        result = _parse_name_from_description("[agentlore-concept] Simple Name")
         assert result == "Simple Name"
 
     def test_malformed_no_prefix_returns_full_string(self):
-        """A description without the [lore-concept] prefix is returned verbatim."""
+        """A description without the [agentlore-concept] prefix is returned verbatim."""
         raw = "Some random description without prefix"
         result = _parse_name_from_description(raw)
         assert result == raw
@@ -120,7 +120,7 @@ class TestParseNameFromDescription:
 
     def test_name_with_brackets_in_name_uses_last_bracket(self):
         """When the name itself contains '[', the LAST ' [' is stripped."""
-        result = _parse_name_from_description("[lore-concept] Name [note] [t1, t2]")
+        result = _parse_name_from_description("[agentlore-concept] Name [note] [t1, t2]")
         assert result == "Name [note]"
 
 
@@ -148,7 +148,7 @@ class TestSubmitConcept:
         submit_concept(client, **self._BASE_ARGS)
 
         _, kwargs = client.create_gist.call_args
-        assert kwargs["description"] == "[lore-concept] WAL Mode [sqlite, concurrency]"
+        assert kwargs["description"] == "[agentlore-concept] WAL Mode [sqlite, concurrency]"
 
     def test_files_contains_concept_md_and_lore_json(self):
         """Created files dict must have exactly concept.md and lore.json keys."""

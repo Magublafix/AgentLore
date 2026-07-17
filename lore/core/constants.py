@@ -11,12 +11,12 @@ VALID_CONCEPT_TYPES: frozenset[str] = frozenset(
 
 
 def _parse_name_from_description(description: str) -> str:
-    """Parse a lore-concept gist description: '[lore-concept] Name [tag1,tag2]'.
+    """Parse a lore-concept gist description: '[agentlore-concept] Name [tag1,tag2]'.
 
-    Input format: ``"[lore-concept] My Pattern [tag1, tag2]"``
+    Input format: ``"[agentlore-concept] My Pattern [tag1, tag2]"``
     Output: ``"My Pattern"``
 
-    Strips the leading ``"[lore-concept] "`` prefix, then strips the trailing
+    Strips the leading ``"[agentlore-concept] "`` prefix, then strips the trailing
     ``" [...]"`` suffix (everything from the last ``" ["`` onwards).  If
     parsing fails for any reason the full description is returned as a fallback.
 
@@ -27,7 +27,7 @@ def _parse_name_from_description(description: str) -> str:
         The extracted concept name, or the full description if parsing fails.
     """
     try:
-        prefix = "[lore-concept] "
+        prefix = "[agentlore-concept] "
         if not description.startswith(prefix):
             return description
         remainder = description[len(prefix):]
