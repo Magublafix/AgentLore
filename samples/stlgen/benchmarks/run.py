@@ -111,6 +111,9 @@ _ACTIVE_BACKEND: str = "selfhosted"
 # Accumulates gist IDs created during a series so they can be deleted at end.
 _SERIES_GIST_IDS: list[str] = []
 
+# Concept IDs submitted during the current run (reset each run).
+_RUN_SUBMITTED_IDS: list[str] = []
+
 # Lazily initialised GistsClient — created on first gists-backend call.
 _gists_client_instance = None
 
@@ -546,6 +549,8 @@ def _handle_submit_concept_selfhosted(inputs: dict) -> str:
     result = _lore_api("POST", "/v1/concepts", json=payload)
     if "concept_id" in result:
         _update_session([result["concept_id"]])
+        if result["concept_id"] not in _RUN_SUBMITTED_IDS:
+            _RUN_SUBMITTED_IDS.append(result["concept_id"])
     elif result.get("error") == "semantic_duplicate" and "existing_concept_id" in result:
         # Dedup: track the existing concept so wrapup can rate it.
         _update_session([result["existing_concept_id"]])
@@ -588,6 +593,8 @@ def _handle_submit_concept_gists(inputs: dict) -> str:
     if "concept_id" in result:
         gist_id = result["concept_id"]
         _update_session([gist_id])
+        if gist_id not in _RUN_SUBMITTED_IDS:
+            _RUN_SUBMITTED_IDS.append(gist_id)
         # Track gist ID for series-end cleanup.
         if gist_id not in _SERIES_GIST_IDS:
             _SERIES_GIST_IDS.append(gist_id)
@@ -918,7 +925,7 @@ def _run_agent_anthropic(
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
     if PROVIDER == "local":
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=600.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=900.0)
         model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
     else:
         client = anthropic.Anthropic()
@@ -1100,18 +1107,40 @@ def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple
     # Inject the tail of the coding session so the agent has recollection context.
     tail = messages[-(WRAPUP_HISTORY_TURNS * 2):] if len(messages) > WRAPUP_HISTORY_TURNS * 2 else list(messages)
 
+    submitted_ids: list[str] = list(_RUN_SUBMITTED_IDS)
+    # session_ids contains searched IDs; exclude any that were also submitted
+    # (they'll appear in the submitted list instead).
+    searched_ids = [cid for cid in session_ids if cid not in submitted_ids]
+
     wrapup_prompt = "The coding session above is now complete. Follow the wrapup skill from step 1."
-    if session_ids:
+
+    id_section = ""
+    if searched_ids:
+        id_section += (
+            "\n\nConcept IDs RETRIEVED from Lore during this session (rate these with rate_concept):\n"
+            + "\n".join(f"  - {cid}" for cid in searched_ids)
+        )
+    if submitted_ids:
+        id_section += (
+            "\n\nConcept IDs SUBMITTED to Lore during this session (rate these with rate_concept):\n"
+            + "\n".join(f"  - {cid}" for cid in submitted_ids)
+        )
+    if id_section:
+        wrapup_prompt += id_section
         wrapup_prompt += (
-            f"\n\nThe following concept IDs were retrieved from Lore during this session "
-            f"and MUST be rated with rate_concept before calling finish_wrapup:\n"
-            + "\n".join(f"  - {cid}" for cid in session_ids)
+            "\n\nCRITICAL: Only call rate_concept for the exact IDs listed above. "
+            "Do NOT invent, guess, or slug-ify concept IDs. If an ID is not in the lists above, skip it."
+        )
+    else:
+        wrapup_prompt += (
+            "\n\nNo concepts were retrieved or submitted during this session. "
+            "Skip Step 1 (no rate_concept calls needed). Proceed directly to Step 2 (reflection)."
         )
 
     wrapup_messages = tail + [{"role": "user", "content": wrapup_prompt}]
 
     label = "[wrapup] "
-    n_concepts = len(session_ids)
+    n_concepts = len(searched_ids) + len(submitted_ids)
     print(f"\n  [wrapup] {n_concepts} concept(s) to rate — up to {MAX_TURNS_WRAPUP} turns "
           f"(session context: last {len(tail)} messages)...", flush=True)
 
@@ -1188,8 +1217,9 @@ def step_run(
         print("[dry-run] skipping.")
         return None
 
-    global _CURRENT_SESSION_ID
+    global _CURRENT_SESSION_ID, _RUN_SUBMITTED_IDS
     _CURRENT_SESSION_ID = f"benchmark-s{series_num}-r{run_num}"
+    _RUN_SUBMITTED_IDS = []
 
     SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.write_text("[]")
