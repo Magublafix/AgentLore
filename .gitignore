@@ -11,3 +11,5 @@ build/
 .venv/
 *.db
 .claude/scheduled_tasks.lock
+.env
+samples/stlgen/benchmarks/RUNNING.md
