@@ -2,19 +2,20 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-07 17:36 |
+| Date | 2026-07-19 08:42 |
+| Backend | gists |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (31 concepts) |
+| Lore search active | yes (23 concepts) |
 | Web search active | yes |
 | Turn budget | 40 |
-| Turns (main loop) | 29 |
-| Turns (wrapup) | 30 |
+| Turns (main loop) | 25 |
+| Turns (wrapup) | 4 |
 | Task submitted | yes |
-| Input tokens | 31,056 |
-| Output tokens | 18,134 |
-| Total tokens | 49,190 |
-| Concepts captured this run | 19 |
-| Elapsed | 1762.7s |
+| Input tokens | 25,826 |
+| Output tokens | 9,804 |
+| Total tokens | 35,630 |
+| Concepts captured this run | 3 |
+| Elapsed | 1191.6s |
 | Tests passed | ✅ yes (13/13) |
 
 ## Test output
@@ -23,7 +24,7 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
 cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run8_cx5rp6sw
+rootdir: /tmp/lore_stlgen_run8_ws4psjma
 configfile: pyproject.toml
 plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -50,10 +51,10 @@ tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_trunc
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-  /tmp/lore_stlgen_run8_cx5rp6sw/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run8_ws4psjma/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 14 passed, 2 warnings in 24.16s ========================
+======================= 14 passed, 2 warnings in 37.88s ========================
 
 ```

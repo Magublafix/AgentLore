@@ -392,93 +392,96 @@ def search_concepts(
 ) -> dict:
     """Search for Lore concepts stored as GitHub Gists.
 
-    Issues paginated GitHub search API queries using the ``[lore-concept]``
-    description marker, then applies client-side filters for type, language, and
-    minimum rating before returning the first ``limit`` matching concepts with
-    inline depth-1 link resolution.
+    Lists all gists owned by the authenticated user via a single
+    :meth:`GistsClient.search_gists` call (which follows ``Link`` header
+    pagination internally), filters to those whose description contains the
+    ``"[agentlore-concept]"`` marker, ranks candidates by keyword relevance
+    to ``problem``, and then fetches full concept details for each candidate
+    until ``limit`` filter-passing results have been collected.
 
-    Pagination strategy: up to 3 pages of 30 results each are fetched.  Fetching
-    stops early when either a page returns fewer results than requested (last
-    page reached) or enough filter-passing candidates have already been collected.
-    Gist details (``lore.json`` + comments) are only fetched for candidates that
-    have not already been deduplicated.
+    Relevance scoring: the number of lowercased words from ``problem`` that
+    appear in the gist description (lowercased).  Candidates are sorted by
+    descending score before detail-fetching begins.
+
+    Filters applied after concept detail is fetched:
+    - ``type``: concept ``type`` field must match (when ``type`` is not None).
+    - ``language``: concept ``language`` field must match (when not None).
+    - ``min_rating``: concepts with ``avg_rating`` strictly below threshold
+      are excluded.  Unrated concepts (``avg_rating`` is None) always pass.
 
     Args:
         client: An authenticated :class:`GistsClient` instance.
         problem: Natural-language description of the problem to search for.
-            Combined with ``"[lore-concept]"`` as the GitHub search query.
-        type: Optional concept type filter.  When set, concepts whose
-            ``lore.json`` ``type`` field differs are skipped.
-        language: Optional programming language filter.  When set, concepts
-            whose ``lore.json`` ``language`` field differs are skipped.
+            Used for relevance scoring against gist descriptions.
+        type: Optional concept type filter.
+        language: Optional programming language filter.
         limit: Maximum number of matching concepts to return.  Defaults to 3.
-        min_rating: Minimum average rating threshold (inclusive).  Concepts
-            with an ``avg_rating`` strictly below this value are excluded.
-            Concepts with no ratings yet are **included** regardless of this
-            threshold.  Defaults to 2.0.
+        min_rating: Minimum average rating threshold (inclusive).  Defaults
+            to 2.0.
 
     Returns:
-        A dict with a single key ``"results"`` whose value is a list of concept
-        dicts, each matching the shape returned by :func:`get_concept`.  Returns
-        ``{"results": []}`` when no concepts match.
+        A dict with a single key ``"results"`` whose value is a list of
+        concept dicts, each matching the shape returned by :func:`get_concept`.
+        Returns ``{"results": []}`` when no concepts match.
 
     Raises:
         RuntimeError: If a :class:`GistRateLimitError` is raised during any
             GitHub API call.
     """
-    _MAX_PAGES = 3
-    _PER_PAGE = 30
+    try:
+        all_summaries = client.search_gists("")
+    except GistRateLimitError as exc:
+        raise RuntimeError(f"GitHub rate limit reached: {exc}") from exc
 
-    query = f"[agentlore-concept] {problem}"
+    # Filter to lore concept gists only.
+    concept_summaries = [
+        s for s in all_summaries if "[agentlore-concept]" in s.description
+    ]
+
+    # Rank by keyword relevance: count how many problem words appear in description.
+    problem_words = problem.lower().split()
+
+    def _relevance(summary) -> int:
+        desc_lower = summary.description.lower()
+        return sum(1 for w in problem_words if w in desc_lower)
+
+    ranked = sorted(concept_summaries, key=_relevance, reverse=True)
+
     seen_ids: set[str] = set()
     results: list[dict] = []
 
-    for page in range(1, _MAX_PAGES + 1):
+    for summary in ranked:
         if len(results) >= limit:
             break
 
+        gist_id = summary.gist_id
+        if gist_id in seen_ids:
+            continue
+        seen_ids.add(gist_id)
+
+        # Fetch full concept (includes lore.json, link resolution, ratings).
         try:
-            summaries = client.search_gists(query, page=page, per_page=_PER_PAGE)
+            concept = get_concept(client, gist_id)
         except GistRateLimitError as exc:
             raise RuntimeError(f"GitHub rate limit reached: {exc}") from exc
 
-        last_page = len(summaries) < _PER_PAGE
+        if concept is None:
+            # Gist not found or unavailable — skip silently.
+            continue
 
-        for summary in summaries:
-            if len(results) >= limit:
-                break
+        # Client-side type filter.
+        if type is not None and concept.get("type") != type:
+            continue
 
-            gist_id = summary.gist_id
-            if gist_id in seen_ids:
-                continue
-            seen_ids.add(gist_id)
+        # Client-side language filter.
+        if language is not None and concept.get("language") != language:
+            continue
 
-            # Fetch full concept (includes lore.json, link resolution, ratings).
-            try:
-                concept = get_concept(client, gist_id)
-            except GistRateLimitError as exc:
-                raise RuntimeError(f"GitHub rate limit reached: {exc}") from exc
+        # Rating filter: unrated concepts (avg_rating is None) always pass.
+        avg_rating = concept.get("avg_rating")
+        if avg_rating is not None and avg_rating < min_rating:
+            continue
 
-            if concept is None:
-                # Gist not found or unavailable — skip silently.
-                continue
-
-            # Client-side type filter.
-            if type is not None and concept.get("type") != type:
-                continue
-
-            # Client-side language filter.
-            if language is not None and concept.get("language") != language:
-                continue
-
-            # Rating filter: unrated concepts (avg_rating is None) always pass.
-            avg_rating = concept.get("avg_rating")
-            if avg_rating is not None and avg_rating < min_rating:
-                continue
-
-            results.append(concept)
-
-        if last_page:
-            break
+        results.append(concept)
 
     return {"results": results}

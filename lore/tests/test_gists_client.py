@@ -189,20 +189,27 @@ def test_update_gist_not_found(client: GistsClient):
 
 
 def test_search_gists_results(client: GistsClient):
-    """search_gists returns a list of GistSummary objects."""
-    client._session.request.return_value = make_response(
+    """search_gists lists all user gists and returns GistSummary objects.
+
+    The method calls GET /gists (not the defunct GET /search/gists), so the
+    response body is a JSON array of gist objects rather than a search-result
+    envelope.  No Link header is returned, so a single page is fetched.
+    """
+    resp = make_response(
         200,
-        json_body={"items": [{"id": "g1", "description": "Concept: foo"}]},
+        json_body=[{"id": "g1", "description": "Concept: foo"}],
     )
+    resp.headers["Link"] = ""  # no next page
+    client._session.request.return_value = resp
     result = client.search_gists("foo")
     assert result == [GistSummary(gist_id="g1", description="Concept: foo")]
 
 
 def test_search_gists_empty(client: GistsClient):
-    """search_gists returns an empty list when no items are returned."""
-    client._session.request.return_value = make_response(
-        200, json_body={"items": []}
-    )
+    """search_gists returns an empty list when the user has no gists."""
+    resp = make_response(200, json_body=[])
+    resp.headers["Link"] = ""
+    client._session.request.return_value = resp
     assert client.search_gists("nothing") == []
 
 

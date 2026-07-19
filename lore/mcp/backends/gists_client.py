@@ -13,12 +13,31 @@ Environment variables:
 from __future__ import annotations
 
 import os
+import re as _re
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import requests
+
+
+def _parse_next_link(link_header: str) -> str | None:
+    """Parse the ``rel="next"`` URL from a GitHub ``Link`` response header.
+
+    Args:
+        link_header: Raw value of the ``Link`` HTTP header.
+
+    Returns:
+        The next-page URL string, or ``None`` if no ``rel="next"`` entry
+        is present.
+    """
+    for part in link_header.split(","):
+        if 'rel="next"' in part:
+            m = _re.search(r"<([^>]+)>", part)
+            if m:
+                return m.group(1)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +98,10 @@ class GistData:
 @dataclass
 class GistSummary:
     """Lightweight summary returned by :meth:`GistsClient.search_gists`.
+
+    Callers are responsible for filtering the returned list; the client
+    returns all gists owned by the authenticated user without any
+    server-side keyword filtering.
 
     Attributes:
         gist_id: The GitHub gist identifier.
@@ -229,34 +252,80 @@ class GistsClient:
         self._request("PATCH", f"/gists/{gist_id}", json=payload)
 
     def search_gists(
-        self, query: str, page: int = 1, per_page: int = 30
+        self, query: str, page: int = 1, per_page: int = 100
     ) -> list[GistSummary]:
-        """Search gists via the GitHub search API.
+        """List all gists owned by the authenticated user.
+
+        Uses ``GET /gists`` with pagination via ``Link`` headers, fetching
+        every page until exhaustion.  The ``query`` and ``page`` parameters
+        are accepted for interface compatibility but are **not** used for
+        server-side filtering — callers must perform their own filtering on
+        the returned list.
 
         Args:
-            query: Free-text search query string.
-            page: Page number to fetch (1-indexed).  Defaults to ``1``.
-            per_page: Number of results per page.  Defaults to ``30``.
+            query: Ignored.  Accepted for interface compatibility only.
+            page: Ignored.  Accepted for interface compatibility only.
+            per_page: Number of results per API page.  Defaults to ``100``
+                (the GitHub maximum).
 
         Returns:
-            List of :class:`GistSummary` objects matching the query.  Returns
-            an empty list when there are no results.
+            List of :class:`GistSummary` objects for every gist owned by the
+            authenticated user.  Returns an empty list when the user has no
+            gists.
 
         Raises:
             GistAuthError: On 401/403.
             GistRateLimitError: When the rate limit is exhausted.
             GistAPIError: On unexpected errors.
         """
-        resp = self._request(
-            "GET",
-            "/search/gists",
-            params={"q": query, "page": page, "per_page": per_page},
-        )
-        items = resp.json().get("items", [])
-        return [
-            GistSummary(gist_id=item["id"], description=item["description"])
-            for item in items
-        ]
+        results: list[GistSummary] = []
+        url: str | None = f"{self._base_url}/gists"
+        params: dict = {"per_page": per_page}
+
+        while url is not None:
+            resp = self._session.request("GET", url, params=params)
+            # Re-use the error handling logic by delegating to _request only
+            # on the first call; for subsequent pages use the absolute URL
+            # directly and manually check status.
+            params = {}  # params already encoded in the Link-derived URL
+
+            # Mirror _request error handling for paginated responses.
+            if resp.status_code in (502, 503):
+                time.sleep(1)
+                resp = self._session.request("GET", url)
+                if resp.status_code in (502, 503):
+                    raise GistAPIError(
+                        f"GitHub API returned {resp.status_code} on GET {url} after retry."
+                    )
+
+            remaining = resp.headers.get("X-RateLimit-Remaining")
+            if resp.status_code == 429:
+                raise GistRateLimitError("GitHub API rate limit exhausted (HTTP 429).")
+            if remaining is not None and int(remaining) == 0:
+                raise GistRateLimitError(
+                    "GitHub API rate limit exhausted (X-RateLimit-Remaining: 0)."
+                )
+            if resp.status_code in (401, 403):
+                raise GistAuthError(
+                    f"GitHub authentication/authorisation error (HTTP {resp.status_code})."
+                )
+            if resp.status_code == 404:
+                raise GistNotFoundError("GitHub resource not found: GET /gists")
+            if resp.status_code >= 400:
+                raise GistAPIError(f"GitHub API error {resp.status_code} on GET {url}.")
+
+            for item in resp.json():
+                results.append(
+                    GistSummary(
+                        gist_id=item["id"],
+                        description=item.get("description") or "",
+                    )
+                )
+
+            link_header = resp.headers.get("Link", "")
+            url = _parse_next_link(link_header) if link_header else None
+
+        return results
 
     def list_comments(self, gist_id: str) -> list[Comment]:
         """List all comments on a gist.
