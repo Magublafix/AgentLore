@@ -1141,11 +1141,16 @@ def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple
 
     label = "[wrapup] "
     n_concepts = len(searched_ids) + len(submitted_ids)
+    # Only offer rate_concept when there are real IDs to rate — prevents the
+    # local model from hallucinating ghost IDs when the tool isn't available.
+    wrapup_tools = TOOLS_WRAPUP if n_concepts > 0 else [
+        t for t in TOOLS_WRAPUP if t["name"] != "rate_concept"
+    ]
     print(f"\n  [wrapup] {n_concepts} concept(s) to rate — up to {MAX_TURNS_WRAPUP} turns "
           f"(session context: last {len(tail)} messages)...", flush=True)
 
     in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
-        wrapup_system, TOOLS_WRAPUP, wrapup_messages,
+        wrapup_system, wrapup_tools, wrapup_messages,
         workdir=None, max_turns=MAX_TURNS_WRAPUP, verbose=verbose,
         label=label, stop_on_submit=True,
     )
