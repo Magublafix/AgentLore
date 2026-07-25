@@ -2,62 +2,59 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-19 07:29 |
+| Date | 2026-07-24 03:45 |
 | Backend | gists |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (19 concepts) |
+| Lore search active | yes (8 concepts) |
 | Web search active | yes |
 | Turn budget | 40 |
-| Turns (main loop) | 40 |
-| Turns (wrapup) | 4 |
-| Task submitted | no (hit limit) |
-| Input tokens | 30,015 |
-| Output tokens | 22,695 |
-| Total tokens | 52,710 |
-| Concepts captured this run | 2 |
-| Elapsed | 2581.5s |
-| Tests passed | ❌ no |
+| Turns (main loop) | 19 |
+| Turns (wrapup) | 9 |
+| Task submitted | yes |
+| Input tokens | 21,062 |
+| Output tokens | 4,135 |
+| Total tokens | 25,197 |
+| Concepts captured this run | 3 |
+| Elapsed | 526.9s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
 ```
-ation::test_too_long_rejected PASSED [ 42%]
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/lore_stlgen_run6_ydugzhu8
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 14 items
+
+tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
+tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 14%]
+tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 21%]
+tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 28%]
+tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 35%]
+tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 42%]
 tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 50%]
 tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 57%]
 tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles FAILED [ 71%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
 tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text FAILED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated FAILED [100%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated PASSED [100%]
 
-=================================== FAILURES ===================================
-_________________ TestSTLValidity.test_no_degenerate_triangles _________________
-tests/test_text2stl_cli.py:250: in test_no_degenerate_triangles
-    assert min_area > 0, (
-E   AssertionError: Mesh contains degenerate (zero-area) triangles — min triangle area: 0.0
-E   assert 0.0 > 0
-_____________ TestCharacterShapes.test_character_shapes_match_text _____________
-tests/test_text2stl_cli.py:314: in test_character_shapes_match_text
-    assert iou >= 0.25, (
-E   AssertionError: Character shape IoU 0.191 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
-E   assert 0.19056117390442198 >= 0.25
-___________ TestCharacterShapes.test_character_shapes_not_truncated ____________
-tests/test_text2stl_cli.py:361: in test_character_shapes_not_truncated
-    assert min_corr >= 0.3, (
-E   AssertionError: Band-profile correlation -0.030 < 0.3 — cross-section looks truncated (missing a chunk of its vertical or horizontal extent) even though it may still pass the IoU shape check. Check for clipping against canvas/render boundaries — e.g. font size too large relative to canvas combined with edge-anchored text placement.
-E   assert -0.030496106156961328 >= 0.3
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-  /tmp/lore_stlgen_run6_455yf503/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run6_ydugzhu8/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-================== 3 failed, 11 passed, 2 warnings in 16.47s ===================
+======================= 14 passed, 2 warnings in 26.50s ========================
 
 ```

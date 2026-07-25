@@ -2,28 +2,27 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-07 23:55 |
+| Date | 2026-07-24 12:42 |
+| Backend | gists |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (35 concepts) |
+| Lore search active | yes (40 concepts) |
 | Web search active | yes |
 | Turn budget | 40 |
-| Turns (main loop) | 22 |
-| Turns (wrapup) | 2 |
-| Task submitted | yes |
-| Input tokens | 19,714 |
-| Output tokens | 3,852 |
-| Total tokens | 23,566 |
-| Concepts captured this run | 2 |
-| Elapsed | 440.3s |
-| Tests passed | ✅ yes (13/13) |
+| Turns (main loop) | 40 |
+| Turns (wrapup) | 15 |
+| Task submitted | no (hit limit) |
+| Input tokens | 49,862 |
+| Output tokens | 35,197 |
+| Total tokens | 85,059 |
+| Concepts captured this run | 9 |
+| Elapsed | 4488.3s |
+| Tests passed | ❌ no |
 
 ## Test output
 
 ```
-============================= test session starts ==============================
-platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
-cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run10_xk31lxdz
+r: .pytest_cache
+rootdir: /tmp/lore_stlgen_run10_ypy6v84_
 configfile: pyproject.toml
 plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -45,15 +44,23 @@ tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED
 tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
-tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated PASSED [100%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated FAILED [100%]
 
+=================================== FAILURES ===================================
+___________ TestCharacterShapes.test_character_shapes_not_truncated ____________
+tests/test_text2stl_cli.py:361: in test_character_shapes_not_truncated
+    assert min_corr >= 0.3, (
+E   AssertionError: Band-profile correlation -0.039 < 0.3 — cross-section looks truncated (missing a chunk of its vertical or horizontal extent) even though it may still pass the IoU shape check. Check for clipping against canvas/render boundaries — e.g. font size too large relative to canvas combined with edge-anchored text placement.
+E   assert -0.03941537739424443 >= 0.3
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-  /tmp/lore_stlgen_run10_xk31lxdz/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run10_ypy6v84_/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 14 passed, 2 warnings in 18.13s ========================
+=========================== short test summary info ============================
+FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
+================== 1 failed, 13 passed, 2 warnings in 26.41s ===================
 
 ```

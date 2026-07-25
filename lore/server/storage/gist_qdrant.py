@@ -198,7 +198,10 @@ class GistQdrantBackend(StorageBackend):
         gist_id: str = payload["gist_id"]
         point_id = _gist_id_to_point_id(gist_id)
 
-        # Idempotency check: compare stored gist_updated_at with request value.
+        avg_rating = payload.get("avg_rating")
+        avg_hours_saved = payload.get("avg_hours_saved")
+
+        # Idempotency check: if content unchanged, only update rating fields.
         existing = self._qdrant.retrieve(
             collection_name=COLLECTION_NAME,
             ids=[point_id],
@@ -207,6 +210,14 @@ class GistQdrantBackend(StorageBackend):
         if existing:
             stored_updated_at = existing[0].payload.get("gist_updated_at")  # type: ignore[union-attr]
             if stored_updated_at == payload.get("gist_updated_at"):
+                # Content unchanged — update rating fields if they differ.
+                stored_avg = existing[0].payload.get("avg_outcome")  # type: ignore[union-attr]
+                if avg_rating != stored_avg:
+                    self._qdrant.set_payload(
+                        collection_name=COLLECTION_NAME,
+                        payload={"avg_outcome": avg_rating, "avg_hours_saved": avg_hours_saved},
+                        points=[point_id],
+                    )
                 return {"status": "skipped", "gist_id": gist_id}
 
         # Embed and upsert.
@@ -222,8 +233,8 @@ class GistQdrantBackend(StorageBackend):
             "when_to_use": payload["when_to_use"],
             "dont_use_when": payload.get("dont_use_when"),
             "gist_updated_at": payload.get("gist_updated_at", ""),
-            "avg_outcome": None,
-            "avg_hours_saved": None,
+            "avg_outcome": avg_rating,
+            "avg_hours_saved": avg_hours_saved,
             "rating_count": 0,
             "usage_count": 0,
         }

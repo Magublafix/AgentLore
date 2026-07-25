@@ -2,63 +2,59 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-19 10:54 |
+| Date | 2026-07-24 05:00 |
 | Backend | gists |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (27 concepts) |
+| Lore search active | yes (15 concepts) |
 | Web search active | yes |
 | Turn budget | 40 |
-| Turns (main loop) | 40 |
-| Turns (wrapup) | 3 |
-| Task submitted | no (hit limit) |
-| Input tokens | 31,225 |
-| Output tokens | 37,415 |
-| Total tokens | 68,640 |
+| Turns (main loop) | 24 |
+| Turns (wrapup) | 7 |
+| Task submitted | yes |
+| Input tokens | 15,908 |
+| Output tokens | 5,202 |
+| Total tokens | 21,110 |
 | Concepts captured this run | 1 |
-| Elapsed | 4709.3s |
-| Tests passed | ❌ no |
+| Elapsed | 622.8s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
 ```
-xt
-    assert iou >= 0.25, (
-E   AssertionError: Character shape IoU 0.000 < 0.25 — cross-section does not resemble 'HELLO'. Letters may be malformed, missing, or in wrong order.
-E   assert 0.0 >= 0.25
-___________ TestCharacterShapes.test_character_shapes_not_truncated ____________
-tests/test_text2stl_cli.py:361: in test_character_shapes_not_truncated
-    assert min_corr >= 0.3, (
-E   AssertionError: Band-profile correlation 0.000 < 0.3 — cross-section looks truncated (missing a chunk of its vertical or horizontal extent) even though it may still pass the IoU shape check. Check for clipping against canvas/render boundaries — e.g. font size too large relative to canvas combined with edge-anchored text placement.
-E   assert 0.0 >= 0.3
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/lore_stlgen_run10_b3p3ei_m
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 14 items
+
+tests/test_text2stl_cli.py::TestInvocation::test_single_char PASSED      [  7%]
+tests/test_text2stl_cli.py::TestInvocation::test_five_chars PASSED       [ 14%]
+tests/test_text2stl_cli.py::TestInvocation::test_max_length PASSED       [ 21%]
+tests/test_text2stl_cli.py::TestInvocation::test_default_output_filename PASSED [ 28%]
+tests/test_text2stl_cli.py::TestValidation::test_empty_string_rejected PASSED [ 35%]
+tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 42%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 50%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 57%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
+tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
+tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated PASSED [100%]
+
 =============================== warnings summary ===============================
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-  /home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/triangles.py:302: RuntimeWarning: divide by zero encountered in divide
-    center_mass = integrated[1:4] / volume
-
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-  /home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/triangles.py:302: RuntimeWarning: invalid value encountered in divide
-    center_mass = integrated[1:4] / volume
-
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-  /home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/triangles.py:316: RuntimeWarning: invalid value encountered in scalar multiply
-    integrated[5] + integrated[6] - (volume * (center_mass[[1, 2]] ** 2).sum())
-
-tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-  /home/magublafix/AI/AgentLore/.venv/lib64/python3.11/site-packages/trimesh/triangles.py:325: RuntimeWarning: invalid value encountered in scalar multiply
-    inertia[1, 2] = -(integrated[8] - (volume * np.prod(center_mass[[1, 2]])))
-
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-  /tmp/lore_stlgen_run10_ya2m2yzn/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run10_b3p3ei_m/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume
-FAILED tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
-FAILED tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-=================== 5 failed, 9 passed, 6 warnings in 42.25s ===================
+======================= 14 passed, 2 warnings in 27.29s ========================
 
 ```

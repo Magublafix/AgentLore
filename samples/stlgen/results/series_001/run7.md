@@ -2,21 +2,21 @@
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-19 08:17 |
+| Date | 2026-07-24 03:58 |
 | Backend | gists |
 | Model | unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M |
-| Lore search active | yes (21 concepts) |
+| Lore search active | yes (11 concepts) |
 | Web search active | yes |
 | Turn budget | 40 |
-| Turns (main loop) | 40 |
-| Turns (wrapup) | 3 |
-| Task submitted | no (hit limit) |
-| Input tokens | 31,958 |
-| Output tokens | 20,740 |
-| Total tokens | 52,698 |
+| Turns (main loop) | 16 |
+| Turns (wrapup) | 8 |
+| Task submitted | yes |
+| Input tokens | 21,949 |
+| Output tokens | 3,536 |
+| Total tokens | 25,485 |
 | Concepts captured this run | 2 |
-| Elapsed | 2510.6s |
-| Tests passed | ❌ no |
+| Elapsed | 455.1s |
+| Tests passed | ✅ yes (13/13) |
 
 ## Test output
 
@@ -24,7 +24,7 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /home/magublafix/AI/AgentLore/.venv/bin/python
 cachedir: .pytest_cache
-rootdir: /tmp/lore_stlgen_run7_73zzy94h
+rootdir: /tmp/lore_stlgen_run7_3rg_042f
 configfile: pyproject.toml
 plugins: cov-7.1.0, anyio-4.13.0, asyncio-1.4.0, timeout-2.4.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -42,27 +42,19 @@ tests/test_text2stl_cli.py::TestValidation::test_too_long_rejected PASSED [ 42%]
 tests/test_text2stl_cli.py::TestSTLValidity::test_stl_loads_without_error PASSED [ 50%]
 tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_is_watertight PASSED [ 57%]
 tests/test_text2stl_cli.py::TestSTLValidity::test_mesh_has_positive_volume PASSED [ 64%]
-tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles FAILED [ 71%]
+tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles PASSED [ 71%]
 tests/test_text2stl_cli.py::TestDimensions::test_width_scales_with_char_count PASSED [ 78%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_cross_section_is_nonempty PASSED [ 85%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text PASSED [ 92%]
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated PASSED [100%]
 
-=================================== FAILURES ===================================
-_________________ TestSTLValidity.test_no_degenerate_triangles _________________
-tests/test_text2stl_cli.py:250: in test_no_degenerate_triangles
-    assert min_area > 0, (
-E   AssertionError: Mesh contains degenerate (zero-area) triangles — min triangle area: 0.0
-E   assert 0.0 > 0
 =============================== warnings summary ===============================
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_match_text
 tests/test_text2stl_cli.py::TestCharacterShapes::test_character_shapes_not_truncated
-  /tmp/lore_stlgen_run7_73zzy94h/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  /tmp/lore_stlgen_run7_3rg_042f/tests/test_text2stl_cli.py:52: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
     section_2d, _ = section.to_planar()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_text2stl_cli.py::TestSTLValidity::test_no_degenerate_triangles
-============= 1 failed, 13 passed, 2 warnings in 65.26s (0:01:05) ==============
+======================= 14 passed, 2 warnings in 26.42s ========================
 
 ```

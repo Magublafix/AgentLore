@@ -11,7 +11,9 @@ The gist description encodes the concept name and tags in the format:
     ``[lore-concept] <name> [<tag1>, <tag2>, ...]``
 
 Rating data is stored as gist comments whose body starts with the prefix
-``[lore-rating]`` followed by a JSON payload.
+``[lore-rating]`` followed by a JSON payload.  Each call to
+``rate_concept`` always creates a new comment so ratings accumulate across
+runs and users.
 
 Depth-1 link resolution is performed inline during ``get_concept`` — a
 maximum of 10 linked concepts are resolved in a single call.  Unavailable
@@ -292,25 +294,21 @@ def rate_concept(
     hours_saved: float | None = None,
     notes: str | None = None,
 ) -> dict:
-    """Rate a concept stored as a GitHub Gist using a comment-based rating system.
+    """Rate a concept by posting a new ``[lore-rating]`` comment on its gist.
 
-    Writes a structured ``[lore-rating]`` comment to the concept's gist.  If
-    a rating comment by the authenticated user already exists it is updated
-    in-place (edit-if-exists).  Only one active rating per user is kept.
+    Each call always creates a new comment so ratings accumulate across runs
+    and users.  Aggregates are read back from the full comment history via
+    :func:`get_concept`.
 
     Respects the ``LORE_FREELOADER`` environment variable: when set to
     ``"true"`` (case-insensitive) no comment is written and a no-op result is
     returned immediately.
 
-    Rating aggregation (``avg_rating``, ``avg_hours_saved``) is handled
-    exclusively by :func:`get_concept` — this function is write-only.
-
     Args:
         client: An authenticated :class:`GistsClient` instance.
         concept_id: The GitHub gist id for the concept to rate.
         outcome: Integer quality score 1–5 (1 = not helpful, 5 = very helpful).
-        session_id: The current agent session identifier (stored for audit
-            purposes; not written to the gist comment in this implementation).
+        session_id: The current agent session identifier; stored in the comment.
         hours_saved: Estimated engineering hours saved by using the concept.
             Must be non-negative if provided.  ``None`` omits the field.
         notes: Free-text notes to attach to the rating.  ``None`` omits the field.
@@ -318,8 +316,7 @@ def rate_concept(
     Returns:
         One of:
         - ``{"status": "no-op", "reason": "LORE_FREELOADER=true"}`` when freeloader mode is active.
-        - ``{"status": "created", "concept_id": <concept_id>}`` on new comment creation.
-        - ``{"status": "updated", "concept_id": <concept_id>}`` when an existing rating is edited.
+        - ``{"status": "created", "concept_id": ..., "avg_rating": float|None, "time_saved_avg_hours": float|None}``
 
     Raises:
         ValueError: If ``outcome`` is outside the range 1–5, or if ``hours_saved``
@@ -329,15 +326,11 @@ def rate_concept(
         GistRateLimitError: If the GitHub API rate limit is exhausted.
         GistAPIError: On unexpected GitHub API errors.
     """
-    # Validate outcome before any network call.
     if not (1 <= outcome <= 5):
         raise ValueError(f"outcome must be 1–5, got {outcome}")
-
-    # Validate hours_saved before any network call.
     if hours_saved is not None and hours_saved < 0:
         raise ValueError(f"hours_saved must be non-negative, got {hours_saved}")
 
-    # Freeloader mode: skip all API calls when enabled.
     if os.environ.get("LORE_FREELOADER", "").lower() == "true":
         return {
             "status": "no-op",
@@ -346,36 +339,23 @@ def rate_concept(
             "time_saved_avg_hours": None,
         }
 
-    # Build comment body.
     payload: dict = {"outcome": outcome}
+    if session_id:
+        payload["session_id"] = session_id
     if hours_saved is not None:
         payload["hours_saved"] = hours_saved
-    if notes is not None:
+    if notes:
         payload["notes"] = notes
     comment_body = f"{_LORE_RATING_PREFIX} {json.dumps(payload)}"
 
-    # Find an existing rating comment by the authenticated user.
-    existing_comments = client.list_comments(concept_id)
-    status: str = "created"
-    for comment in existing_comments:
-        if (
-            comment.body.startswith(_LORE_RATING_PREFIX)
-            and comment.author_login == client.authenticated_login
-        ):
-            client.update_comment(concept_id, comment.id, comment_body)
-            status = "updated"
-            break
-    else:
-        # No existing rating — create a new comment.
-        client.create_comment(concept_id, comment_body)
+    client.create_comment(concept_id, comment_body)
 
-    # Fetch updated concept to compute aggregates.
     updated = get_concept(client, concept_id)
     avg_rating = updated["avg_rating"] if updated else None
     time_saved_avg_hours = updated.get("time_saved_avg_hours") if updated else None
 
     return {
-        "status": status,
+        "status": "created",
         "concept_id": concept_id,
         "avg_rating": avg_rating,
         "time_saved_avg_hours": time_saved_avg_hours,

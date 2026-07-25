@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -408,11 +409,11 @@ def build_system_wrapup() -> str:
         "Step 2 (reflection gate) is MANDATORY — enumerate 3-6 implementation areas "
         "and evaluate each for Lore-worthy insights, even if the session was short.\n"
         "Step 3: call submit_concept for each insight identified in Step 2 that is not "
-        "already in Lore. You MUST call submit_concept at least once if you learned anything new.\n"
-        "Step 4: call finish_wrapup only after Steps 1-3 are complete.\n"
+        "already in Lore. Submit at most 9 new concepts (hard cap). After submitting 9 concepts "
+        "OR after you have evaluated all areas (whichever comes first), call finish_wrapup immediately.\n"
+        "Step 4: call finish_wrapup as soon as Steps 1-3 are complete.\n"
         "When the skill says to invoke capture-concept, call submit_concept directly.\n"
-        "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts.\n"
-        "Do NOT call finish_wrapup until you have completed Steps 2 and 3."
+        "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts."
     )
 
 
@@ -914,6 +915,7 @@ def _run_agent_anthropic(
     verbose: bool,
     label: str = "",
     stop_on_submit: bool = False,
+    max_submit_concepts: int | None = None,
 ) -> tuple[int, int, int, bool, list[dict]]:
     """Unified Anthropic-SDK agent loop for both cloud (Claude) and local (Ollama).
 
@@ -933,6 +935,8 @@ def _run_agent_anthropic(
 
     total_in = total_out = turns = 0
     submitted = False
+    wrapup_submit_count = 0
+    wrapup_rated_ids: set[str] = set()  # dedup guard for rate_concept loop
 
     # Local thinking models (e.g. Qwen3.5 via Ollama) frequently end a turn right
     # after their <think> block with no tool call when tool_choice is left at the
@@ -1058,12 +1062,65 @@ def _run_agent_anthropic(
                     submitted = True
             if name == "finish_wrapup":
                 submitted = True
+            if name == "submit_concept" and max_submit_concepts is not None:
+                wrapup_submit_count += 1
+            if name == "rate_concept" and max_submit_concepts is not None:
+                wrapup_rated_ids.add(inputs.get("concept_id") or inputs.get("id") or "")
             if verbose:
                 print(f"    ← {str(result)[:120].replace(chr(10), ' ')}", flush=True)
             tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": result})
 
         if tool_results:
             messages.append({"role": "user", "content": tool_results})
+
+        # Hard cap: if the wrapup agent has submitted the maximum number of concepts,
+        # inject a follow-up user message forcing it to call finish_wrapup immediately.
+        if (
+            max_submit_concepts is not None
+            and wrapup_submit_count >= max_submit_concepts
+            and not submitted
+        ):
+            print(
+                f"  {label}[concept cap reached: {wrapup_submit_count}/{max_submit_concepts} submitted"
+                " — injecting finish_wrapup prompt]",
+                flush=True,
+            )
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"You have submitted {wrapup_submit_count} concepts (the maximum allowed per session). "
+                    "Call finish_wrapup now to complete the wrapup."
+                ),
+            })
+
+        # Consecutive-duplicate rate_concept check: last two assistant turns both called
+        # rate_concept with the same concept_id → stuck in a loop.
+        if max_submit_concepts is not None and not submitted and len(messages) >= 4:
+            def _last_rate_id(msg):
+                content = msg.get("content", [])
+                if not isinstance(content, list):
+                    return None
+                for b in content:
+                    if b.get("type") == "tool_use" and b.get("name") == "rate_concept":
+                        return b.get("input", {}).get("concept_id") or b.get("input", {}).get("id")
+                return None
+            # messages[-1] is latest tool_result, [-2] is latest assistant, [-3] is prev tool_result, [-4] is prev assistant
+            prev_id = _last_rate_id(messages[-4]) if len(messages) >= 4 else None
+            curr_id = _last_rate_id(messages[-2]) if len(messages) >= 2 else None
+            if curr_id and curr_id == prev_id:
+                print(
+                    f"  {label}[rate_concept loop detected on '{curr_id}' — injecting redirect]",
+                    flush=True,
+                )
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"You have already rated concept '{curr_id}'. "
+                        "Do NOT call rate_concept again. "
+                        "Proceed immediately to Step 2: enumerate what was built in this session, "
+                        "then capture new insights with submit_concept."
+                    ),
+                })
 
         if stop_on_submit and submitted:
             break
@@ -1152,7 +1209,7 @@ def run_wrapup_phase(run_num: int, verbose: bool, messages: list[dict]) -> tuple
     in_tok, out_tok, turns, _, _ = _run_agent_anthropic(
         wrapup_system, wrapup_tools, wrapup_messages,
         workdir=None, max_turns=MAX_TURNS_WRAPUP, verbose=verbose,
-        label=label, stop_on_submit=True,
+        label=label, stop_on_submit=True, max_submit_concepts=9,
     )
 
     SESSION_FILE.write_text("[]")
@@ -1170,12 +1227,15 @@ def run_tests(workdir: Path) -> tuple[bool, str]:
     # whether the agent remembered to run `pip install -e .` themselves.
     install_header = ""
     if (workdir / "pyproject.toml").exists() or (workdir / "setup.py").exists():
-        install = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", ".", "-q"],
-            cwd=workdir, capture_output=True, text=True, timeout=120,
-        )
-        if install.returncode != 0:
-            install_header = f"[pip install -e . failed]\n{install.stdout}{install.stderr}\n"
+        try:
+            install = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
+                cwd=workdir, capture_output=True, text=True, timeout=60,
+            )
+            if install.returncode != 0:
+                install_header = f"[pip install -e . failed]\n{install.stdout}{install.stderr}\n"
+        except subprocess.TimeoutExpired:
+            install_header = "[pip install -e . timed out — continuing anyway]\n"
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/test_text2stl_cli.py", "-v", "--tb=short", "--timeout=60"],
@@ -1697,6 +1757,11 @@ def main() -> None:
                         help="First series number (default: 1). Use to avoid overwriting existing series.")
     parser.add_argument("--backend", choices=["selfhosted", "gists"], default="selfhosted",
                         help="Backend to use for concept operations (default: selfhosted).")
+    parser.add_argument("--inter-run-delay", type=int, default=0, metavar="SECS",
+                        help="Seconds to wait between runs (default: 0). "
+                             "Use with --backend gists to let the watcher index new concepts "
+                             "before the next run's search_concepts call. "
+                             "Set LORE_WATCH_INTERVAL to a matching low value on the semantic server.")
     args = parser.parse_args()
 
     global _ACTIVE_BACKEND, _gists_client_instance
@@ -1735,6 +1800,13 @@ def main() -> None:
                     res = None
                 if res:
                     series_results.append(res)
+                if args.inter_run_delay > 0 and run_num < 10 and not args.dry_run:
+                    print(
+                        f"\n  [inter-run] waiting {args.inter_run_delay}s for watcher "
+                        f"to index new concepts before run {run_num + 1}...",
+                        flush=True,
+                    )
+                    time.sleep(args.inter_run_delay)
 
             if len(series_results) >= 2:
                 _write_comparison(series_results, output_dir=series_dir)
@@ -1763,6 +1835,13 @@ def main() -> None:
             res = step_run(run_num, args.verbose, args.dry_run, max_turns=args.max_turns)
             if res:
                 results.append(res)
+            if args.inter_run_delay > 0 and run_num < max(runs) and not args.dry_run:
+                print(
+                    f"\n  [inter-run] waiting {args.inter_run_delay}s for watcher "
+                    f"to index new concepts before run {run_num + 1}...",
+                    flush=True,
+                )
+                time.sleep(args.inter_run_delay)
 
         if len(results) >= 2:
             _write_comparison(results)

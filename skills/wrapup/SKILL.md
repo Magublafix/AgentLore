@@ -41,6 +41,8 @@ For each area from 4a, ask: does it meet at least one of these?
 **4c. Capture qualifying areas.**
 For each area that qualifies, invoke `/lore:capture-concept`. Let that skill handle generalization and submission. Record the `concept_id` returned by each `submit_concept` call — you will rate these in the next step. If nothing qualifies, move on silently.
 
+**Hard cap: submit at most 9 new concepts per wrapup session.** After 9 `submit_concept` calls have been made, stop invoking `/lore:capture-concept` immediately and proceed to step 3 (rating), regardless of how many qualifying areas remain. This is a hard rule, not a guideline — do not exceed 9 submissions even if more areas would qualify.
+
 ### 3. Rate all concepts (agent-autonomous)
 
 Rate every concept in two groups:

@@ -178,21 +178,49 @@ async def _fetch_full_gist(
     client: httpx.AsyncClient,
     gist_id: str,
 ) -> dict[str, Any]:
-    """Fetch the full gist object (including file contents) from GitHub.
-
-    Args:
-        client: An authenticated :class:`httpx.AsyncClient` instance.
-        gist_id: GitHub gist identifier string.
-
-    Returns:
-        Full gist dict from the GitHub API including ``files`` with content.
-
-    Raises:
-        httpx.HTTPStatusError: On non-2xx HTTP responses.
-    """
+    """Fetch the full gist object (including file contents) from GitHub."""
     response = await client.get(f"{_GITHUB_API_BASE}/gists/{gist_id}")
     response.raise_for_status()
     return response.json()
+
+
+_LORE_RATING_PREFIX = "[lore-rating]"
+
+
+async def _fetch_rating_aggregates(
+    client: httpx.AsyncClient,
+    gist_id: str,
+) -> tuple[float | None, float | None]:
+    """Fetch gist comments and return (avg_rating, avg_hours_saved) from ``[lore-rating]`` entries.
+
+    Returns (None, None) if there are no rating comments or on fetch failure.
+    """
+    try:
+        response = await client.get(f"{_GITHUB_API_BASE}/gists/{gist_id}/comments")
+        response.raise_for_status()
+        comments = response.json()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to fetch comments for gist %s: %s", gist_id, exc)
+        return None, None
+
+    outcomes: list[float] = []
+    hours_list: list[float] = []
+    for comment in comments:
+        body = comment.get("body", "")
+        if not body.startswith(_LORE_RATING_PREFIX):
+            continue
+        raw = body[len(_LORE_RATING_PREFIX):]
+        try:
+            data = json.loads(raw)
+            outcomes.append(float(data["outcome"]))
+            if data.get("hours_saved") is not None:
+                hours_list.append(float(data["hours_saved"]))
+        except Exception:  # noqa: BLE001
+            pass
+
+    avg_rating = sum(outcomes) / len(outcomes) if outcomes else None
+    avg_hours_saved = sum(hours_list) / len(hours_list) if hours_list else None
+    return avg_rating, avg_hours_saved
 
 
 # ---------------------------------------------------------------------------
@@ -200,14 +228,22 @@ async def _fetch_full_gist(
 # ---------------------------------------------------------------------------
 
 
-def _extract_payload(gist: dict[str, Any]) -> dict[str, Any] | None:
+def _extract_payload(
+    gist: dict[str, Any],
+    avg_rating: float | None = None,
+    avg_hours_saved: float | None = None,
+) -> dict[str, Any] | None:
     """Extract a upsert payload dict from a full GitHub gist object.
 
     Reads ``lore.json`` from the gist's files, parses it, and builds the
     payload dict expected by :meth:`~lore.server.storage.base.StorageBackend.upsert_concept`.
+    Rating aggregates computed from gist comments are passed in explicitly so
+    the caller controls when to fetch them.
 
     Args:
         gist: Full gist dict from the GitHub API (``GET /gists/{id}``).
+        avg_rating: Pre-computed average rating from comments, or ``None``.
+        avg_hours_saved: Pre-computed average hours saved, or ``None``.
 
     Returns:
         Upsert payload dict, or ``None`` if ``lore.json`` is absent or cannot
@@ -257,6 +293,8 @@ def _extract_payload(gist: dict[str, Any]) -> dict[str, Any] | None:
         "source_url": metadata.get("source_url"),
         "links": metadata.get("links", []),
         "gist_updated_at": gist.get("updated_at", ""),
+        "avg_rating": avg_rating,
+        "avg_hours_saved": avg_hours_saved,
     }
 
 
@@ -265,35 +303,62 @@ def _extract_payload(gist: dict[str, Any]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-async def _fetch_all_public_gists(
+async def _search_lore_gists(
     client: httpx.AsyncClient,
 ) -> list[dict[str, Any]]:
-    """Fetch all public gists (no ``since`` filter), following pagination.
+    """Find all public Lore concept gists via GitHub code search.
 
-    Calls ``GET /gists/public?per_page=100&page=N`` starting at page 1 and
-    stops when an empty page is returned or the ``Link: rel="next"`` header
-    is absent.
+    Uses ``GET /search/code?q=when_to_use+filename:lore.json`` to locate gist
+    files named ``lore.json`` whose content contains ``when_to_use`` — a required
+    field in every Lore concept file.  Filters results to only gist URLs
+    (``gist.github.com``) to exclude any repository files that happen to match.
+
+    Returns gist summary dicts shaped like the ``/gists/public`` response so
+    callers can treat them uniformly.
 
     Args:
         client: An authenticated :class:`httpx.AsyncClient` instance.
 
     Returns:
-        List of all public gist summary dicts from the GitHub API.
+        List of unique gist summary dicts (deduplicated by gist ID).
     """
-    all_gists: list[dict[str, Any]] = []
-    url: str | None = f"{_GITHUB_API_BASE}/gists/public?per_page=100&page=1"
+    seen: set[str] = set()
+    results: list[dict[str, Any]] = []
+    page = 1
 
-    while url:
+    while True:
+        url = (
+            f"{_GITHUB_API_BASE}/search/code"
+            f"?q=when_to_use+filename%3Alore.json&per_page=100&page={page}"
+        )
         response = await client.get(url)
         response.raise_for_status()
-        page = response.json()
-        if not page:
+        data = response.json()
+        items = data.get("items", [])
+        if not items:
             break
-        all_gists.extend(page)
-        link_header = response.headers.get("Link", "")
-        url = _parse_next_link(link_header)
 
-    return all_gists
+        for item in items:
+            repo = item.get("repository", {})
+            html_url: str = repo.get("html_url", "")
+            # Only include gists, not regular repos.
+            if "gist.github.com" not in html_url:
+                continue
+            # Gist ID is the last path segment of the gist URL.
+            gist_id = html_url.rstrip("/").split("/")[-1]
+            if not gist_id or gist_id in seen:
+                continue
+            seen.add(gist_id)
+            results.append({
+                "id": gist_id,
+                "description": repo.get("description", ""),
+            })
+
+        if len(items) < 100:
+            break
+        page += 1
+
+    return results
 
 
 async def _run_bootstrap(
@@ -328,7 +393,7 @@ async def _run_bootstrap(
         )
         return
 
-    logger.info("Bootstrap: fetching all public gists…")
+    logger.info("Bootstrap: searching for [agentlore-concept] gists via code search…")
 
     headers = {
         "Authorization": f"Bearer {github_token}",
@@ -337,22 +402,16 @@ async def _run_bootstrap(
     }
 
     try:
-        async with httpx.AsyncClient(headers=headers) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
             try:
-                summaries = await _fetch_all_public_gists(client)
+                candidates = await _search_lore_gists(client)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Bootstrap: failed to fetch public gists: %s", exc)
+                logger.warning("Bootstrap: code search failed: %s", exc)
                 return
 
-            # Filter to [lore-concept] gists.
-            candidates = [
-                g for g in summaries
-                if _LORE_CONCEPT_MARKER in (g.get("description") or "")
-            ]
             logger.info(
-                "Bootstrap: found %d [lore-concept] gist(s) out of %d total.",
+                "Bootstrap: found %d [agentlore-concept] gist(s) via code search.",
                 len(candidates),
-                len(summaries),
             )
 
             indexed = 0
@@ -370,35 +429,21 @@ async def _run_bootstrap(
                     )
                     continue
 
-                # --- Rating filter ---
-                if min_rating > 0:
-                    lore_json_file = full_gist.get("files", {}).get("lore.json")
-                    ratings: list[dict[str, Any]] = []
-                    if lore_json_file:
-                        try:
-                            metadata = json.loads(lore_json_file.get("content", ""))
-                            ratings = metadata.get("ratings", [])
-                        except (json.JSONDecodeError, AttributeError):
-                            pass  # Treat as unrated — will be indexed.
+                # Fetch comment-based rating aggregates.
+                avg_rating, avg_hours_saved = await _fetch_rating_aggregates(client, gist_id)
 
-                    if ratings:
-                        outcomes = [
-                            r["outcome"] for r in ratings
-                            if isinstance(r.get("outcome"), (int, float))
-                        ]
-                        if outcomes:
-                            avg = sum(outcomes) / len(outcomes)
-                            if avg < min_rating:
-                                logger.info(
-                                    "Skipping gist %s — avg rating %.1f below threshold %s",
-                                    gist_id,
-                                    avg,
-                                    min_rating,
-                                )
-                                skipped += 1
-                                continue
+                # --- Rating filter (unrated concepts always pass) ---
+                if min_rating > 0 and avg_rating is not None and avg_rating < min_rating:
+                    logger.info(
+                        "Skipping gist %s — avg rating %.1f below threshold %s",
+                        gist_id,
+                        avg_rating,
+                        min_rating,
+                    )
+                    skipped += 1
+                    continue
 
-                payload = _extract_payload(full_gist)
+                payload = _extract_payload(full_gist, avg_rating=avg_rating, avg_hours_saved=avg_hours_saved)
                 if payload is None:
                     continue
 
@@ -531,7 +576,7 @@ async def _run_poll_cycle(storage: StorageBackend, github_token: str) -> None:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    async with httpx.AsyncClient(headers=headers) as client:
+    async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
         try:
             summaries = await _fetch_public_gists(client, since)
         except Exception as exc:  # noqa: BLE001
@@ -553,7 +598,7 @@ async def _run_poll_cycle(storage: StorageBackend, github_token: str) -> None:
                 continue
             seen_ids.add(gist_id)
 
-            # Fetch full gist for lore.json content.
+            # Fetch full gist and comment-based rating aggregates.
             try:
                 full_gist = await _fetch_full_gist(client, gist_id)
             except Exception as exc:  # noqa: BLE001
@@ -562,7 +607,8 @@ async def _run_poll_cycle(storage: StorageBackend, github_token: str) -> None:
                 )
                 continue
 
-            payload = _extract_payload(full_gist)
+            avg_rating, avg_hours_saved = await _fetch_rating_aggregates(client, gist_id)
+            payload = _extract_payload(full_gist, avg_rating=avg_rating, avg_hours_saved=avg_hours_saved)
             if payload is None:
                 # _extract_payload already logged the warning.
                 continue
