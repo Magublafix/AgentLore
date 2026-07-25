@@ -87,32 +87,6 @@ Story format:
 
 ---
 
-## [LORE-041] Submit to Smithery.ai and official MCP registry
-
-**Phase:** 4
-**Priority:** medium
-**Effort:** S
-**Agent:** general-purpose
-**Phase item:** `PROJECT.md` §Development Phases > Phase 4 > Submit to Smithery.ai and official MCP registry
-**Depends on:** LORE-040 (package must be live on PyPI first)
-
-**As a** Lore user
-**I want to be able to** discover `mcp-server-lore` through standard MCP directories
-**So that** agents and developers can find it without knowing the package name in advance
-
-**Acceptance Criteria:**
-- [ ] `smithery.yaml` added to repo root with name, description, install command (`uvx mcp-server-lore`), and env var schema (`LORE_BACKEND`, `LORE_GITHUB_TOKEN`, etc.)
-- [ ] Server submitted to Smithery.ai and visible in its directory
-- [ ] Submission PR or entry filed with `registry.modelcontextprotocol.io` (the official MCP registry)
-- [ ] `README.md` install section updated: leads with `uvx mcp-server-lore`, shows Claude Desktop config snippet, links to both registries
-
-**DoD:**
-- [ ] AC above met — tokens recorded
-- [ ] README.md committed
-- [ ] No test changes required
-
----
-
 ## [LORE-042] Flip `LORE_CAPTURE_MODE` default to `auto`
 
 **Phase:** 4
