@@ -112,6 +112,9 @@ _ACTIVE_BACKEND: str = "selfhosted"
 # Accumulates gist IDs created during a series so they can be deleted at end.
 _SERIES_GIST_IDS: list[str] = []
 
+# Gist IDs created specifically by --inject-noise; subset of _SERIES_GIST_IDS.
+_NOISE_GIST_IDS: list[str] = []
+
 # Concept IDs submitted during the current run (reset each run).
 _RUN_SUBMITTED_IDS: list[str] = []
 
@@ -1257,6 +1260,8 @@ def step_run(
     max_turns: int = MAX_TURNS,
     output_dir: Path | None = None,
     series_num: int = 1,
+    inject_noise_n: int = 0,
+    noise_injected: int = 0,
 ) -> dict | None:
     """Execute a single benchmark run.
 
@@ -1266,11 +1271,15 @@ def step_run(
         dry_run: If True, print header and return immediately without running.
         max_turns: Turn budget for the main coding loop.
         output_dir: Directory to write run*.md into. Defaults to RESULTS_DIR.
+        inject_noise_n: Number of wrong concepts to inject (run 1 only).
+        noise_injected: Pre-computed count to carry on runs 2–10 for reporting.
     """
     lore_active = run_num > 1
 
     if run_num == 1:
         _clear_db()
+        if inject_noise_n > 0:
+            noise_injected = _inject_noise_concepts(inject_noise_n)
 
     concepts_in_db = len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else _count_concepts()
 
@@ -1339,6 +1348,7 @@ def step_run(
         "elapsed": elapsed,
         "task_submitted": submitted,
         "tests_passed": passed,
+        "noise_injected": noise_injected,
     }
     _write_run_md(result, test_out, output_dir=output_dir)
     _print_summary(result)
@@ -1512,6 +1522,54 @@ def _seed_concepts() -> None:
         print(f"  [seed] {seeded} concept(s) seeded into DB.", flush=True)
 
 
+def _inject_noise_concepts(n: int) -> int:
+    """Inject up to *n* wrong concepts from noise_concepts.json before a series starts.
+
+    Each concept is submitted via ``handle_submit_concept`` and immediately
+    rated 3/5 so the search ranker treats them as legitimate mid-quality entries.
+    When the active backend is ``"gists"``, the gist ID is appended to both
+    ``_SERIES_GIST_IDS`` and ``_NOISE_GIST_IDS`` so normal series cleanup removes them.
+
+    Returns:
+        The number of concepts actually injected.
+
+    Raises:
+        FileNotFoundError: If noise_concepts.json is missing.
+    """
+    if n <= 0:
+        return 0
+
+    noise_path = Path(__file__).parent / "noise_concepts.json"
+    entries: list[dict] = json.loads(noise_path.read_text(encoding="utf-8"))
+    entries = entries[:n]
+
+    injected = 0
+    for entry in entries:
+        raw_result = handle_submit_concept(entry)
+        try:
+            result = json.loads(raw_result)
+        except (json.JSONDecodeError, ValueError) as exc:
+            print(f"  [noise] warning: could not parse submit result for {entry.get('name')!r}: {exc}", flush=True)
+            continue
+
+        concept_id = result.get("concept_id") or result.get("id")
+        if not concept_id:
+            print(f"  [noise] warning: no concept_id in result for {entry.get('name')!r}: {result}", flush=True)
+            continue
+
+        handle_rate_concept({"concept_id": concept_id, "outcome": 3, "session_id": "noise-inject"})
+
+        if _ACTIVE_BACKEND == "gists":
+            gist_id = result.get("gist_id") or concept_id
+            _SERIES_GIST_IDS.append(gist_id)
+            _NOISE_GIST_IDS.append(gist_id)
+
+        injected += 1
+
+    print(f"  [noise] injected {injected} concept(s) with outcome=3", flush=True)
+    return injected
+
+
 def _write_run_md(r: dict, test_out: str, output_dir: Path | None = None) -> None:
     """Write per-run markdown results file.
 
@@ -1541,6 +1599,7 @@ def _write_run_md(r: dict, test_out: str, output_dir: Path | None = None) -> Non
         f"| Output tokens | {r['output_tokens']:,} |\n"
         f"| Total tokens | {r['total_tokens']:,} |\n"
         f"| Concepts captured this run | {r['concepts_captured']} |\n"
+        f"| Noise concepts injected | {r.get('noise_injected', 0)} |\n"
         f"| Elapsed | {r['elapsed']:.1f}s |\n"
         f"| Tests passed | {'✅ yes (13/13)' if r['tests_passed'] else '❌ no'} |\n\n"
         f"## Test output\n\n```\n{test_out[-3000:]}\n```\n",
@@ -1638,8 +1697,10 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
 
     existing_series: list[dict] = existing.get("series", [])
 
+    noise_injected_series = series_results[0].get("noise_injected", 0) if series_results else 0
     new_series = {
         "series_id": series_id,
+        "noise_injected": noise_injected_series,
         "runs": [
             {
                 "run": r["run"],
@@ -1656,6 +1717,7 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
                 "elapsed": round(r["elapsed"], 1),
                 "task_submitted": r["task_submitted"],
                 "tests_passed": r["tests_passed"],
+                "noise_injected": r.get("noise_injected", 0),
             }
             for r in series_results
         ],
@@ -1762,6 +1824,10 @@ def main() -> None:
                              "Use with --backend gists to let the watcher index new concepts "
                              "before the next run's search_concepts call. "
                              "Set LORE_WATCH_INTERVAL to a matching low value on the semantic server.")
+    parser.add_argument("--inject-noise", type=int, default=0, metavar="N",
+                        help="Inject N wrong concepts (from noise_concepts.json) before the series "
+                             "starts. Each is rated 3/5. Cleaned up at series end alongside real "
+                             "concepts. Only meaningful with --series or --all.")
     args = parser.parse_args()
 
     global _ACTIVE_BACKEND, _gists_client_instance
@@ -1783,6 +1849,7 @@ def main() -> None:
             print(f"{'#'*60}")
 
             series_results: list[dict] = []
+            _series_noise_count: int = 0
             for run_num in range(1, 11):
                 try:
                     res = step_run(
@@ -1792,6 +1859,8 @@ def main() -> None:
                         max_turns=args.max_turns,
                         output_dir=series_dir,
                         series_num=series_num,
+                        inject_noise_n=args.inject_noise if run_num == 1 else 0,
+                        noise_injected=_series_noise_count if run_num > 1 else 0,
                     )
                 except Exception as _run_exc:
                     import traceback as _tb
@@ -1799,6 +1868,8 @@ def main() -> None:
                     print(_tb.format_exc(), flush=True)
                     res = None
                 if res:
+                    if run_num == 1:
+                        _series_noise_count = res.get("noise_injected", 0)
                     series_results.append(res)
                 if args.inter_run_delay > 0 and run_num < 10 and not args.dry_run:
                     print(
@@ -1830,10 +1901,18 @@ def main() -> None:
         # Single-series mode (--all or --run): unchanged behaviour.
         runs = list(range(1, 11)) if args.all else [args.run]
         results: list[dict] = []
+        _run_noise_count: int = 0
 
         for run_num in runs:
-            res = step_run(run_num, args.verbose, args.dry_run, max_turns=args.max_turns)
+            res = step_run(
+                run_num, args.verbose, args.dry_run,
+                max_turns=args.max_turns,
+                inject_noise_n=args.inject_noise if run_num == runs[0] else 0,
+                noise_injected=_run_noise_count if run_num != runs[0] else 0,
+            )
             if res:
+                if run_num == runs[0]:
+                    _run_noise_count = res.get("noise_injected", 0)
                 results.append(res)
             if args.inter_run_delay > 0 and run_num < max(runs) and not args.dry_run:
                 print(
