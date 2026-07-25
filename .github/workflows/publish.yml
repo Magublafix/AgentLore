@@ -1,0 +1,125 @@
+name: Publish
+
+# Fires only on version tags (e.g. v0.1.0, v1.2.3).
+# Build order is enforced by job dependencies: tests must pass before
+# the PyPI publish runs, and the Docker push runs only after PyPI succeeds.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Test gate — identical to ci.yml.  If this fails, nothing publishes.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test (Python 3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.11-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py3.11-
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest lore/tests/ --cov=lore --cov-fail-under=80 -q
+
+  # ---------------------------------------------------------------------------
+  # 2. Build and publish to PyPI via OIDC trusted publishing.
+  #    No PYPI_TOKEN secret required — the id-token permission exchanges the
+  #    GitHub OIDC token for a short-lived PyPI upload credential at runtime.
+  #    Configure trusted publishing on PyPI: Settings → Trusted Publishers →
+  #    add GitHub, repo name, workflow filename, and (optionally) environment.
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: test
+
+    # OIDC trusted publishing requires id-token: write.
+    # contents: read is the minimum for checkout.
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      # pypa/gh-action-pypi-publish picks up dist/ automatically.
+      # OIDC trusted publishing is the default when no password is supplied.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ---------------------------------------------------------------------------
+  # 3. Build the thin MCP server image and push to Docker Hub.
+  #    Uses the root-level Dockerfile (not lore/selfhosted/Dockerfile).
+  #    Tagged with the git version tag AND :latest.
+  # ---------------------------------------------------------------------------
+  publish-docker:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+
+    # contents:read is needed for checkout.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set as repository
+      # secrets (Settings → Secrets and variables → Actions).
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # github.ref_name resolves to the tag name (e.g. "v0.1.0").
+      # We push two tags: the version tag for immutability, and :latest
+      # so consumers can always pull the newest release without pinning.
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mcp-server-lore:${{ github.ref_name }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mcp-server-lore:latest
+          # GHA layer cache keeps the builder stage warm across tag pushes.
+          # mode=max preserves intermediate layers (the dep-install layer is
+          # the expensive one — ~200 MB of Python packages).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
