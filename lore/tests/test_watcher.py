@@ -267,6 +267,8 @@ async def test_cursor_loaded_on_startup_uses_existing_timestamp(tmp_path):
         if "/gists/public" in url:
             mock_resp.json.return_value = summaries
             mock_resp.headers = {"Link": ""}
+        elif "/comments" in url:
+            mock_resp.json.return_value = []
         else:
             mock_resp.json.return_value = gist
         return mock_resp
@@ -709,6 +711,8 @@ async def test_fetch_full_gist_raises_logs_warning_and_continues(tmp_path, caplo
             mock_resp.headers = {"Link": ""}
         elif "/gists/broken" in url:
             raise httpx.ConnectError("broken gist fetch")
+        elif "/comments" in url:
+            mock_resp.json.return_value = []
         else:
             mock_resp.json.return_value = ok_gist
         return mock_resp

@@ -169,104 +169,6 @@ class TestRateConceptCreate:
         client.update_comment.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# TestRateConceptEditIfExists — existing rating comment by same user
-# ---------------------------------------------------------------------------
-
-
-class TestRateConceptEditIfExists:
-    """rate_concept updates an existing comment when the authenticated user already has one."""
-
-    CONCEPT_ID = "gist-abc"
-
-    def test_update_comment_called_when_existing_rating_found(self):
-        """update_comment is called when a [lore-rating] comment from authenticated_login exists."""
-        client = _make_client()
-        existing = _lore_rating_comment(outcome=3, comment_id="comment-99")
-        client.list_comments.return_value = [existing]
-
-        rate_concept(client, self.CONCEPT_ID, outcome=5, session_id="sess-1")
-
-        client.update_comment.assert_called_once()
-
-    def test_update_comment_called_with_correct_args(self):
-        """update_comment receives (concept_id, comment_id, new_body)."""
-        client = _make_client()
-        existing = _lore_rating_comment(outcome=3, comment_id="comment-99")
-        client.list_comments.return_value = [existing]
-
-        rate_concept(client, self.CONCEPT_ID, outcome=5, session_id="sess-1")
-
-        args, _ = client.update_comment.call_args
-        assert args[0] == self.CONCEPT_ID
-        assert args[1] == "comment-99"
-
-    def test_returns_updated_status(self):
-        """Returns {'status': 'updated', 'concept_id': ..., 'avg_rating': ..., 'time_saved_avg_hours': ...} when updating."""
-        client = _make_client()
-        existing = _lore_rating_comment(outcome=2, comment_id="comment-77")
-        client.list_comments.return_value = [existing]
-
-        result = rate_concept(client, self.CONCEPT_ID, outcome=4, session_id="sess-1")
-
-        assert result["status"] == "updated"
-        assert result["concept_id"] == self.CONCEPT_ID
-        assert "avg_rating" in result
-        assert "time_saved_avg_hours" in result
-
-    def test_create_comment_not_called_on_update(self):
-        """create_comment must NOT be called when updating an existing rating."""
-        client = _make_client()
-        existing = _lore_rating_comment(outcome=1, comment_id="comment-10")
-        client.list_comments.return_value = [existing]
-
-        rate_concept(client, self.CONCEPT_ID, outcome=3, session_id="sess-1")
-
-        client.create_comment.assert_not_called()
-
-    def test_edit_if_exists_ignores_other_users_rating_comments(self):
-        """A [lore-rating] comment from a different user does not trigger edit-if-exists."""
-        client = _make_client(login="test-user")
-        other_users_comment = _lore_rating_comment(
-            outcome=2, comment_id="other-comment", author_login="other-user"
-        )
-        client.list_comments.return_value = [other_users_comment]
-
-        result = rate_concept(client, self.CONCEPT_ID, outcome=4, session_id="sess-1")
-
-        # Should create a new comment, not update the other user's
-        assert result["status"] == "created"
-        client.create_comment.assert_called_once()
-        client.update_comment.assert_not_called()
-
-    def test_edit_if_exists_ignores_non_rating_comments_from_same_user(self):
-        """A comment from authenticated_login that is NOT a [lore-rating] comment is ignored."""
-        client = _make_client(login="test-user")
-        non_rating_comment = _make_comment(
-            comment_id="non-rating-comment",
-            body="Great concept!",
-            author_login="test-user",
-        )
-        client.list_comments.return_value = [non_rating_comment]
-
-        result = rate_concept(client, self.CONCEPT_ID, outcome=4, session_id="sess-1")
-
-        assert result["status"] == "created"
-        client.create_comment.assert_called_once()
-        client.update_comment.assert_not_called()
-
-    def test_edit_if_exists_matches_first_own_rating_comment(self):
-        """When multiple [lore-rating] comments from the same user exist, the first one is updated."""
-        client = _make_client(login="test-user")
-        first_comment = _lore_rating_comment(outcome=1, comment_id="first")
-        second_comment = _lore_rating_comment(outcome=2, comment_id="second")
-        client.list_comments.return_value = [first_comment, second_comment]
-
-        rate_concept(client, self.CONCEPT_ID, outcome=5, session_id="sess-1")
-
-        args, _ = client.update_comment.call_args
-        assert args[1] == "first"
-
 
 # ---------------------------------------------------------------------------
 # TestRateConceptValidation — input validation
@@ -508,8 +410,8 @@ class TestRateConceptCommentBody:
         payload = json.loads(body[len("[lore-rating] "):])
         assert "notes" not in payload
 
-    def test_both_optional_none_only_outcome_in_json(self):
-        """When both hours_saved and notes are None, only 'outcome' appears in the JSON."""
+    def test_both_optional_none_only_outcome_and_session_in_json(self):
+        """When hours_saved and notes are None, only 'outcome' and 'session_id' appear in the JSON."""
         client = _make_client()
         client.list_comments.return_value = []
 
@@ -520,20 +422,16 @@ class TestRateConceptCommentBody:
 
         body = self._capture_comment_body(client)
         payload = json.loads(body[len("[lore-rating] "):])
-        assert set(payload.keys()) == {"outcome"}
+        assert set(payload.keys()) == {"outcome", "session_id"}
 
-    def test_update_body_contains_new_outcome(self):
-        """When updating, the new comment body reflects the new outcome."""
+    def test_create_body_contains_outcome(self):
+        """The created comment body reflects the submitted outcome."""
         client = _make_client()
-        existing = _lore_rating_comment(outcome=1, comment_id="c1")
-        client.list_comments.return_value = [existing]
 
         rate_concept(client, self.CONCEPT_ID, outcome=5, session_id="s")
 
-        _, update_kwargs = client.update_comment.call_args
-        # update_comment(concept_id, comment_id, body) — body is the 3rd positional arg
-        update_args, _ = client.update_comment.call_args
-        body = update_args[2]
+        create_args, _ = client.create_comment.call_args
+        body = create_args[1]
         payload = json.loads(body[len("[lore-rating] "):])
         assert payload["outcome"] == 5
 
