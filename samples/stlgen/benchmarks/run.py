@@ -38,7 +38,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote as _quote
 
-import anthropic
 
 from lore.core.constants import VALID_CONCEPT_TYPES as _VALID_CONCEPT_TYPES
 
@@ -926,6 +925,8 @@ def _run_agent_anthropic(
     applies text promotion when the model returns JSON in a text block instead of
     a structured tool_use block.
     """
+    import anthropic  # noqa: PLC0415 — lazy import; not a CI/test dependency
+
     global _TOOLS_REGISTRY_NAMES
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
