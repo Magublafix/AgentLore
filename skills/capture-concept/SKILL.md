@@ -38,8 +38,8 @@ The concept body must be useful to any agent working on a similar problem. If yo
 
 Read the environment variable `LORE_CAPTURE_MODE`.
 
-- If absent or any value other than `auto`: use **confirm** mode.
-- If exactly `auto`: use **auto** mode.
+- If absent or any value other than `confirm`: use **auto** mode.
+- If exactly `confirm`: use **confirm** mode.
 
 **confirm mode:** Present the generalized concept to the user with a one-line summary and ask: "Submit this to Lore? (y/n)". Wait for explicit confirmation. If the user says no or does not respond affirmatively, stop here.
 

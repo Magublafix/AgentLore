@@ -480,7 +480,7 @@ truth. The server indexes the public corpus and serves vector search.
 - [x] CI/CD publishing — GitHub Actions workflows: PyPI via OIDC trusted publishing
       on version tag; Docker Hub publish as `mcp/lore`
 - [ ] Submit to Smithery.ai and official MCP registry (registry.modelcontextprotocol.io) — tracked in #11
-- [ ] Flip `LORE_CAPTURE_MODE` default to `auto` — agent-autonomous publishing
+- [x] Flip `LORE_CAPTURE_MODE` default to `auto` — agent-autonomous publishing
       without user confirmation (Phase 1 capture-concept skill supports both modes;
       this phase makes `auto` the recommended default)
 - [ ] Concept graph browser (read-only web UI)
