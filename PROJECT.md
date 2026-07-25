@@ -483,7 +483,7 @@ truth. The server indexes the public corpus and serves vector search.
 - [x] Flip `LORE_CAPTURE_MODE` default to `auto` — agent-autonomous publishing
       without user confirmation (Phase 1 capture-concept skill supports both modes;
       this phase makes `auto` the recommended default)
-- [ ] Concept graph browser (read-only web UI)
+- [ ] Concept graph browser (read-only web UI) — tracked in #13
 
 ---
 
