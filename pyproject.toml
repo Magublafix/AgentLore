@@ -1,6 +1,11 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "lore"
+name = "mcp-server-lore"
 version = "0.1.0"
+description = "A typed, linked knowledge graph for AI coding agents — MCP server"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=0.1.0",
@@ -13,6 +18,9 @@ dependencies = [
     "pydantic>=2.6.0",
 ]
 
+[project.scripts]
+mcp-server-lore = "lore.mcp.server:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
@@ -20,8 +28,8 @@ dev = [
     "pytest-asyncio>=0.23.0",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["lore"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-
-[tool.setuptools.packages.find]
-include = ["lore*"]

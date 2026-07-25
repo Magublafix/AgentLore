@@ -475,12 +475,15 @@ truth. The server indexes the public corpus and serves vector search.
 
 ### Phase 4 — Publishing
 
-- [ ] Publish MCP server to PyPI as `lore-mcp`
-- [ ] Publish self-hosted Docker image to Docker Hub as `lore/selfhosted`
-- [ ] Concept graph browser (read-only web UI)
+- [ ] Modernise `pyproject.toml` — rename to `mcp-server-lore`, add `main()` entry
+      point so `uvx mcp-server-lore` works, switch build backend to hatchling
+- [ ] CI/CD publishing — GitHub Actions workflows: PyPI via OIDC trusted publishing
+      on version tag; Docker Hub publish as `mcp/lore`
+- [ ] Submit to Smithery.ai and official MCP registry (registry.modelcontextprotocol.io)
 - [ ] Flip `LORE_CAPTURE_MODE` default to `auto` — agent-autonomous publishing
       without user confirmation (Phase 1 capture-concept skill supports both modes;
       this phase makes `auto` the recommended default)
+- [ ] Concept graph browser (read-only web UI)
 
 ---
 

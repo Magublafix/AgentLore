@@ -29,6 +29,116 @@ Story format:
 - [ ] pytest --cov=lore --cov-fail-under=80 passes
 -->
 
+## [LORE-039] Modernise pyproject.toml — `mcp-server-lore`, entry point, hatchling
+
+**Phase:** 4
+**Priority:** high
+**Effort:** S
+**Agent:** python-mcp-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 4 > Modernise pyproject.toml
+
+**As a** Lore user
+**I want to be able to** install and run the MCP server with `uvx mcp-server-lore`
+**So that** the install UX matches the de-facto standard for Python MCP servers
+
+**Acceptance Criteria:**
+- [ ] `pyproject.toml` renamed to `mcp-server-lore` (follows `mcp-server-{name}` convention)
+- [ ] `[build-system]` table present using `hatchling` as build backend
+- [ ] `[project.scripts]` defines `mcp-server-lore = "lore.mcp.server:main"`
+- [ ] `main()` function exists in `lore/mcp/server.py` and is what `if __name__ == "__main__"` calls
+- [ ] `[tool.hatch.build.targets.wheel]` replaces `[tool.setuptools.packages.find]`
+- [ ] `uvx mcp-server-lore` launches the server (manual smoke test)
+- [ ] All existing tests still pass
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-040] CI/CD publishing — PyPI via OIDC + Docker Hub on version tag
+
+**Phase:** 4
+**Priority:** high
+**Effort:** M
+**Agent:** devops-docker-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 4 > CI/CD publishing
+**Depends on:** LORE-039
+
+**As a** Lore maintainer
+**I want to be able to** push a version tag and have PyPI and Docker Hub updated automatically
+**So that** publishing requires no manual steps and no stored registry credentials
+
+**Acceptance Criteria:**
+- [ ] `.github/workflows/publish.yml` triggers on `push: tags: ['v*']`
+- [ ] PyPI publish step uses OIDC trusted publishing (no `PYPI_TOKEN` secret needed); PyPI project `mcp-server-lore` has the GitHub repo configured as a trusted publisher
+- [ ] Docker build publishes `mcp/lore:{version}` and `mcp/lore:latest` to Docker Hub
+- [ ] Docker image built with multi-stage build; final stage is `python:3.11-slim`
+- [ ] Workflow runs `pytest` before publishing; publish steps are skipped if tests fail
+- [ ] A separate `.github/workflows/ci.yml` runs tests on every PR and push to `main`
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Workflow files committed and CI green on `main`
+- [ ] docs/architecture.md, PROJECT.md updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-041] Submit to Smithery.ai and official MCP registry
+
+**Phase:** 4
+**Priority:** medium
+**Effort:** S
+**Agent:** general-purpose
+**Phase item:** `PROJECT.md` §Development Phases > Phase 4 > Submit to Smithery.ai and official MCP registry
+**Depends on:** LORE-040 (package must be live on PyPI first)
+
+**As a** Lore user
+**I want to be able to** discover `mcp-server-lore` through standard MCP directories
+**So that** agents and developers can find it without knowing the package name in advance
+
+**Acceptance Criteria:**
+- [ ] `smithery.yaml` added to repo root with name, description, install command (`uvx mcp-server-lore`), and env var schema (`LORE_BACKEND`, `LORE_GITHUB_TOKEN`, etc.)
+- [ ] Server submitted to Smithery.ai and visible in its directory
+- [ ] Submission PR or entry filed with `registry.modelcontextprotocol.io` (the official MCP registry)
+- [ ] `README.md` install section updated: leads with `uvx mcp-server-lore`, shows Claude Desktop config snippet, links to both registries
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] README.md committed
+- [ ] No test changes required
+
+---
+
+## [LORE-042] Flip `LORE_CAPTURE_MODE` default to `auto`
+
+**Phase:** 4
+**Priority:** medium
+**Effort:** S
+**Agent:** skill-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 4 > Flip LORE_CAPTURE_MODE default to auto
+
+**As a** agent using Lore
+**I want to be able to** publish concepts without being prompted for confirmation
+**So that** capture is fully autonomous in standard agent workflows
+
+**Acceptance Criteria:**
+- [ ] `skills/capture-concept/SKILL.md` updated: `auto` is the documented default; `confirm` mode still supported for users who opt in
+- [ ] Default in `lore/mcp/server.py` or router changed from `confirm` to `auto` if hardcoded anywhere
+- [ ] `README.md` and `docs/architecture.md` updated to reflect new default
+- [ ] Existing benchmark runner (which already sets `LORE_CAPTURE_MODE=auto`) is unaffected
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
 ## [LORE-037] Benchmark series: noise resilience — polluted graph with medium-rated wrong concepts
 
 **Phase:** Benchmark
