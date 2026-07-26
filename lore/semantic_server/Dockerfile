@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the files pip needs to resolve the project.
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 
 # Create placeholder package directory so pip can parse pyproject.toml.
 RUN mkdir -p lore

@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the files pip needs — avoids cache-busting on source changes.
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 
 # Create a placeholder package directory so `pip install .` (which reads
 # pyproject.toml) can resolve the project without the full source tree.

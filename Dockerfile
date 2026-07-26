@@ -32,7 +32,7 @@ WORKDIR /app
 
 # Copy only the files pip needs to resolve dependencies.
 # Avoids cache-busting the install layer on source-only changes.
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 
 # Create the package skeleton so hatchling can read the project metadata
 # without the full source tree present during the dep-install step.
