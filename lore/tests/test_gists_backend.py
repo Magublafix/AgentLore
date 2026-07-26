@@ -162,15 +162,18 @@ class TestSubmitConcept:
         assert "concept.md" in files
         assert "lore.json" in files
 
-    def test_concept_md_is_content_verbatim(self):
-        """concept.md file content equals the ``content`` argument verbatim."""
+    def test_concept_md_starts_with_content(self):
+        """concept.md starts with the ``content`` argument and ends with attribution footer."""
         client = _make_client()
         client.create_gist.return_value = "gist-abc"
 
         submit_concept(client, **self._BASE_ARGS)
 
         _, kwargs = client.create_gist.call_args
-        assert kwargs["files"]["concept.md"] == "Enable WAL mode for concurrent writes."
+        concept_md = kwargs["files"]["concept.md"]
+        assert concept_md.startswith("Enable WAL mode for concurrent writes.")
+        assert "mcp-server-lore" in concept_md
+        assert "github.com/Magublafix/AgentLore" in concept_md
 
     def test_lore_json_structure_schema_version(self):
         """lore.json has schema_version='1'."""

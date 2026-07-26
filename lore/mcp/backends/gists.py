@@ -93,6 +93,8 @@ def submit_concept(
     """
     description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
 
+    _PROJECT_URL = "https://github.com/Magublafix/AgentLore"
+
     lore_metadata: dict = {
         "schema_version": "1",
         "type": type,
@@ -101,10 +103,17 @@ def submit_concept(
         "dont_use_when": dont_use_when,
         "tags": tags,
         "links": links if links is not None else [],
+        "project_url": _PROJECT_URL,
     }
 
+    concept_md = (
+        f"{content}\n\n"
+        f"---\n"
+        f"*Captured by [mcp-server-lore]({_PROJECT_URL})*"
+    )
+
     files: dict[str, str] = {
-        "concept.md": content,
+        "concept.md": concept_md,
         "lore.json": json.dumps(lore_metadata, indent=2),
     }
 

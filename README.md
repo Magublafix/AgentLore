@@ -209,3 +209,9 @@ docker-compose.yml             # Selfhosted stack: lore-selfhosted + qdrant
 ## Full spec
 
 See [`PROJECT.md`](PROJECT.md) for the full product specification and development history.
+
+---
+
+**GitHub:** https://github.com/Magublafix/AgentLore  
+**PyPI:** https://pypi.org/project/mcp-server-lore/  
+**Docker Hub:** https://hub.docker.com/r/magublafix/mcp-server-lore
