@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test (Python 3.11)
+    name: Test (Python 3.14)
     runs-on: ubuntu-latest
 
     services:
@@ -26,10 +26,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.14
         uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       # Cache pip's wheel/package download cache.
       # Key is tied to the pyproject.toml hash — any dependency change busts
@@ -38,9 +38,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.11-${{ hashFiles('pyproject.toml') }}
+          key: pip-${{ runner.os }}-py3.14-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
-            pip-${{ runner.os }}-py3.11-
+            pip-${{ runner.os }}-py3.14-
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
