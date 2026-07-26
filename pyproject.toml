@@ -9,10 +9,6 @@ description = "A typed, linked knowledge graph for AI coding agents — MCP serv
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=0.1.0",
-    "fastapi>=0.110.0",
-    "uvicorn>=0.27.0",
-    "qdrant-client>=1.8.0",
-    "sentence-transformers>=2.6.0",
     "httpx>=0.27.0",
     "requests>=2.31.0",
     "pydantic>=2.6.0",
@@ -22,10 +18,22 @@ dependencies = [
 mcp-server-lore = "lore.mcp.server:main"
 
 [project.optional-dependencies]
+# Heavy selfhosted backend — sentence-transformers pulls PyTorch (~2 GB).
+# Install with: pip install "mcp-server-lore[selfhosted]"
+selfhosted = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "qdrant-client>=1.8.0",
+    "sentence-transformers>=2.6.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.23.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "qdrant-client>=1.8.0",
+    "sentence-transformers>=2.6.0",
 ]
 
 [tool.hatch.build.targets.wheel]

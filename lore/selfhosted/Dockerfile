@@ -32,8 +32,8 @@ COPY pyproject.toml ./
 # We copy the real source in the next step.
 RUN mkdir -p lore
 
-# Install runtime dependencies only (no [dev] extras).
-RUN pip install --no-cache-dir .
+# Install selfhosted extras (sentence-transformers, qdrant-client, fastapi, uvicorn).
+RUN pip install --no-cache-dir ".[selfhosted]"
 
 # Now copy the actual source so the installed package is complete.
 # (We installed first so this layer is only invalidated by source changes,
