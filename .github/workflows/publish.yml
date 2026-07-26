@@ -74,8 +74,12 @@ jobs:
 
       # pypa/gh-action-pypi-publish picks up dist/ automatically.
       # OIDC trusted publishing is the default when no password is supplied.
+      # skip-existing: true lets re-runs of the same tag (e.g. after a Docker
+      # failure) skip the already-uploaded release without failing the job.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   # ---------------------------------------------------------------------------
   # 3. Build the thin MCP server image and push to Docker Hub.
