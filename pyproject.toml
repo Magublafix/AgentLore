@@ -12,17 +12,17 @@ license = {text = "MIT"}
 authors = [
     {name = "magublafix"},
 ]
-
-[project.urls]
-Homepage = "https://github.com/Magublafix/AgentLore"
-Repository = "https://github.com/Magublafix/AgentLore"
-Issues = "https://github.com/Magublafix/AgentLore/issues"
 dependencies = [
     "fastmcp>=0.1.0",
     "httpx>=0.27.0",
     "requests>=2.31.0",
     "pydantic>=2.6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Magublafix/AgentLore"
+Repository = "https://github.com/Magublafix/AgentLore"
+Issues = "https://github.com/Magublafix/AgentLore/issues"
 
 [project.scripts]
 mcp-server-lore = "lore.mcp.server:main"
