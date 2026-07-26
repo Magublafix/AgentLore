@@ -44,6 +44,8 @@ dev = [
     "uvicorn>=0.27.0",
     "qdrant-client>=1.8.0",
     "sentence-transformers>=2.6.0",
+    "responses>=0.25.0",
+    "respx>=0.21.0",
 ]
 
 [tool.hatch.build.targets.wheel]
