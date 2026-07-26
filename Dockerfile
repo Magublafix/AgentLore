@@ -23,7 +23,7 @@
 # Kept separate so the runtime stage can copy only the installed packages
 # and not the build tools (pip, wheel, setuptools internals).
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -54,7 +54,7 @@ RUN pip install --no-cache-dir --no-deps .
 # Stage 2 — runtime
 # Minimal image: just Python, the installed packages, and a non-root user.
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
