@@ -24,7 +24,7 @@ python benchmarks/run.py --run 1
 
 # Local model via an Anthropic-compatible server (llama.cpp or Ollama)
 LORE_LLM_PROVIDER=local \
-LORE_LOCAL_BASE_URL=http://192.168.1.38:8080 \
+LORE_LOCAL_BASE_URL=http://your-llm-server:8080 \
 LORE_LOCAL_MODEL="unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
 python benchmarks/run.py --run 1
 ```
