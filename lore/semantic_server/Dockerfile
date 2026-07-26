@@ -29,7 +29,7 @@ COPY pyproject.toml ./
 RUN mkdir -p lore
 
 # Install runtime dependencies only (no [dev] extras).
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[selfhosted]"
 
 # Copy the actual source after deps are installed to keep the dep layer cached.
 COPY lore/ lore/

@@ -1,10 +1,23 @@
-# ---------------------------------------------------------------------------
-# Lore semantic server — standalone compose file (LORE-030).
+# Lore semantic search stack — companion to the gists backend
 #
-# Runs independently of the Backend 1 compose stack.  Qdrant is NOT exposed
-# on host ports to avoid collision with Backend 1's Qdrant on 6333/6334.
-# Only semantic-server is reachable from the host (port 8766).
-# ---------------------------------------------------------------------------
+# Runs the semantic search server (FastAPI + Qdrant + background watcher).
+# The watcher indexes public [agentlore-concept] GitHub gists into Qdrant so
+# search_concepts uses vector similarity instead of tag-only matching.
+#
+# Concepts are stored on GitHub Gists — this stack provides the search index only.
+#
+# Usage:
+#   LORE_GITHUB_TOKEN=ghp_... docker compose -f docker-compose.semantic.yml up -d
+#
+# Then point the MCP server at it:
+#   claude mcp add lore \
+#     -e LORE_BACKEND=gists \
+#     -e LORE_GITHUB_TOKEN=ghp_... \
+#     -e LORE_SEMANTIC_URL=http://localhost:8766 \
+#     -- uvx mcp-server-lore
+#
+# Qdrant is intentionally not mapped to host ports to avoid collision with
+# the selfhosted stack (docker-compose.yml) if both are running.
 
 services:
   semantic-server:
@@ -18,6 +31,7 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: "6333"
       LORE_STORAGE_BACKEND: gist_qdrant
+      LORE_GITHUB_TOKEN: "${LORE_GITHUB_TOKEN}"
     volumes:
       - semantic-model-cache:/app/.cache
     depends_on:
