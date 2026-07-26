@@ -1,6 +1,6 @@
 # Lore
 
-[![CI](https://github.com/Magublafix/AgentLore/actions/workflows/test.yml/badge.svg)](https://github.com/Magublafix/AgentLore/actions/workflows/test.yml)
+[![CI](https://github.com/Magublafix/AgentLore/actions/workflows/ci.yml/badge.svg)](https://github.com/Magublafix/AgentLore/actions/workflows/ci.yml)
 [![Renovate](https://img.shields.io/badge/renovate-enabled-brightgreen?logo=renovatebot)](https://renovateapp.com)
 
 **A typed, linked knowledge graph for AI coding agents.**

@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "mcp-server-lore"
 version = "0.1.0"
 description = "A typed, linked knowledge graph for AI coding agents — MCP server"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=0.1.0",
