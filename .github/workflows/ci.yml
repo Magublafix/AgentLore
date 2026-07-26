@@ -16,15 +16,19 @@ jobs:
         image: qdrant/qdrant:latest
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "curl -f http://localhost:6333/healthz || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Wait for Qdrant
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:6333/healthz && echo "Qdrant ready" && break
+            echo "Waiting for Qdrant... ($i/30)"
+            sleep 2
+          done
+          curl -sf http://localhost:6333/healthz || (echo "Qdrant did not start" && exit 1)
 
       - name: Set up Python 3.14
         uses: actions/setup-python@v7
