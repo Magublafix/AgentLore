@@ -35,6 +35,7 @@ services:
       LORE_GITHUB_TOKEN: "${LORE_GITHUB_TOKEN}"
     volumes:
       - semantic-model-cache:/app/.cache
+      - semantic-key-store:/app/.lore
     depends_on:
       qdrant:
         condition: service_healthy
@@ -65,3 +66,4 @@ services:
 volumes:
   semantic-qdrant-data:
   semantic-model-cache:
+  semantic-key-store:

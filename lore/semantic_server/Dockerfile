@@ -46,7 +46,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/app/.cache \
     TRANSFORMERS_CACHE=/app/.cache \
-    LORE_STORAGE_BACKEND=gist_qdrant
+    LORE_STORAGE_BACKEND=gist_qdrant \
+    HOME=/app
 
 # Create a non-root user before copying files so chown is cheap.
 RUN groupadd --gid 1000 lore && \
@@ -61,6 +62,12 @@ COPY --from=builder --chown=lore:lore /app/lore /app/lore
 
 # /app/.cache — HuggingFace model cache (mounted as a volume).
 RUN mkdir -p /app/.cache && chown lore:lore /app/.cache
+
+# /app/.lore — KeyStore's default DB path (~/.lore/semantic-keys.db). The
+# `lore` user is created with --no-create-home, so /home/lore never exists on
+# disk even though /etc/passwd points there; HOME=/app (set above) redirects
+# expanduser() here instead, and this dir must exist and be writable by lore.
+RUN mkdir -p /app/.lore && chown lore:lore /app/.lore
 
 # Entrypoint downloads the model on first start, then launches uvicorn.
 COPY --chown=lore:lore lore/semantic_server/entrypoint.sh /app/entrypoint.sh
