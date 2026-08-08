@@ -25,6 +25,7 @@ services:
       context: .
       dockerfile: lore/semantic_server/Dockerfile
     image: lore/semantic-server
+    pull_policy: build
     ports:
       - "8766:8766"
     environment:

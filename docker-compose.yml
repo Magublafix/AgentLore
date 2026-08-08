@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: lore/selfhosted/Dockerfile
     image: lore/selfhosted
+    pull_policy: build
     ports:
       - "8765:8765"
     environment:
