@@ -415,16 +415,20 @@ def test_search_falls_back_to_gists_when_semantic_unreachable(monkeypatch):
 
 
 @_skip_if_no_qdrant
-def test_rate_concept_via_semantic_raises_when_unreachable(monkeypatch):
-    """rate_concept raises RuntimeError when semantic server POST /ratings fails.
+def test_rate_concept_semantic_unreachable_falls_through_to_gists(monkeypatch):
+    """rate_concept swallows a semantic server connection error and writes to gist instead.
 
     Points LORE_SEMANTIC_URL at port 19999 (nothing listening) so the real
-    httpx POST to /ratings gets a connection error, which the router wraps as
-    RuntimeError.
+    httpx POST to /ratings gets a connection error.  The router logs the warning
+    and falls through to gists_backend.rate_concept as the authoritative write.
 
     Verifies:
-    - ``RuntimeError`` is raised (no silent swallow).
+    - No RuntimeError is raised — the error is swallowed.
+    - gists_backend.rate_concept is called despite the semantic server failure.
+    - The caller receives the gist backend's response.
     """
+    import lore.mcp.backends.gists as gists_backend_mod
+
     monkeypatch.setenv("LORE_BACKEND", "gists")
     monkeypatch.setenv("LORE_GITHUB_TOKEN", "fake-token")
     monkeypatch.setenv("LORE_SEMANTIC_URL", "http://127.0.0.1:19999")
@@ -432,11 +436,25 @@ def test_rate_concept_via_semantic_raises_when_unreachable(monkeypatch):
 
     router = BackendRouter(backend="gists", selfhosted_url="")
 
-    # Bypass API key registration so it does not fail first (no server to register with).
-    with patch.object(router, "_ensure_semantic_api_key", return_value=None):
-        with pytest.raises(RuntimeError):
-            router.rate_concept(
-                concept_id="gist-abc",
-                outcome=4,
-                session_id="s1",
-            )
+    expected = {
+        "status": "created",
+        "concept_id": "gist-abc",
+        "avg_rating": 4.0,
+        "time_saved_avg_hours": None,
+    }
+
+    # Bypass API key registration (no server at 19999 to register with),
+    # patch GistsClient so lazy-init doesn't trigger a real GitHub auth call,
+    # and patch gists_backend.rate_concept so no real GitHub API call is made.
+    with patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+         patch("lore.mcp.router.GistsClient"), \
+         patch.object(gists_backend_mod, "rate_concept", return_value=expected) as mock_gist_fn:
+        result = router.rate_concept(
+            concept_id="gist-abc",
+            outcome=4,
+            session_id="s1",
+        )
+
+    mock_gist_fn.assert_called_once()
+    assert result["status"] == "created"
+    assert result["concept_id"] == "gist-abc"
