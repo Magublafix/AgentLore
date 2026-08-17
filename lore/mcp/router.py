@@ -524,7 +524,6 @@ class BackendRouter:
             A dict with updated aggregate rating statistics.
 
         Raises:
-            NotImplementedError: For the ``gists`` backend (not yet implemented).
             ValueError: For unknown backend values.
             RuntimeError: On selfhosted HTTP errors.
         """
@@ -556,12 +555,10 @@ class BackendRouter:
                     ) as client:
                         response = client.post("/ratings", json=payload, headers=headers)
                         response.raise_for_status()
-                        return response.json()
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("Semantic server rate_concept failed: %s", exc)
-                    raise RuntimeError(
-                        f"Failed to rate concept via semantic server: {exc}"
-                    ) from exc
+                    logger.warning("Semantic server rate_concept cache write failed: %s", exc)
+                    # fall through — gist is the authoritative store
+
             return gists_backend.rate_concept(
                 self._gists_client,
                 concept_id,

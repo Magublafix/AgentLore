@@ -30,6 +30,12 @@ gists backend
     - rate_concept delegates to gists_backend.rate_concept (LORE-014)
     - GistsClient is NOT instantiated at BackendRouter construction time
 
+gists backend + semantic URL (rate_concept routing fix)
+    - semantic server receives POST to /ratings AND gists_backend is also called
+    - return value comes from gists_backend, not semantic server
+    - semantic server failure is swallowed; gists_backend is still called
+    - without _semantic_url: only gists_backend is called (unchanged)
+
 unknown backend
     - ValueError raised on every method
 """
@@ -415,6 +421,165 @@ class TestGistsBackend:
             router.get_concept(concept_id="gist-2")
 
             assert MockGistsClient.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Gists backend + semantic URL — rate_concept routing fix
+# ---------------------------------------------------------------------------
+
+
+def _gists_router_with_semantic(semantic_url: str = "http://sem:8766") -> BackendRouter:
+    """Return a BackendRouter configured for gists + semantic URL."""
+    router = BackendRouter(backend="gists", selfhosted_url="http://localhost:8765")
+    router._semantic_url = semantic_url
+    return router
+
+
+def _make_httpx_client_mock(status_code: int = 200, body: Any = None) -> MagicMock:
+    """Return a mock httpx.Client context manager that returns a fixed response."""
+    response = MagicMock(spec=httpx.Response)
+    response.status_code = status_code
+    response.json.return_value = body or {"avg_outcome": 4.0}
+    response.raise_for_status = MagicMock()
+
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.post.return_value = response
+    return client
+
+
+class TestGistsBackendWithSemanticUrl:
+    """Tests for BackendRouter.rate_concept when _semantic_url is configured.
+
+    Covers the bug fix: semantic server is a best-effort cache write; the gist
+    backend is always the authoritative store and its response is what callers
+    receive.
+    """
+
+    _GIST_RATE_RESULT = {
+        "status": "created",
+        "concept_id": "gist-xyz",
+        "avg_rating": 4.0,
+        "time_saved_avg_hours": 2.5,
+    }
+
+    def test_semantic_server_receives_post_when_url_set(self):
+        """When _semantic_url is set, httpx POSTs to the semantic server's /ratings."""
+        router = _gists_router_with_semantic()
+        mock_http = _make_httpx_client_mock()
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT), \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=mock_http):
+            router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s")
+
+        mock_http.post.assert_called_once()
+        call_args = mock_http.post.call_args
+        assert call_args[0][0] == "/ratings"
+
+    def test_semantic_server_payload_contains_concept_id_and_outcome(self):
+        """The semantic server POST payload contains concept_id and outcome."""
+        router = _gists_router_with_semantic()
+        mock_http = _make_httpx_client_mock()
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT), \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=mock_http):
+            router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s")
+
+        payload = mock_http.post.call_args[1]["json"]
+        assert payload["concept_id"] == "gist-xyz"
+        assert payload["outcome"] == 4
+
+    def test_semantic_server_payload_includes_hours_saved_when_provided(self):
+        """hours_saved is included in the semantic server payload when passed."""
+        router = _gists_router_with_semantic()
+        mock_http = _make_httpx_client_mock()
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT), \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=mock_http):
+            router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s", hours_saved=2.5)
+
+        payload = mock_http.post.call_args[1]["json"]
+        assert payload["hours_saved"] == pytest.approx(2.5)
+
+    def test_gists_backend_also_called_when_semantic_url_set(self):
+        """gists_backend.rate_concept is called even when semantic server succeeds."""
+        router = _gists_router_with_semantic()
+        mock_http = _make_httpx_client_mock()
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT) as mock_gist_fn, \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=mock_http):
+            router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s")
+
+        mock_gist_fn.assert_called_once()
+
+    def test_return_value_comes_from_gists_backend_not_semantic(self):
+        """Return value must come from gists_backend, not the semantic server response."""
+        router = _gists_router_with_semantic()
+        mock_http = _make_httpx_client_mock(body={"avg_outcome": 99.0})  # semantic-only shape
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT), \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=mock_http):
+            result = router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s")
+
+        # Must have gist-format fields, NOT the semantic server's avg_outcome key
+        assert "avg_rating" in result
+        assert "time_saved_avg_hours" in result
+        assert "avg_outcome" not in result
+        assert result["status"] == "created"
+
+    def test_semantic_server_failure_is_swallowed_gist_still_called(self):
+        """When semantic server raises, the exception is logged and gist backend is still called."""
+        router = _gists_router_with_semantic()
+
+        failing_http = MagicMock()
+        failing_http.__enter__ = MagicMock(return_value=failing_http)
+        failing_http.__exit__ = MagicMock(return_value=False)
+        failing_http.post.side_effect = httpx.ConnectError("connection refused")
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT) as mock_gist_fn, \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=failing_http):
+            result = router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s")
+
+        # Gist backend must still have been called
+        mock_gist_fn.assert_called_once()
+        # And we get the gist result back, not an exception
+        assert result["status"] == "created"
+        assert result["concept_id"] == "gist-xyz"
+
+    def test_semantic_server_failure_does_not_raise(self):
+        """A semantic server network error must not propagate to the caller."""
+        router = _gists_router_with_semantic()
+
+        failing_http = MagicMock()
+        failing_http.__enter__ = MagicMock(return_value=failing_http)
+        failing_http.__exit__ = MagicMock(return_value=False)
+        failing_http.post.side_effect = httpx.ConnectError("connection refused")
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT), \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client", return_value=failing_http):
+            # Must not raise
+            router.rate_concept(concept_id="gist-xyz", outcome=4, session_id="s")
+
+    def test_without_semantic_url_only_gist_backend_called(self):
+        """When _semantic_url is not set, only gists_backend.rate_concept is called."""
+        router = _gists_router()  # no semantic URL
+
+        with patch("lore.mcp.router.gists_backend.rate_concept", return_value=self._GIST_RATE_RESULT) as mock_gist_fn, \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.httpx.Client") as mock_httpx_client:
+            result = router.rate_concept(concept_id="gist-xyz", outcome=3, session_id="s")
+
+        mock_gist_fn.assert_called_once()
+        mock_httpx_client.assert_not_called()
+        assert result["status"] == "created"
 
 
 # ---------------------------------------------------------------------------

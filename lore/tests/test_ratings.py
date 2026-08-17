@@ -736,8 +736,11 @@ class TestBackendRouterRateConcept:
         """When semantic_url is set, rate_concept POSTs to /ratings."""
         router = _make_router(semantic_url="http://localhost:8766")
         mock_client = _mock_httpx_client({"avg_outcome": 4.0, "avg_hours_saved": None})
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 4.0, "time_saved_avg_hours": None}
 
-        with patch("lore.mcp.router.httpx.Client", return_value=mock_client):
+        with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
+             patch("lore.mcp.router.GistsClient"), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             result = router.rate_concept("gist-abc", 4, "session-1")
 
         mock_client.post.assert_called_once()
@@ -749,9 +752,12 @@ class TestBackendRouterRateConcept:
         router = _make_router(semantic_url="http://localhost:8766")
         router._semantic_api_key = "testkey_64chars_" + "x" * 48
         mock_client = _mock_httpx_client({"avg_outcome": 3.0, "avg_hours_saved": None})
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 3.0, "time_saved_avg_hours": None}
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=router._semantic_api_key):
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=router._semantic_api_key), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             router.rate_concept("gist-abc", 3, "session-1")
 
         call_kwargs = mock_client.post.call_args[1]
@@ -770,9 +776,10 @@ class TestBackendRouterRateConcept:
         mock_gists.assert_called_once()
         assert result == {"avg_rating": 3.0}
 
-    def test_rate_concept_semantic_server_error_raises_runtime_error(self):
-        """When semantic server returns 500, raises RuntimeError."""
+    def test_rate_concept_semantic_server_error_falls_through_to_gist(self):
+        """When semantic server returns 500, error is swallowed and gist backend is called."""
         router = _make_router(semantic_url="http://localhost:8766")
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 3.0, "time_saved_avg_hours": None}
 
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -788,17 +795,24 @@ class TestBackendRouterRateConcept:
         mock_client.post.return_value = mock_response
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=None):
-            with pytest.raises(RuntimeError):
-                router.rate_concept("gist-abc", 3, "session-1")
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result) as mock_gists:
+            result = router.rate_concept("gist-abc", 3, "session-1")
+
+        mock_gists.assert_called_once()
+        assert result == gist_result
 
     def test_rate_concept_hours_saved_included_in_payload(self):
         """When hours_saved is given, the POST body includes hours_saved."""
         router = _make_router(semantic_url="http://localhost:8766")
         mock_client = _mock_httpx_client({"avg_outcome": 4.0, "avg_hours_saved": 1.5})
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 4.0, "time_saved_avg_hours": 1.5}
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=None):
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             router.rate_concept("gist-abc", 4, "session-1", hours_saved=1.5)
 
         call_kwargs = mock_client.post.call_args[1]
@@ -810,9 +824,12 @@ class TestBackendRouterRateConcept:
         """When hours_saved=None, the POST body does NOT include hours_saved."""
         router = _make_router(semantic_url="http://localhost:8766")
         mock_client = _mock_httpx_client({"avg_outcome": 3.0, "avg_hours_saved": None})
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 3.0, "time_saved_avg_hours": None}
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=None):
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             router.rate_concept("gist-abc", 3, "session-1", hours_saved=None)
 
         call_kwargs = mock_client.post.call_args[1]
@@ -823,9 +840,12 @@ class TestBackendRouterRateConcept:
         """POST body always contains concept_id and outcome."""
         router = _make_router(semantic_url="http://localhost:8766")
         mock_client = _mock_httpx_client({"avg_outcome": 4.0, "avg_hours_saved": None})
+        gist_result = {"status": "created", "concept_id": "gist-xyz", "avg_rating": 4.0, "time_saved_avg_hours": None}
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=None):
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             router.rate_concept("gist-xyz", 4, "session-99")
 
         call_kwargs = mock_client.post.call_args[1]
@@ -833,26 +853,31 @@ class TestBackendRouterRateConcept:
         assert body["concept_id"] == "gist-xyz"
         assert body["outcome"] == 4
 
-    def test_rate_concept_returns_semantic_server_response(self):
-        """result dict is the JSON response from the semantic server."""
+    def test_rate_concept_returns_gist_backend_response(self):
+        """result dict comes from the gist backend (authoritative), not the semantic server."""
         router = _make_router(semantic_url="http://localhost:8766")
-        expected = {"avg_outcome": 4.5, "avg_hours_saved": 2.0}
-        mock_client = _mock_httpx_client(expected)
+        mock_client = _mock_httpx_client({"avg_outcome": 4.5, "avg_hours_saved": 2.0})
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 4.5, "time_saved_avg_hours": 2.0}
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=None):
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             result = router.rate_concept("gist-abc", 5, "session-1", hours_saved=2.0)
 
-        assert result["avg_outcome"] == pytest.approx(4.5)
-        assert result["avg_hours_saved"] == pytest.approx(2.0)
+        assert result["avg_rating"] == pytest.approx(4.5)
+        assert result["time_saved_avg_hours"] == pytest.approx(2.0)
 
     def test_rate_concept_no_api_key_no_auth_header(self):
         """When _ensure_semantic_api_key returns None, no Authorization header is sent."""
         router = _make_router(semantic_url="http://localhost:8766")
         mock_client = _mock_httpx_client({"avg_outcome": 3.0, "avg_hours_saved": None})
+        gist_result = {"status": "created", "concept_id": "gist-abc", "avg_rating": 3.0, "time_saved_avg_hours": None}
 
         with patch("lore.mcp.router.httpx.Client", return_value=mock_client), \
-             patch.object(router, "_ensure_semantic_api_key", return_value=None):
+             patch("lore.mcp.router.GistsClient"), \
+             patch.object(router, "_ensure_semantic_api_key", return_value=None), \
+             patch("lore.mcp.router.gists_backend.rate_concept", return_value=gist_result):
             router.rate_concept("gist-abc", 3, "session-1")
 
         call_kwargs = mock_client.post.call_args[1]
