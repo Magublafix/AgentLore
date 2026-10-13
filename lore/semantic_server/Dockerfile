@@ -10,7 +10,7 @@
 # lore-model-cache Docker volume.  Subsequent starts skip the download.
 # ---------------------------------------------------------------------------
 
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -40,7 +40,7 @@ RUN pip install --no-cache-dir --no-deps .
 # ---------------------------------------------------------------------------
 # Runtime stage — minimal, non-root
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
