@@ -322,7 +322,15 @@ def rate_concept(
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Entry point: ``init`` runs one-command setup; otherwise start the MCP server."""
+    import sys
+
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "init":
+        from lore.setup.init import run_init
+
+        sys.exit(run_init(args[1:]))
     mcp.run()
 
 

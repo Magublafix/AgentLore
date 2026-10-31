@@ -531,12 +531,12 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 10 — 2026-11-02 → 2026-11-13
 **Goal:** Ship a one-command setup (`uvx mcp-server-lore init`) so a new user reaches a verified, working AgentLore install with no manual config editing (#22).
-**Status:** planned
+**Status:** in-progress
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-043 | `init` command: prerequisite checks and idempotent MCP registration | python-mcp-engineer | planned | — |
+| LORE-043 | `init` command: prerequisite checks and idempotent MCP registration | python-mcp-engineer | done | — |
 | LORE-044 | `init` command: GitHub auth, state initialisation and install verification | python-mcp-engineer | planned | — |
 | LORE-045 | README quick start and first-search walkthrough | skill-engineer | planned | — |
 
@@ -561,11 +561,11 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **So that** I do not have to install or edit configuration by hand
 
 **Acceptance Criteria:**
-- [ ] `init` subcommand added to the `mcp-server-lore` entry point (`main()` dispatches subcommands; no subcommand still starts the server)
-- [ ] Checks Python version, `claude` CLI presence, and Docker (only when the semantic stack is requested); each failure prints the cause and the exact fix
-- [ ] Registers the MCP server via `claude mcp add` through an agent-adapter interface; Claude Code is the only adapter shipped
-- [ ] Re-running detects an existing identical registration and reports `already configured` without duplicating; a conflicting entry is reported, not overwritten, unless `--force`
-- [ ] `--dry-run` prints planned actions and changes nothing
+- [x] `init` subcommand added to the `mcp-server-lore` entry point (`main()` dispatches subcommands; no subcommand still starts the server)
+- [x] Checks Python version, `claude` CLI presence, and Docker (only when the semantic stack is requested); each failure prints the cause and the exact fix
+- [x] Registers the MCP server via `claude mcp add` through an agent-adapter interface; Claude Code is the only adapter shipped
+- [x] Re-running detects an existing identical registration and reports `already configured` without duplicating; a conflicting entry is reported, not overwritten, unless `--force`
+- [x] `--dry-run` prints planned actions and changes nothing
 
 **DoD:**
 - [ ] AC above met — tokens recorded

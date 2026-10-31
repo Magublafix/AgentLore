@@ -521,3 +521,18 @@ Feature format:
 **What changed:** `docs/phases/phase-3-summary.md` created. Phase 3 is formally closed.
 
 **Implementation notes:** All Phase 3 PROJECT.md checklist items confirmed checked. Coverage at close: 97.15%, 611 tests. Known gap: Phase 2 manual live test (submit/search/star/rate against real GitHub API) not recorded — unit/integration tests cover the same paths.
+
+---
+
+## [LORE-043] `init` command: prerequisite checks and idempotent MCP registration
+
+**Sprint:** 10   **Shipped:** 2026-10-31   **Phase:** 5   **Tokens:** —
+
+**As a** new Lore user
+**I want to be able to** run a single `mcp-server-lore init` command that checks prerequisites and registers the MCP server with Claude Code
+**So that** I do not have to install or edit configuration by hand
+
+**What changed:** New `lore/setup/` package (`checks.py`, `agents.py`, `init.py`). `lore.mcp.server.main()` now dispatches the `init` subcommand and otherwise starts the MCP server as before. `init` checks Python >= 3.11, the `claude` CLI and `uvx` (Docker only with `--semantic`), printing an actionable fix for each failure, then registers `uvx mcp-server-lore` via `claude mcp add` through an `AgentAdapter` interface (Claude Code is the only adapter). Re-running reports "already configured"; a differing registration is reported and left alone unless `--force`; `--dry-run` changes nothing.
+
+**Implementation notes:** Unrecognised or failed `claude mcp get` output raises an error and is never treated as "not registered" (caught in review: it could have overwritten an existing entry). Unknown scopes are never force-removed; non-stdio registrations count as conflicts. Registers `LORE_BACKEND=gists` only — the GitHub token is added in LORE-044. 63 tests in test_setup_init.py (100% of `lore/setup`); 687 passed, 7 skipped, 94.48% total coverage. Tokens not recorded (`/cost` unavailable). Gate 2 review was done by a general-purpose agent following the `test-suite-architect` definition because that agent type was not registered in the session. Follow-up: ASCII fallback for terminals that cannot print the check marks. `uvx mcp-server-lore` itself was not smoke-tested (`uv` not installed in this environment).
+

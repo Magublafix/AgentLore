@@ -510,6 +510,10 @@ lore/
 │   │   └── semantic.py         # Backend 3: semantic server client
 │   ├── embeddings.py           # sentence-transformers wrapper (Backend 1)
 │   └── models.py               # Concept, Link, Rating dataclasses
+├── setup/
+│   ├── init.py                 # `mcp-server-lore init` flow (LORE-043)
+│   ├── checks.py               # prerequisite checks with actionable fixes
+│   └── agents.py               # AgentAdapter + ClaudeCodeAdapter (`claude mcp` CLI)
 ├── selfhosted/
 │   ├── api.py                  # FastAPI service (Backend 1)
 │   ├── db.py                   # SQLite schema + operations

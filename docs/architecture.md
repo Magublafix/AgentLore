@@ -105,6 +105,7 @@ lore/
 ├── semantic_server/ # Backend 3: FastAPI + Qdrant (lore.semantic_server.api)
 ├── skills/          # Claude Code skill file + Stop hook
 ├── seed/            # Seed concept graph (6 concepts, 5 links)
+├── setup/           # `mcp-server-lore init` one-command setup (LORE-043)
 └── tests/           # unit/ and integration/
 ```
 
@@ -202,6 +203,18 @@ reconciles SQLite concept_ids against Qdrant point IDs.
 | Component | Responsibility |
 |-----------|---------------|
 | `seed/concepts.py` | Idempotent seed loader: inserts 6 REST CLI concepts + 5 links directly via SQLite/Qdrant (no HTTP); validates the full retrieval path on first run |
+
+---
+
+### 5.7 Level 2 — Setup Layer
+
+| Component | Responsibility |
+|-----------|---------------|
+| `setup/init.py` | `run_init()` — the `mcp-server-lore init` flow: prerequisite checks, then idempotent MCP registration; flags `--agent`, `--scope`, `--force`, `--dry-run`, `--semantic`; returns an exit code and never raises on expected failures |
+| `setup/checks.py` | Pure prerequisite checks (Python ≥ 3.11, `claude` CLI, `uvx`; Docker only with `--semantic`); each failure carries an actionable `fix` string |
+| `setup/agents.py` | `AgentAdapter` interface (`get_registration` / `register` / `remove`) and `ClaudeCodeAdapter`, which drives the `claude mcp` CLI and parses `claude mcp get` output; `ServerSpec` is the registration Lore wants; new coding agents are added by implementing the interface and listing them in `ADAPTERS` |
+
+`mcp/server.py:main()` dispatches `init` to `setup.init.run_init`; any other invocation starts the MCP server as before.
 
 ---
 
@@ -437,6 +450,8 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-011 | API key auth for Backend 3 writes — one key per GitHub user, issued via /auth/register; key stored in ~/.lore/semantic-keys.db (SQLite); read endpoints remain unauthenticated; auth is a no-op for Backend 1 (sqlite_qdrant) | accepted | 2026-07-14 |
 | ADR-012 | Gists backend search uses `GET /gists` list-and-filter, not `GET /search/gists` — the search endpoint returns 404 (non-existent GitHub API); list-and-filter with keyword scoring works correctly and scales to benchmark-scale collections (≤100 gists) | accepted | 2026-07-19 |
 
+| ADR-013 | `init` registers the MCP server through the agent's own CLI (`claude mcp add`) behind an `AgentAdapter` interface, is idempotent, and never overwrites a differing registration without `--force`; unparseable CLI output is an error, never treated as "not registered"; `init` never publishes or rates concepts | accepted | 2026-10-31 |
+
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 
 ---
@@ -464,6 +479,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | R-3 | Embedding model (all-MiniLM-L6-v2) produces poor matches for highly technical queries | Low | Medium | Evaluate at Phase 1; swap model if needed |
 | R-4 | Stop hook fails silently and ratings are never collected | Low | High | Hook must exit 0 but log errors to `~/.lore/hook.log` |
 | R-5 | Concept inserted to SQLite but Qdrant unavailable — concept saved but not searchable | Low | Medium | API returns 503 + concept_id; operator can re-index; future reindex endpoint planned |
+| R-6 | `init` depends on the human-readable output of `claude mcp get`; a Claude Code CLI change could break parsing | Medium | Low | Unrecognised output fails loudly with an "update your CLI" message instead of guessing; parser tested against captured real output |
 
 ---
 
@@ -479,4 +495,5 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | Session file | `~/.lore/session.json` — tracks concept IDs used in the current agent session |
 | Stop hook | Bash script fired by Claude Code when a session ends; collects batch ratings |
 | Seed graph | Six concepts and five links pre-loaded on first run to validate the full retrieval path |
+| Agent adapter | `setup/agents.py` `AgentAdapter` — reads and writes the Lore MCP server registration for one coding agent (Claude Code today) |
 | Content scanner | `core/scanner.py` — checks concept fields for credential patterns, internal URLs, and LORE_BLOCK_PATTERNS before persisting |
