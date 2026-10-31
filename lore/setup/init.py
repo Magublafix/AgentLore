@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="write an env/prompt-sourced token into the agent config in plain text (off by default)",
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="register this Python interpreter (python -m lore.mcp.server) instead of 'uvx mcp-server-lore'",
+    )
     parser.add_argument("--no-verify", action="store_true", help="skip the end-to-end search check")
     return parser
 
@@ -72,7 +77,10 @@ def _print_checks(checks: Sequence[Check], out: Callable[[str], None]) -> bool:
 
 
 def build_spec(
-    token: auth_mod.TokenResult, store_token: bool, semantic_url: Optional[str]
+    token: auth_mod.TokenResult,
+    store_token: bool,
+    semantic_url: Optional[str],
+    local: bool = False,
 ) -> ServerSpec:
     """Choose the registration for the token situation.
 
@@ -89,6 +97,10 @@ def build_spec(
         secrets["LORE_GITHUB_TOKEN"] = token.token
     if semantic_url:
         env["LORE_SEMANTIC_URL"] = semantic_url
+    if local:
+        return ServerSpec(
+            command=sys.executable, args=("-m", "lore.mcp.server"), env=env, secrets=secrets
+        )
     return ServerSpec(env=env, secrets=secrets)
 
 
@@ -117,8 +129,17 @@ def run_init(
     def out(msg: str) -> None:  # noqa: F811 — every line is redacted before it is shown
         raw_out(redact(msg, secrets))
 
+    if args.store_token and args.scope == "project":
+        out(_PROJECT_TOKEN_REFUSAL)
+        return 1
+
+    semantic_url = args.semantic_url or env.get("LORE_SEMANTIC_URL") or None
+    if args.scope == "project" and semantic_url and _url_is_credentialed(semantic_url):
+        out(_PROJECT_URL_REFUSAL)
+        return 1
+
     out("Checking prerequisites")
-    if not _print_checks((checks_fn or run_checks)(semantic=args.semantic), out):
+    if not _print_checks((checks_fn or run_checks)(semantic=args.semantic, **({"local": True} if args.local else {})), out):
         out("\nSetup stopped: fix the issues above and re-run.")
         return 1
 
@@ -143,9 +164,11 @@ def run_init(
         out(f"  ✓ token from {_SOURCE_LABEL[token.source]} is valid"
             + (f" (GitHub user {login})" if login else ""))
 
-    semantic_url = args.semantic_url or env.get("LORE_SEMANTIC_URL") or None
-    spec = spec or build_spec(token, args.store_token, semantic_url)
+    spec = spec or build_spec(token, args.store_token, semantic_url, args.local)
     secrets.extend(spec.secret_values())
+    if spec.secrets and args.scope == "project":
+        out(_PROJECT_TOKEN_REFUSAL)
+        return 1
     adapter.secrets = secrets  # shared list: CLI error text is redacted too
     _explain_token_handling(token, args.store_token, out)
 
@@ -154,6 +177,9 @@ def run_init(
     run_env = dict(spec.env)
     try:
         existing = adapter.get_registration(spec.name)
+        if existing is not None and existing.scope == "project" and spec.secrets:
+            out(_PROJECT_EXISTING_REFUSAL)
+            return 1
         if existing is not None and existing.env.get("LORE_GITHUB_TOKEN"):
             secrets.append(existing.env["LORE_GITHUB_TOKEN"])  # legacy stored token: redact too
         if existing is not None and existing.matches(spec):
@@ -252,6 +278,39 @@ _SOURCE_LABEL = {
     auth_mod.SOURCE_GH: "'gh auth token'",
     auth_mod.SOURCE_PROMPT: "the prompt",
 }
+
+
+_PROJECT_TOKEN_REFUSAL = (
+    "  ✗ refusing to store a token with project scope: it would be written in plain text to "
+    ".mcp.json, which is usually committed to version control.\n"
+    "      fix: use --scope user or --scope local with --store-token, or drop --store-token and "
+    "put LORE_GITHUB_TOKEN in the environment Claude Code starts from"
+)
+_PROJECT_EXISTING_REFUSAL = (
+    "  ✗ refusing to store a token: a project-scope 'lore' registration already exists, and "
+    "project scope writes .mcp.json, which is usually committed to version control.\n"
+    "      fix: remove it with 'claude mcp remove lore -s project' and re-run, or drop "
+    "--store-token and put LORE_GITHUB_TOKEN in the environment Claude Code starts from"
+)
+_PROJECT_URL_REFUSAL = (
+    "  ✗ refusing to register this semantic URL with project scope: it may contain credentials "
+    "(an '@'), a query string or a fragment, or lacks a scheme, and project scope writes it verbatim to "
+    ".mcp.json, which is usually committed.\n"
+    "      fix: use a plain URL like https://host, or use --scope user or --scope local"
+)
+
+
+def _url_is_credentialed(url: str) -> bool:
+    """True when ``url`` might carry secrets: any ``@``, no ``://`` scheme, a query or a fragment."""
+    from urllib.parse import urlsplit
+
+    if "@" in url or "://" not in url:
+        return True
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return True
+    return bool(parts.query or parts.fragment or parts.username or parts.password)
 
 
 _USERINFO = re.compile(r"(://)[^/@\s]*@")

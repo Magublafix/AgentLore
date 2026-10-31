@@ -16,7 +16,7 @@ from lore.core.auth import REDACTED, gh_auth_token, redact, resolve_github_token
 from lore.setup import auth as auth_mod
 from lore.setup import init as init_mod
 from lore.setup.agents import AgentError, ClaudeCodeAdapter, Registration, ServerSpec
-from lore.setup.checks import Check
+from lore.setup.checks import Check, run_checks
 from lore.setup.state import ensure_state
 
 ENV_TOKEN = "ghp_" + "E" * 36
@@ -305,7 +305,7 @@ class RecAdapter(ClaudeCodeAdapter):
 
 
 def _init(argv, tmp_path, env=None, token_fn=None, adapter=None, verify=None, validate=None,
-          interactive=False):
+          interactive=False, spec=None):
     from lore.setup.verify import VerifyResult
 
     lines: list[str] = []
@@ -320,7 +320,7 @@ def _init(argv, tmp_path, env=None, token_fn=None, adapter=None, verify=None, va
     code = init_mod.run_init(
         argv,
         adapters={"claude": lambda: adapter},
-        checks_fn=lambda semantic: GOOD,
+        checks_fn=lambda semantic, local=False: GOOD,
         out=lines.append,
         env=env if env is not None else {},
         home=tmp_path / "home",
@@ -328,6 +328,7 @@ def _init(argv, tmp_path, env=None, token_fn=None, adapter=None, verify=None, va
         validate_fn=validate or (lambda t: "octo"),
         verify_fn=vf,
         interactive=interactive,
+        spec=spec,
     )
     return code, "\n".join(lines), adapter, verify_calls
 
@@ -496,3 +497,129 @@ class TestModeSwitching:
         (tmp_path / "home" / ".lore").symlink_to(tmp_path / "gone")
         code, out, _, _ = _init([], tmp_path, token_fn=_tok(None, None))
         assert code == 0 and "not a usable directory" in out
+
+
+class TestProjectScopeNeverStoresToken:
+    def test_store_token_with_project_scope_is_refused_before_anything(self, tmp_path):
+        ad = RecAdapter()
+        called = []
+        ad.get_registration = lambda server: called.append(1)
+        code, out, _, vc = _init(["--store-token", "--scope", "project"], tmp_path,
+                                 token_fn=lambda **kw: pytest.fail("auth ran"), adapter=ad)
+        assert code == 1 and ".mcp.json" in out and "--scope user" in out
+        assert called == [] and ad.registered == [] and vc == []
+        assert not (tmp_path / "home" / ".lore").exists()
+
+    def test_existing_project_registration_is_not_given_a_token(self, tmp_path):
+        reg = Registration("stdio", "uvx", ("mcp-server-lore",), {"LORE_BACKEND": "gists"}, "project")
+        ad = ModeAdapter(reg)
+        code, out, _, _ = _init(["--store-token", "--scope", "user"], tmp_path,
+                                token_fn=_tok(PLAIN_SECRET, "env"), adapter=ad)
+        assert code == 1 and "project-scope 'lore' registration already exists" in out
+        assert "claude mcp remove lore -s project" in out and PLAIN_SECRET not in out
+        assert ad.registered == [] and ad.removed == []
+        assert not (tmp_path / "home" / ".lore").exists()
+
+    @pytest.mark.parametrize("scope", ["user", "local"])
+    def test_other_scopes_can_store(self, tmp_path, scope):
+        code, out, ad, _ = _init(["--store-token", "--scope", scope], tmp_path,
+                                 token_fn=_tok(PLAIN_SECRET, "env"))
+        assert code == 0 and ad.registered[0].secrets and PLAIN_SECRET not in out
+
+    def test_project_scope_without_store_token_works(self, tmp_path):
+        code, _, ad, _ = _init(["--scope", "project"], tmp_path, token_fn=_tok(PLAIN_SECRET, "env"))
+        assert code == 0 and not ad.registered[0].secrets
+
+
+    @pytest.mark.parametrize("extra", [[], ["--dry-run"]])
+    def test_spec_with_secret_is_refused_at_project_scope(self, tmp_path, extra):
+        spec = ServerSpec(secrets={"LORE_GITHUB_TOKEN": PLAIN_SECRET})
+        ad = RecAdapter()
+        code, out, _, vc = _init(["--scope", "project", *extra], tmp_path,
+                                 token_fn=_tok(PLAIN_SECRET, "env"), adapter=ad, spec=spec)
+        assert code == 1 and ".mcp.json" in out and PLAIN_SECRET not in out
+        assert ad.registered == [] and vc == []
+        assert not (tmp_path / "home" / ".lore").exists()
+
+
+class TestProjectScopeSemanticUrl:
+    @pytest.mark.parametrize("url", [
+        "http://user:pw@sem:1", "https://sem/x?key=abc", "https://sem/x#frag", "https://u@sem",
+        "user:pw@host:1", "user@host", "https:u:p@h", "https://host/path@secret", "host:8766",
+    ])
+    def test_credentialed_url_refused_for_project_scope(self, tmp_path, url):
+        ad = RecAdapter()
+        code, out, _, _ = _init(["--scope", "project", "--semantic-url", url], tmp_path,
+                                token_fn=_tok(None, None), adapter=ad)
+        assert code == 1 and "semantic URL" in out and "pw" not in out and "abc" not in out
+        assert "secret" not in out
+        assert ad.registered == [] and not (tmp_path / "home" / ".lore").exists()
+
+    def test_env_url_also_checked(self, tmp_path):
+        code, out, ad, _ = _init(["--scope", "project"], tmp_path,
+                                 env={"LORE_SEMANTIC_URL": "http://u:p@sem:1"}, token_fn=_tok(None, None))
+        assert code == 1 and ad.registered == []
+
+    @pytest.mark.parametrize("url", ["https://host", "http://host:8766", "https://host:1/api/v1"])
+    def test_plain_urls_accepted_for_project(self, tmp_path, url):
+        code, _, ad, _ = _init(["--scope", "project", "--semantic-url", url], tmp_path,
+                               token_fn=_tok(None, None))
+        assert code == 0 and ad.registered[0].env["LORE_SEMANTIC_URL"] == url
+
+    def test_plain_url_ok_for_project_and_credentialed_ok_for_user(self, tmp_path):
+        code, _, ad, _ = _init(["--scope", "project", "--semantic-url", "https://sem.example:8766"],
+                               tmp_path, token_fn=_tok(None, None))
+        assert code == 0 and ad.registered[0].env["LORE_SEMANTIC_URL"] == "https://sem.example:8766"
+        code, _, ad, _ = _init(["--scope", "user", "--semantic-url", "http://u:p@sem:1"],
+                               tmp_path, token_fn=_tok(None, None))
+        assert code == 0
+
+
+class TestLocalMode:
+    def test_spec_uses_this_interpreter(self, tmp_path):
+        import sys
+
+        code, out, ad, vc = _init(["--local"], tmp_path, token_fn=_tok(None, None))
+        spec = ad.registered[0]
+        assert code == 0 and spec.command == sys.executable and spec.args == ("-m", "lore.mcp.server")
+        assert spec.env["LORE_READ_ONLY"] == "1"
+        assert vc[0][0] == sys.executable and vc[0][1] == ["-m", "lore.mcp.server"]  # verify runs it
+        assert f"registering 'lore': {sys.executable} -m lore.mcp.server" in out
+
+    def test_dry_run_states_the_command(self, tmp_path):
+        import sys
+
+        code, out, ad, vc = _init(["--local", "--dry-run"], tmp_path, token_fn=_tok(None, None))
+        assert code == 0 and ad.registered == [] and vc == []
+        assert f"[dry-run] registering 'lore': {sys.executable} -m lore.mcp.server" in out
+
+    def test_uvx_check_skipped_only_for_local(self):
+        no_uvx = lambda n: None if n == "uvx" else f"/bin/{n}"  # noqa: E731
+        kw = dict(which=no_uvx, version_info=(3, 12, 0))
+        assert [c.name for c in run_checks(local=True, **kw) if not c.ok] == []
+        assert [c.name for c in run_checks(**kw) if not c.ok] == ["uvx"]
+
+    def test_checks_receive_local_flag(self, tmp_path):
+        seen = []
+        from lore.setup.verify import VerifyResult
+
+        (tmp_path / "home").mkdir(exist_ok=True)
+        init_mod.run_init(
+            ["--local", "--dry-run"], adapters={"claude": RecAdapter},
+            checks_fn=lambda semantic, local=False: seen.append(local) or GOOD, out=lambda _: None,
+            env={}, home=tmp_path / "home", token_fn=_tok(None, None))
+        assert seen == [True]
+
+    def test_uvx_and_local_registrations_conflict_both_ways(self, tmp_path):
+        import sys
+
+        local_reg = Registration("stdio", sys.executable, ("-m", "lore.mcp.server"),
+                                 {"LORE_BACKEND": "gists", "LORE_READ_ONLY": "1"}, "user")
+        code, out, ad, _ = _init([], tmp_path, token_fn=_tok(None, None), adapter=ModeAdapter(local_reg))
+        assert code == 1 and "different command" in out
+        uvx_reg = Registration("stdio", "uvx", ("mcp-server-lore",),
+                               {"LORE_BACKEND": "gists", "LORE_READ_ONLY": "1"}, "user")
+        code, out, _, _ = _init(["--local"], tmp_path, token_fn=_tok(None, None), adapter=ModeAdapter(uvx_reg))
+        assert code == 1 and "different command" in out
+        code, out, _, _ = _init(["--local"], tmp_path, token_fn=_tok(None, None), adapter=ModeAdapter(local_reg))
+        assert code == 0 and "already configured" in out

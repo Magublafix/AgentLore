@@ -132,7 +132,7 @@ lore/
 | `server/storage/base.py` | `StorageBackend` ABC — `upsert_concept`, `search_concepts`, `get_concept`, `rate_concept`, `health_check`; all backends implement this interface. `upsert_concept` may return `{"concept_id": ..., "_qdrant_failed": True}` when the SQLite insert succeeds but Qdrant indexing fails. The HTTP layer treats this as HTTP 503 but includes the `concept_id` so callers can retry indexing. See `base.py` for the full contract. |
 | `server/storage/sqlite_qdrant.py` | `SqliteQdrantBackend` — Backend 1 implementation: SQLite + Qdrant; WAL mode; near-duplicate detection at 0.88 cosine threshold |
 | `server/storage/gist_qdrant.py` | `GistQdrantBackend` — Backend 3 implementation: Qdrant-only, denormalized payloads; deterministic point IDs via `uuid5(NAMESPACE_URL, gist_id)`; idempotent upsert via `gist_updated_at` comparison |
-| `server/watcher.py` | **Gist Watcher** — asyncio background task; polls `GET /gists/public?since=<cursor>` for `[lore-concept]` gists; extracts metadata from `lore.json`; calls `storage.upsert_concept()`; persists cursor to `~/.lore/watcher_cursor.json`; deduplicates within each cycle; logs WARNING on bad gists without crashing |
+| `server/watcher.py` | **Gist Watcher** — asyncio background task. At startup a fail-soft **bootstrap** discovers all existing `[agentlore-concept]` gists via the gist web search (`gist.github.com/search`, unofficial; paged, rate-limited, descriptive User-Agent, per-owner cap), fetches each through `GET /gists/{id}` and indexes it. Then it polls `GET /gists/public?since=<cursor>` (capped by GitHub at 30 pages / ~3000 gists / ~13 min of activity, so the interval must stay short; WARNING when the cap is hit); extracts metadata from `lore.json`; calls `storage.upsert_concept()`; persists cursor to `~/.lore/watcher_cursor.json`; logs WARNING on bad gists without crashing |
 
 #### Denormalized Qdrant payload
 
@@ -289,19 +289,33 @@ lifespan() creates asyncio.Task(watch_loop(storage, token, interval))
   │
   ▼ [runs concurrently with request handling]
 watch_loop() — runs forever until cancelled
+  │
+  ▼ Bootstrap (once; fail-soft — errors never block the poll loop)
+  1. Skip with WARNING if no token
+  2. Page gist.github.com/search?q="agentlore-concept"&p=N (no auth, token
+     never sent) until an empty page, LORE_BOOTSTRAP_MAX_PAGES, HTTP 429/403
+     or a CAPTCHA page (WARNING; results so far are kept); wait
+     LORE_BOOTSTRAP_DELAY (>= 2 s) between pages; collect owner/gist_id
+  3. Apply per-owner cap (LORE_BOOTSTRAP_MAX_PER_OWNER)
+  4. For each id: GET /gists/<id>; require "[agentlore-concept]" in the
+     description and a valid lore.json; upsert_concept (re-runs report
+     "skipped" = unchanged). The web page is discovery only, never content.
+     Bounds: 100 pages x 10 = 1000 gists; per-owner cap counts candidates
+     before validation. The cursor advances past data the capped feed could
+     not return.
 
   ┌─────────────────────────────────────────────────────────────┐
   │  Per cycle (default: every 300 s)                          │
   │                                                             │
   │  1. Load cursor from ~/.lore/watcher_cursor.json            │
-  │     (default: now - 24h if file absent)                     │
+  │     (default: now - 24h; the feed only reaches ~13 min)     │
   │                                                             │
   │  2. If LORE_GITHUB_TOKEN empty → log WARNING + sleep        │
   │                                                             │
   │  3. GET /gists/public?since=<cursor>&per_page=100           │
-  │     Follow Link rel=next pagination                         │
+  │     Follow Link rel=next (feed cap: 30 pages; WARNING)      │
   │                                                             │
-  │  4. Filter: keep gists with "[lore-concept]" in description │
+  │  4. Filter: keep gists with "[agentlore-concept]" in desc.  │
   │     Dedup by gist_id within this cycle                      │
   │                                                             │
   │  5. For each candidate:                                     │
@@ -467,6 +481,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 
 | ADR-013 | `init` registers the MCP server through the agent's own CLI (`claude mcp add`) behind an `AgentAdapter` interface, is idempotent, and never overwrites a differing registration without `--force`; unparseable CLI output is an error, never treated as "not registered"; `init` never publishes or rates concepts | accepted | 2026-10-31 |
 | ADR-014 | Read-only demo mode (`LORE_READ_ONLY=1`) with a bundled seed corpus: with no GitHub token `init` still completes, write tools return a typed `read_only` error, and search serves the curated seed concepts (semantic server first when configured). The `gh` token is resolved at runtime (`LORE_TOKEN_FROM_GH=1`) instead of being copied into agent config; env/prompt tokens are stored only with `--store-token` | accepted | 2026-10-31 |
+| ADR-015 | Bootstrap discovers concepts via the gist web search; unofficial and fail-soft. Code search does not index gists and `/gists/public` is capped (~3000 gists / ~13 min), so `gist.github.com/search` is the only way to enumerate existing concepts. It is used for discovery only (content always via the authenticated API), is rate-limited with a descriptive User-Agent, stops on 429/403/CAPTCHA, isolates parsing in one function, and never blocks the poll loop. Bounds: at most `LORE_BOOTSTRAP_MAX_PAGES` (100) pages x 10 = 1000 gists; the per-owner cap (default 300) counts candidates before validation | accepted | 2026-10-31 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 
@@ -498,6 +513,10 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | R-6 | `init` depends on the human-readable output of `claude mcp get`; a Claude Code CLI change could break parsing | Medium | Low | Unrecognised output fails loudly with an "update your CLI" message instead of guessing; parser tested against captured real output |
 | R-7 | Bundled seed corpus goes stale or is mistaken for community content | Medium | Low | Results labelled `source: "seed"` / "curated example"; corpus changes ship with releases; init states that community search needs a semantic server |
 | R-8 | A token stored with `--store-token` sits in plain text in the agent config and in argv of `claude mcp add` during registration | Low | High | Off by default; `gh` tokens never stored; explicit plain-text warning; all output redacted; docs recommend `gh` or env |
+| R-9 | Bootstrap relies on unofficial HTML scraping of `gist.github.com/search`; markup changes or throttling/CAPTCHA can break or truncate discovery | Medium | Medium | Single fixture-tested parser; unexpected markup logs WARNING and returns what was found; a result-less page with block markers (CAPTCHA/rate limit), HTTP 429/403 or a network error stops discovery with WARNING and keeps partial results (result text is never treated as a block marker); poll loop unaffected |
+| R-10 | The public gist feed is capped at 30 pages (~3000 gists, ~13 min); a long poll interval or outage loses concepts until the next bootstrap | Medium | Medium | Keep `LORE_WATCH_INTERVAL` short; WARNING when a poll hits the cap and more pages exist; restart re-runs the bootstrap. The cursor still advances past data the capped feed could not return |
+| R-11 | Spam: one account floods gists carrying the marker | Low | Medium | Marker + valid `lore.json` required; per-owner cap (`LORE_BOOTSTRAP_MAX_PER_OWNER`, default 300) |
+| R-12 | Bootstrap runs before the first poll and can take minutes (2 s x up to 100 pages plus 2-3 API calls per gist), which can exceed the ~13-minute public-feed window on a large corpus, so concepts published meanwhile may fall outside the feed | Low | Medium | Page bound (100 pages x 10 = 1000 gists max); per-owner cap counts candidates before validation; delay is configurable but never below 2 s; consider running the poll concurrently if corpora grow |
 
 ---
 

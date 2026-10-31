@@ -27,10 +27,26 @@ def pytest_configure(config):
         "(skipped unless LORE_LIVE_TESTS=1).",
     )
     if os.environ.get("LORE_LIVE_TESTS") != "1":
+        # Keep the (read-only, content-addressed) model caches at their real
+        # location; otherwise every run would re-download the embedding model
+        # into the throwaway home.
+        if _REAL_HOME:
+            os.environ.setdefault("HF_HOME", os.path.join(_REAL_HOME, ".cache", "huggingface"))
         _TEST_HOME = tempfile.mkdtemp(prefix="lore-test-home-")
         os.environ["HOME"] = _TEST_HOME
-        os.environ.pop("LORE_SESSION_FILE", None)
-        os.environ.pop("LORE_DB_PATH", None)
+        # A developer's real credentials/config must never leak into the suite
+        # (e.g. start the watcher against the live GitHub API).
+        for var in (
+            "LORE_SESSION_FILE",
+            "LORE_DB_PATH",
+            "LORE_GITHUB_TOKEN",
+            "LORE_TOKEN_FROM_GH",
+            "LORE_READ_ONLY",
+            "LORE_SEMANTIC_URL",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+        ):
+            os.environ.pop(var, None)
 
 
 def pytest_unconfigure(config):

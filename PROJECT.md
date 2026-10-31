@@ -487,14 +487,14 @@ truth. The server indexes the public corpus and serves vector search.
 
 ### Phase 5 — v1.1.0 (milestone v1.1.0)
 
-- [ ] One-command setup — `uvx mcp-server-lore init` installs, configures MCP, authenticates,
+- [x] One-command setup — `uvx mcp-server-lore init` installs, configures MCP, authenticates,
       verifies — tracked in #22
 - [ ] Reproducibility and compatibility metadata on workarounds — reproducer, version ranges,
       applicability check, compatibility-aware retrieval — tracked in #19
 - [ ] Benchmark controls and knowledge-transfer evaluation — repeated-attempt control,
       matched random-context baseline, mixed-effects/permutation analysis, cross-task
       transfer design — tracked in #18
-- [ ] Watcher bootstrap discovers all existing concepts via the gist web search instead of
+- [x] Watcher bootstrap discovers all existing concepts via the gist web search instead of
       code search — tracked in #25
 
 ---

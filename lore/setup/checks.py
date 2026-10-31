@@ -84,13 +84,16 @@ def run_checks(
     semantic: bool = False,
     which: Which = shutil.which,
     version_info: tuple = tuple(sys.version_info[:3]),
+    local: bool = False,
 ) -> list[Check]:
-    """Run all prerequisite checks; Docker is checked only when ``semantic``."""
-    checks = [
-        check_python(version_info),
-        check_claude_cli(which),
-        check_uvx(which),
-    ]
+    """Run all prerequisite checks.
+
+    Docker is checked only when ``semantic``; ``uvx`` is skipped when ``local``
+    (``init --local`` registers this interpreter instead of ``uvx``).
+    """
+    checks = [check_python(version_info), check_claude_cli(which)]
+    if not local:
+        checks.append(check_uvx(which))
     if semantic:
         checks.append(check_docker(which))
     return checks
