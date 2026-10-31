@@ -537,13 +537,15 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
 | LORE-043 | `init` command: prerequisite checks and idempotent MCP registration | python-mcp-engineer | done | — |
-| LORE-044 | `init` command: GitHub auth, state initialisation and install verification | python-mcp-engineer | planned | — |
+| LORE-044 | `init` command: GitHub auth, state initialisation and install verification | python-mcp-engineer | done | — |
 | LORE-045 | README quick start and first-search walkthrough | skill-engineer | planned | — |
+| LORE-056 | Watcher bootstrap: discover all existing concepts via gist web search | python-mcp-engineer | planned | — |
 
 ### Notes
 - Resolves the #22 open questions: Claude Code is the first supported agent (registration via its `claude mcp add` CLI; other agents added behind a small adapter interface). Auth reuses `gh auth token` or `LORE_GITHUB_TOKEN`; the token is never printed or written to config in plain text where an env reference works. A read-only demo mode (search with no token) is in scope for LORE-044.
 - Depends on packaging from LORE-039/LORE-040 (`uvx mcp-server-lore` must resolve). PROJECT.md marks both done but they are still in backlog.md — confirm and move them to features.md before starting.
 - LORE-043 first; LORE-044 builds on it; LORE-045 last, once the command's real output exists.
+- LORE-056 (issue #25, milestone v1.1.0) was added to this sprint after planning: it is independent of the `init` stories and touches `lore/server/watcher.py` only, so it can run in parallel with LORE-044/045.
 - Safe by default: `init` must never publish a concept, change repo permissions, or run without clear prompts (`--yes` for non-interactive use).
 
 ---
@@ -588,11 +590,13 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **So that** the setup ends with proof that search works
 
 **Acceptance Criteria:**
-- [ ] Token resolved in order: `LORE_GITHUB_TOKEN`, `gh auth token`, then an interactive prompt that points to the token page with `gist` scope; the token is never echoed or logged
-- [ ] Creates `~/.lore/` state only when absent; existing session data is never modified
-- [ ] Verification step starts the MCP server, lists its tools and runs one real `search_concepts` call; success and failure are both reported clearly
-- [ ] Read-only demo mode: with no token, `init` completes registration and verifies search against public gists, and says publishing/rating are disabled
-- [ ] Nothing is published or rated by `init`; submit/rate paths are not invoked
+- [x] Token resolved in order: `LORE_GITHUB_TOKEN`, `gh auth token`, then an interactive prompt (only on a TTY and without `--yes`) that points to the token page with `gist` scope; the token is never echoed or logged and is redacted from all output, including `claude mcp` errors
+- [x] A `gh`-sourced token is not copied into the agent's config: the server resolves it at runtime (`LORE_TOKEN_FROM_GH=1`); an env- or prompt-sourced token is stored in the registration only with explicit `--store-token`
+- [x] Creates `~/.lore/` state only when absent; existing session data is never modified
+- [x] Verification step starts the registered MCP server, lists its tools and runs one real `search_concepts` call; success and failure are both reported clearly; a `fallback` result is reported as a warning
+- [x] Read-only demo mode: with no token, `init` completes registration with `LORE_READ_ONLY=1`, verifies search against the bundled curated concepts (or the semantic server when `--semantic-url` / `LORE_SEMANTIC_URL` is set), and says publishing/rating are disabled and that community-wide search needs a semantic server
+- [x] In read-only mode `submit_concept`, `link_concepts` and `rate_concept` return a typed `read_only` error and the tool list is unchanged; bundled results are labelled as curated examples
+- [x] Nothing is published or rated by `init`; submit/rate paths are not invoked
 
 **DoD:**
 - [ ] AC above met — tokens recorded
@@ -619,6 +623,40 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 - [ ] First-search walkthrough shows the expected output of the verification step
 - [ ] Troubleshooting table covers each actionable error emitted by LORE-043/044
 - [ ] docs/architecture.md updated for the new CLI building block
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-056] Watcher bootstrap: discover all existing concepts via gist web search
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** python-mcp-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Watcher bootstrap discovers all existing concepts — tracked in #25
+
+**As a** semantic server operator
+**I want to be able to** have the watcher bootstrap find every existing public AgentLore concept on first start
+**So that** a fresh server's index is complete without a list of known contributors
+
+**Context:**
+`watcher._run_bootstrap` finds concepts with `GET /search/code?q=when_to_use+filename:lore.json`. GitHub code search does not index gists (live query: 0 gist hits), so a fresh server indexes nothing. The poll cycle cannot compensate: `GET /gists/public` is capped at 30 pages (3,000 gists), which covers only about 13 minutes of GitHub activity, so its 24-hour cursor default is not real. No REST or GraphQL gist search exists, but `https://gist.github.com/search?q="agentlore-concept"&p=N` works without login and, when probed, returned 225 gists (22 pages of 10, then 5, then an empty page 24) — all with the marker, all from one account (`Magubot`).
+
+**Acceptance Criteria:**
+- [ ] Bootstrap pages through the gist web search for the `[agentlore-concept]` marker until an empty page, collecting `owner/gist_id` from each result
+- [ ] Each collected gist is fetched through the authenticated API (`GET /gists/{id}`) and indexed through the existing `_extract_payload` / `upsert_concept` path; the web page is used for discovery only, never as content
+- [ ] Only gists whose description contains the marker and whose `lore.json` parses as a valid concept are indexed; a configurable per-owner cap limits spam
+- [ ] Requests are rate-limited (configurable delay, default >= 2 s), send a descriptive User-Agent, and stop with a WARNING on HTTP 429/403 or a CAPTCHA page; a failed or partial bootstrap never prevents the poll loop from starting
+- [ ] Result-page parsing is isolated behind one function with fixture tests built from a captured real page; unexpected markup logs a WARNING and returns what was found instead of raising
+- [ ] `_search_lore_gists` (code search) is removed; the stale docstrings in `watcher.py` (`[lore-concept]` marker, "full scan of public gists", 24-hour cursor) and the README claim that the watcher bootstraps from existing gists are corrected
+- [ ] Bootstrap is idempotent: a second run reports every concept as unchanged
+
+**Open points (not part of this story):** write-through from `submit_concept` to the server, poll-interval and cap-saturation detection, and deleting indexed gists that now return 404.
 
 **DoD:**
 - [ ] AC above met — tokens recorded

@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 
 import requests
 
+from lore.core.auth import resolve_github_token
+
 
 def _parse_next_link(link_header: str) -> str | None:
     """Parse the ``rel="next"`` URL from a GitHub ``Link`` response header.
@@ -159,7 +161,7 @@ class GistsClient:
             GistAuthError: If ``LORE_GITHUB_TOKEN`` is not set or if the token
                 fails the ``GET /user`` validation call.
         """
-        token = os.environ.get("LORE_GITHUB_TOKEN")
+        token = resolve_github_token()
         if not token:
             raise GistAuthError(
                 "LORE_GITHUB_TOKEN is not set. "

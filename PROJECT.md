@@ -494,6 +494,8 @@ truth. The server indexes the public corpus and serves vector search.
 - [ ] Benchmark controls and knowledge-transfer evaluation — repeated-attempt control,
       matched random-context baseline, mixed-effects/permutation analysis, cross-task
       transfer design — tracked in #18
+- [ ] Watcher bootstrap discovers all existing concepts via the gist web search instead of
+      code search — tracked in #25
 
 ---
 
@@ -507,13 +509,20 @@ lore/
 │   ├── backends/
 │   │   ├── selfhosted.py       # Backend 1: Qdrant + SQLite client
 │   │   ├── gists.py            # Backend 2: GitHub Gists client
+│   │   ├── seed.py             # read-only demo backend over the bundled seed corpus (LORE-044)
 │   │   └── semantic.py         # Backend 3: semantic server client
 │   ├── embeddings.py           # sentence-transformers wrapper (Backend 1)
 │   └── models.py               # Concept, Link, Rating dataclasses
 ├── setup/
-│   ├── init.py                 # `mcp-server-lore init` flow (LORE-043)
+│   ├── init.py                 # `mcp-server-lore init` flow (LORE-043/044)
 │   ├── checks.py               # prerequisite checks with actionable fixes
-│   └── agents.py               # AgentAdapter + ClaudeCodeAdapter (`claude mcp` CLI)
+│   ├── agents.py               # AgentAdapter + ClaudeCodeAdapter (`claude mcp` CLI)
+│   ├── auth.py                 # token resolution (env -> gh -> prompt) + validation (LORE-044)
+│   ├── state.py                # idempotent ~/.lore creation (LORE-044)
+│   └── verify.py               # end-to-end install check: tools list + one search (LORE-044)
+├── core/
+│   ├── auth.py                 # resolve_github_token (LORE_TOKEN_FROM_GH) + redact (LORE-044)
+│   └── scanner.py              # content scanner
 ├── selfhosted/
 │   ├── api.py                  # FastAPI service (Backend 1)
 │   ├── db.py                   # SQLite schema + operations

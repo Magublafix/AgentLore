@@ -13,6 +13,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from lore.core.auth import redact
+
 SERVER_NAME = "lore"
 
 
@@ -24,6 +26,13 @@ class ServerSpec:
     command: str = "uvx"
     args: tuple[str, ...] = ("mcp-server-lore",)
     env: dict[str, str] = field(default_factory=lambda: {"LORE_BACKEND": "gists"})
+    # Values stored in the agent config (only with --store-token). Kept apart so
+    # they never take part in matching or repr, and can be redacted from output.
+    secrets: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
+
+    def secret_values(self) -> list[str]:
+        """All secret values, for redaction."""
+        return [v for v in self.secrets.values() if v]
 
 
 @dataclass(frozen=True)
@@ -33,21 +42,45 @@ class Registration:
     transport: str
     command: str
     args: tuple[str, ...]
-    env: dict[str, str]
+    env: dict[str, str] = field(repr=False)
     scope: str
 
-    def matches(self, spec: ServerSpec) -> bool:
-        """True when this registration already satisfies ``spec``.
-
-        Extra environment variables (e.g. a token added later) do not count
-        as a conflict; a different command, args or env value does.
-        """
+    def __repr__(self) -> str:
+        """Show env keys only — values may be secrets."""
         return (
-            self.transport == "stdio"
-            and self.command == spec.command
-            and self.args == spec.args
-            and all(self.env.get(k) == v for k, v in spec.env.items())
+            f"Registration(transport={self.transport!r}, command={self.command!r}, "
+            f"args={self.args!r}, env_keys={sorted(self.env)!r}, scope={self.scope!r})"
         )
+
+    def mismatch_reason(self, spec: ServerSpec) -> Optional[str]:
+        """Why this registration does not satisfy ``spec``; ``None`` when it does.
+
+        Extra environment variables do not count as a conflict; a different
+        command, args or env value does. ``LORE_READ_ONLY`` must agree in both
+        directions. When ``spec`` asks to store a token, the stored value is
+        compared with the registered ``LORE_GITHUB_TOKEN`` (neither is ever
+        shown); without a stored token in ``spec`` secrets are ignored.
+        """
+        ro_here = self.env.get("LORE_READ_ONLY") == "1"
+        ro_spec = spec.env.get("LORE_READ_ONLY") == "1"
+        if ro_here and not ro_spec:
+            return "registered in read-only mode, but a token is now available"
+        if ro_spec and not ro_here:
+            return "registered with a token, but no token is available now (read-only mode)"
+        if self.transport != "stdio":
+            return f"registered as a {self.transport} server, not a local stdio command"
+        if self.command != spec.command or self.args != spec.args:
+            return "different command or arguments"
+        if any(self.env.get(k) != v for k, v in spec.env.items()):
+            return "different settings (environment variables)"
+        for key, value in spec.secrets.items():
+            if self.env.get(key) != value:
+                return f"the stored {key} differs from the current one"
+        return None
+
+    def matches(self, spec: ServerSpec) -> bool:
+        """True when this registration already satisfies ``spec`` (see :meth:`mismatch_reason`)."""
+        return self.mismatch_reason(spec) is None
 
 
 class AgentError(RuntimeError):
@@ -58,6 +91,10 @@ class AgentAdapter(ABC):
     """Reads and writes MCP server registrations for one coding agent."""
 
     name: str
+    secrets: list[str]  # values to redact from CLI error text (set by init)
+
+    def __init__(self) -> None:
+        self.secrets = []
 
     @abstractmethod
     def get_registration(self, server: str) -> Optional[Registration]:
@@ -133,6 +170,7 @@ class ClaudeCodeAdapter(AgentAdapter):
     name = "Claude Code"
 
     def __init__(self, runner: Runner = _run) -> None:
+        super().__init__()
         self._run = runner
 
     def get_registration(self, server: str) -> Optional[Registration]:
@@ -141,24 +179,27 @@ class ClaudeCodeAdapter(AgentAdapter):
         if "No MCP server named" in output:
             return None
         if result.returncode != 0:
-            detail = output.strip() or "no output"
+            detail = redact(output.strip(), self.secrets) or "no output"
             raise AgentError(f"'claude mcp get' failed: {detail}")
         return parse_claude_get(output)
 
     def register(self, spec: ServerSpec, scope: str) -> None:
         cmd = ["claude", "mcp", "add", spec.name, "-s", scope]
-        for key, value in spec.env.items():
+        for key, value in {**spec.env, **spec.secrets}.items():
+            # NOTE: a stored secret is visible in this process's argv while it runs.
             cmd += ["-e", f"{key}={value}"]
         cmd += ["--", spec.command, *spec.args]
-        self._check(self._run(cmd), "register")
+        self._check(self._run(cmd), "register", [*spec.secret_values(), *self.secrets])
 
     def remove(self, server: str, scope: str) -> None:
-        self._check(self._run(["claude", "mcp", "remove", server, "-s", scope]), "remove")
+        self._check(self._run(["claude", "mcp", "remove", server, "-s", scope]), "remove", self.secrets)
 
     @staticmethod
-    def _check(result: "subprocess.CompletedProcess[str]", action: str) -> None:
+    def _check(
+        result: "subprocess.CompletedProcess[str]", action: str, secrets: list[str] | None = None
+    ) -> None:
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip() or "no output"
+            detail = redact((result.stderr or result.stdout).strip(), secrets or []) or "no output"
             raise AgentError(f"'claude mcp {action}' failed: {detail}")
 
 

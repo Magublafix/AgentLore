@@ -13,7 +13,7 @@ authors = [
     {name = "magublafix"},
 ]
 dependencies = [
-    "fastmcp>=0.1.0",
+    "fastmcp>=3.0.0",
     "httpx>=0.27.0",
     "requests>=2.31.0",
     "pydantic>=2.6.0",

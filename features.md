@@ -536,3 +536,17 @@ Feature format:
 
 **Implementation notes:** Unrecognised or failed `claude mcp get` output raises an error and is never treated as "not registered" (caught in review: it could have overwritten an existing entry). Unknown scopes are never force-removed; non-stdio registrations count as conflicts. Registers `LORE_BACKEND=gists` only — the GitHub token is added in LORE-044. 63 tests in test_setup_init.py (100% of `lore/setup`); 687 passed, 7 skipped, 94.48% total coverage. Tokens not recorded (`/cost` unavailable). Gate 2 review was done by a general-purpose agent following the `test-suite-architect` definition because that agent type was not registered in the session. Follow-up: ASCII fallback for terminals that cannot print the check marks. `uvx mcp-server-lore` itself was not smoke-tested (`uv` not installed in this environment).
 
+---
+
+## [LORE-044] `init` command: GitHub auth, state initialisation and install verification
+
+**Sprint:** 10   **Shipped:** 2026-10-31   **Phase:** 5   **Tokens:** —
+
+**As a** new Lore user
+**I want to be able to** have `init` handle GitHub authentication, create local state and verify the install end-to-end
+**So that** the setup ends with proof that search works
+
+**What changed:** `mcp-server-lore init` now resolves a GitHub token (env, then `gh auth token`, then a TTY-only prompt), creates `~/.lore/` state only when absent, registers the server, and verifies it by spawning the registered command over stdio, listing the five tools and running one `search_concepts` call. New flags: `--yes`, `--no-verify`, `--semantic-url`, `--store-token`. With no token it registers a read-only demo (`LORE_READ_ONLY=1`): the tool list is unchanged, `submit_concept`, `link_concepts` and `rate_concept` return a typed `read_only` error, and search reads a bundled curated corpus (labelled as examples) or the semantic server when `LORE_SEMANTIC_URL` is set. New modules: `lore/core/auth.py`, `lore/mcp/backends/seed.py`, `lore/setup/{auth,state,verify}.py`; `gists_client.py`, `router.py`, `server.py`, `agents.py`, `init.py` extended. Also isolated the test suite from the real home directory (`lore/tests/conftest.py` sets `HOME` to a temp dir before collection).
+
+**Implementation notes:** A `gh`-sourced token is never copied into the agent config (the server resolves it at runtime via `LORE_TOKEN_FROM_GH=1`); env/prompt tokens are stored only with `--store-token`, and all output, including `claude mcp` errors, is redacted. The acceptance criterion for demo mode was reworded from "public gists" to "bundled curated concepts" because the gists backend only searches the caller's own gists and community-wide search needs a semantic server (see #25 / LORE-056 for the bootstrap defect). 774 tests pass, 94.80% total coverage. Tokens not recorded (`/cost` unavailable). The Gate 2 reviews were done by general-purpose agents following the `test-suite-architect` definition (that agent type was not registered in the session); two review rounds, final verdict APPROVED. `fastmcp>=3.0.0` floor was verified by the implementing agent against 2.3.0, 2.10.0, 2.14.5 and 3.0.0 only; versions between 3.0.0 and 4.1.4 were not tried. `init` has been exercised only in dry-run/isolated-HOME mode, never against the real agent config. Known follow-ups: the Stop hook (`.claude/hooks/lore-stop.sh`) ignores `LORE_READ_ONLY`; ASCII fallback for terminals that cannot print the check marks; `verify.py` error branches at 81% coverage; two slow subprocess tests.
+

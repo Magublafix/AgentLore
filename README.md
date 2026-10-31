@@ -137,6 +137,8 @@ To allow automatic rating without permission prompts, add to your `settings.json
 |---|---|---|
 | `LORE_BACKEND` | `gists` | Backend: `gists` or `selfhosted` |
 | `LORE_GITHUB_TOKEN` | _(required for gists)_ | GitHub PAT with `gist` scope |
+| `LORE_READ_ONLY` | _(unset)_ | `1` = read-only demo mode: no token needed; `search_concepts`/`get_concept` use the bundled curated examples (or the semantic server), and `submit_concept`/`link_concepts`/`rate_concept` return a `read_only` error. Set by `init` when no GitHub token is found. |
+| `LORE_TOKEN_FROM_GH` | _(unset)_ | `1` = when `LORE_GITHUB_TOKEN` is unset, fetch the token at runtime from `gh auth token` (so it is never written to your agent config). Set by `init` when the token came from `gh`. |
 | `LORE_SEMANTIC_URL` | _(unset)_ | Semantic search server URL. When set, `search_concepts` uses vector similarity. Falls back to tag search on timeout. |
 | `LORE_SEMANTIC_TIMEOUT` | `5.0` | Timeout in seconds for semantic server calls. |
 | `LORE_CAPTURE_MODE` | `auto` | `auto` — submits without confirmation. `confirm` — shows concept and waits for approval. |

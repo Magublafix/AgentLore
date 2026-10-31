@@ -210,9 +210,24 @@ reconciles SQLite concept_ids against Qdrant point IDs.
 
 | Component | Responsibility |
 |-----------|---------------|
-| `setup/init.py` | `run_init()` — the `mcp-server-lore init` flow: prerequisite checks, then idempotent MCP registration; flags `--agent`, `--scope`, `--force`, `--dry-run`, `--semantic`; returns an exit code and never raises on expected failures |
+| `setup/init.py` | `run_init()` — the `mcp-server-lore init` flow: prerequisite checks, then idempotent MCP registration; flags `--agent`, `--scope`, `--force`, `--dry-run`, `--semantic`, `--semantic-url`, `--yes`, `--store-token`, `--no-verify`; sequence: prerequisites -> GitHub auth -> local state -> registration -> verification; returns an exit code and never raises on expected failures |
 | `setup/checks.py` | Pure prerequisite checks (Python ≥ 3.11, `claude` CLI, `uvx`; Docker only with `--semantic`); each failure carries an actionable `fix` string |
 | `setup/agents.py` | `AgentAdapter` interface (`get_registration` / `register` / `remove`) and `ClaudeCodeAdapter`, which drives the `claude mcp` CLI and parses `claude mcp get` output; `ServerSpec` is the registration Lore wants; new coding agents are added by implementing the interface and listing them in `ADAPTERS` |
+
+| `setup/auth.py` | Init-side token resolution (`LORE_GITHUB_TOKEN` -> `gh auth token` -> hidden `getpass` prompt, only on a TTY and without `--yes`) and read-only validation via `GET /user` (401 and missing `gist` scope give clear errors). No token means read-only demo mode |
+| `setup/state.py` | `ensure_state(home, warn)` — creates `~/.lore/` (0700) and `session.json` (`[]`, 0600, `O_EXCL`) only when absent; never modifies or replaces existing files or writes through a symlink |
+| `setup/verify.py` | `verify_install()` — spawns the *registered* command over stdio with `fastmcp.Client`, asserts the five tools are listed and makes exactly one `search_concepts` call (never submit/link/rate); 30 s timeout; child stderr captured and redacted; `fallback: true` is a warning |
+| `core/auth.py` | `resolve_github_token(env, which, run)` used by the MCP side (`LORE_GITHUB_TOKEN`, else `gh auth token` only when `LORE_TOKEN_FROM_GH=1`) and `redact()` |
+
+Registration of the token: a `gh`-sourced token is never copied into the agent config (`LORE_TOKEN_FROM_GH=1` is registered and the server asks `gh` at runtime); an env- or prompt-sourced token is stored only with `--store-token`, in plain text in the agent config, and is then visible in the argv of `claude mcp add -e` while that command runs. `ServerSpec.secrets` is separate from `env`, ignored by `Registration.matches()`, and every output line (including `claude mcp` stderr) is redacted. With no token, `init` registers `LORE_BACKEND=gists LORE_READ_ONLY=1` (plus `LORE_SEMANTIC_URL` when given). A registration's `LORE_READ_ONLY` state must match the spec, and with `--store-token` the stored `LORE_GITHUB_TOKEN` must equal the current one (compared, never shown), or it is reported as a conflict with the reason. Verification runs with exactly the registered environment: a `gh` token is not injected (the server resolves it via `LORE_TOKEN_FROM_GH`); an unstored env/prompt token is injected in memory only, with an explicit warning. `~/.lore` state is created after the conflict check; a symlinked `~/.lore` to an existing directory is used as-is, a dangling one is left alone with a warning.
+
+### 5.8 Read-only Demo Mode and Seed Corpus
+
+With `LORE_READ_ONLY=1` the tool list is unchanged, but:
+
+- `submit_concept`, `link_concepts`, `rate_concept` return `{"error": "read_only", "tool": ..., "hint": ...}` without raising or calling GitHub (`submit_concept` returns it before the content scan).
+- `search_concepts` / `get_concept` are served by `mcp/backends/seed.py`, which reuses the plain-dict `_CONCEPT_DEFS` / `_LINK_DEFS` from `seed/concepts.py` with keyword scoring (like `backends/gists.py`). It touches no SQLite/Qdrant and imports no sentence-transformers/qdrant/fastapi, so it works in the base `uvx mcp-server-lore` install. Results have the normal result shape plus `source: "seed"` and `label: "curated example"`; IDs are `seed:<slug>` (gist IDs are bare hex, so they cannot collide).
+- When `LORE_SEMANTIC_URL` is also set the semantic server is tried first (retry once); on failure the result comes from the seeds with `fallback: true`. `GistsClient` is never constructed in read-only mode. `get_concept` for a non-seed id returns `{"error": "read_only_lookup_unavailable"}` when a semantic URL is configured (search results already contain the full concept). `min_rating` is honoured; seeds are unrated and therefore always pass, as in the gists backend.
 
 `mcp/server.py:main()` dispatches `init` to `setup.init.run_init`; any other invocation starts the MCP server as before.
 
@@ -451,6 +466,7 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-012 | Gists backend search uses `GET /gists` list-and-filter, not `GET /search/gists` — the search endpoint returns 404 (non-existent GitHub API); list-and-filter with keyword scoring works correctly and scales to benchmark-scale collections (≤100 gists) | accepted | 2026-07-19 |
 
 | ADR-013 | `init` registers the MCP server through the agent's own CLI (`claude mcp add`) behind an `AgentAdapter` interface, is idempotent, and never overwrites a differing registration without `--force`; unparseable CLI output is an error, never treated as "not registered"; `init` never publishes or rates concepts | accepted | 2026-10-31 |
+| ADR-014 | Read-only demo mode (`LORE_READ_ONLY=1`) with a bundled seed corpus: with no GitHub token `init` still completes, write tools return a typed `read_only` error, and search serves the curated seed concepts (semantic server first when configured). The `gh` token is resolved at runtime (`LORE_TOKEN_FROM_GH=1`) instead of being copied into agent config; env/prompt tokens are stored only with `--store-token` | accepted | 2026-10-31 |
 
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 
@@ -480,6 +496,8 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | R-4 | Stop hook fails silently and ratings are never collected | Low | High | Hook must exit 0 but log errors to `~/.lore/hook.log` |
 | R-5 | Concept inserted to SQLite but Qdrant unavailable — concept saved but not searchable | Low | Medium | API returns 503 + concept_id; operator can re-index; future reindex endpoint planned |
 | R-6 | `init` depends on the human-readable output of `claude mcp get`; a Claude Code CLI change could break parsing | Medium | Low | Unrecognised output fails loudly with an "update your CLI" message instead of guessing; parser tested against captured real output |
+| R-7 | Bundled seed corpus goes stale or is mistaken for community content | Medium | Low | Results labelled `source: "seed"` / "curated example"; corpus changes ship with releases; init states that community search needs a semantic server |
+| R-8 | A token stored with `--store-token` sits in plain text in the agent config and in argv of `claude mcp add` during registration | Low | High | Off by default; `gh` tokens never stored; explicit plain-text warning; all output redacted; docs recommend `gh` or env |
 
 ---
 
@@ -497,3 +515,6 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | Seed graph | Six concepts and five links pre-loaded on first run to validate the full retrieval path |
 | Agent adapter | `setup/agents.py` `AgentAdapter` — reads and writes the Lore MCP server registration for one coding agent (Claude Code today) |
 | Content scanner | `core/scanner.py` — checks concept fields for credential patterns, internal URLs, and LORE_BLOCK_PATTERNS before persisting |
+| Read-only mode | `LORE_READ_ONLY=1` — demo mode with no token: write tools return a `read_only` error and search uses the bundled seed corpus |
+| Seed corpus | The curated concept definitions in `seed/concepts.py` served by `mcp/backends/seed.py`; IDs `seed:<slug>`, labelled "curated example" |
+| `LORE_TOKEN_FROM_GH` | `1` makes the MCP server fetch its GitHub token from `gh auth token` at runtime instead of reading it from config |

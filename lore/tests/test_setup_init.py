@@ -24,6 +24,25 @@ from lore.setup.agents import (
 )
 from lore.setup.checks import Check, check_docker, check_python, run_checks
 
+
+
+@pytest.fixture(autouse=True)
+def _isolated_setup(tmp_path, monkeypatch):
+    """Keep LORE-043 tests off the real home, network, gh and server (LORE-044 steps)."""
+    from lore.setup import auth as auth_mod
+    from lore.setup import verify as verify_mod
+
+    (tmp_path / "home").mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    for key in ("LORE_READ_ONLY", "LORE_TOKEN_FROM_GH", "LORE_SEMANTIC_URL"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("LORE_GITHUB_TOKEN", "ghp_" + "a" * 36)
+    monkeypatch.setattr(auth_mod, "validate_token", lambda token, http=None: "tester")
+    monkeypatch.setattr(
+        verify_mod, "verify_install", lambda *a, **k: verify_mod.VerifyResult(True, "ok", ["t"] * 5, 1)
+    )
+
+
 # Output captured from the real `claude mcp get lore` CLI (Claude Code 2.1.316).
 GET_OUTPUT = """lore:
   Scope: User config (available in all your projects)

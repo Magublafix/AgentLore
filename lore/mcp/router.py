@@ -39,7 +39,9 @@ from typing import Optional
 
 import httpx
 
+from lore.core.auth import resolve_github_token
 from lore.mcp.backends import gists as gists_backend
+from lore.mcp.backends import seed as seed_backend
 from lore.mcp.backends.gists_client import GistsClient
 
 logger = logging.getLogger(__name__)
@@ -184,6 +186,34 @@ class BackendRouter:
             response.raise_for_status()
             return response.json()
 
+    def _read_only_search(
+        self,
+        problem: str,
+        type: Optional[str],
+        language: Optional[str],
+        limit: int,
+        min_rating: float,
+    ) -> dict:
+        """Read-only search: semantic server first (if configured), then bundled seeds.
+
+        Never touches GitHub. A failed semantic call marks the result
+        ``fallback: true`` so callers can warn that community search is down.
+        """
+        semantic_url = self._semantic_url or os.environ.get("LORE_SEMANTIC_URL") or None
+        if semantic_url:
+            self._semantic_url = semantic_url
+            for attempt in range(2):
+                try:
+                    return self._semantic_search(problem, type, language, limit, min_rating)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Semantic server attempt %d failed (%s).", attempt + 1, exc)
+        result = seed_backend.search_concepts(
+            problem, type=type, language=language, limit=limit, min_rating=min_rating
+        )
+        if semantic_url:
+            result["fallback"] = True
+        return result
+
     # ------------------------------------------------------------------
     # Private helpers — gists
     # ------------------------------------------------------------------
@@ -220,7 +250,7 @@ class BackendRouter:
         if self._semantic_url is None:
             return None
 
-        github_token = os.environ.get("LORE_GITHUB_TOKEN")
+        github_token = resolve_github_token()
         if not github_token:
             return None
 
@@ -294,6 +324,9 @@ class BackendRouter:
             ValueError: For unknown backend values.
             RuntimeError: On selfhosted HTTP errors or gists rate limit.
         """
+        if seed_backend.read_only_enabled():
+            return self._read_only_search(problem, type, language, limit, min_rating)
+
         if self._backend == "selfhosted":
             payload: dict = {
                 "problem": problem,
@@ -359,6 +392,22 @@ class BackendRouter:
             ValueError: For unknown backend values.
             RuntimeError: On selfhosted HTTP errors.
         """
+        if seed_backend.read_only_enabled():
+            result = seed_backend.get_concept(concept_id)
+            if result is None and (self._semantic_url or os.environ.get("LORE_SEMANTIC_URL")):
+                return {
+                    "error": "read_only_lookup_unavailable",
+                    "concept_id": concept_id,
+                    "hint": "Read-only mode cannot look up community concepts by id; "
+                            "search_concepts results already contain the full concept.",
+                }
+            if result is None:
+                raise RuntimeError(
+                    f"Concept {concept_id} not found. Read-only demo mode only serves the "
+                    "bundled curated examples (ids start with 'seed:')."
+                )
+            return result
+
         if self._backend == "selfhosted":
             with self._client() as client:
                 response = client.get(f"/v1/concepts/{concept_id}")
@@ -411,6 +460,9 @@ class BackendRouter:
                 or for unknown backend values.
             RuntimeError: On unexpected selfhosted HTTP errors.
         """
+        if seed_backend.read_only_enabled():
+            return seed_backend.read_only_error("submit_concept")
+
         if self._backend == "selfhosted":
             payload: dict = {
                 "name": name,
@@ -486,6 +538,9 @@ class BackendRouter:
             ValueError: For unknown backend values.
             RuntimeError: On selfhosted HTTP errors.
         """
+        if seed_backend.read_only_enabled():
+            return seed_backend.read_only_error("link_concepts")
+
         if self._backend == "selfhosted":
             payload = {
                 "from_id": from_id,
@@ -527,6 +582,9 @@ class BackendRouter:
             ValueError: For unknown backend values.
             RuntimeError: On selfhosted HTTP errors.
         """
+        if seed_backend.read_only_enabled():
+            return seed_backend.read_only_error("rate_concept")
+
         if self._backend == "selfhosted":
             payload: dict = {"outcome": outcome, "session_id": session_id}
             if hours_saved is not None:
