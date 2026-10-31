@@ -528,3 +528,423 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 - All three stories depend on LORE-030 (core server) from Sprint 7.
 - LORE-034 (auth) should be implemented before LORE-033 and LORE-035 so write endpoints are protected from the start.
 - After Sprint 8: run LORE-029 (gists benchmark) to validate the full Phase 3 stack end-to-end.
+
+## Sprint 10 — 2026-11-02 → 2026-11-13
+**Goal:** Ship a one-command setup (`uvx mcp-server-lore init`) so a new user reaches a verified, working AgentLore install with no manual config editing (#22).
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-043 | `init` command: prerequisite checks and idempotent MCP registration | python-mcp-engineer | planned | — |
+| LORE-044 | `init` command: GitHub auth, state initialisation and install verification | python-mcp-engineer | planned | — |
+| LORE-045 | README quick start and first-search walkthrough | skill-engineer | planned | — |
+
+### Notes
+- Resolves the #22 open questions: Claude Code is the first supported agent (registration via its `claude mcp add` CLI; other agents added behind a small adapter interface). Auth reuses `gh auth token` or `LORE_GITHUB_TOKEN`; the token is never printed or written to config in plain text where an env reference works. A read-only demo mode (search with no token) is in scope for LORE-044.
+- Depends on packaging from LORE-039/LORE-040 (`uvx mcp-server-lore` must resolve). PROJECT.md marks both done but they are still in backlog.md — confirm and move them to features.md before starting.
+- LORE-043 first; LORE-044 builds on it; LORE-045 last, once the command's real output exists.
+- Safe by default: `init` must never publish a concept, change repo permissions, or run without clear prompts (`--yes` for non-interactive use).
+
+---
+
+## [LORE-043] `init` command: prerequisite checks and idempotent MCP registration
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** python-mcp-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > One-command setup
+
+**As a** new Lore user
+**I want to be able to** run a single `mcp-server-lore init` command that checks prerequisites and registers the MCP server with Claude Code
+**So that** I do not have to install or edit configuration by hand
+
+**Acceptance Criteria:**
+- [ ] `init` subcommand added to the `mcp-server-lore` entry point (`main()` dispatches subcommands; no subcommand still starts the server)
+- [ ] Checks Python version, `claude` CLI presence, and Docker (only when the semantic stack is requested); each failure prints the cause and the exact fix
+- [ ] Registers the MCP server via `claude mcp add` through an agent-adapter interface; Claude Code is the only adapter shipped
+- [ ] Re-running detects an existing identical registration and reports `already configured` without duplicating; a conflicting entry is reported, not overwritten, unless `--force`
+- [ ] `--dry-run` prints planned actions and changes nothing
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-044] `init` command: GitHub auth, state initialisation and install verification
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** python-mcp-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > One-command setup
+
+**As a** new Lore user
+**I want to be able to** have `init` handle GitHub authentication, create local state and verify the install end-to-end
+**So that** the setup ends with proof that search works
+
+**Acceptance Criteria:**
+- [ ] Token resolved in order: `LORE_GITHUB_TOKEN`, `gh auth token`, then an interactive prompt that points to the token page with `gist` scope; the token is never echoed or logged
+- [ ] Creates `~/.lore/` state only when absent; existing session data is never modified
+- [ ] Verification step starts the MCP server, lists its tools and runs one real `search_concepts` call; success and failure are both reported clearly
+- [ ] Read-only demo mode: with no token, `init` completes registration and verifies search against public gists, and says publishing/rating are disabled
+- [ ] Nothing is published or rated by `init`; submit/rate paths are not invoked
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-045] README quick start and first-search walkthrough
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** S
+**Agent:** skill-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > One-command setup
+
+**As a** developer discovering AgentLore
+**I want to be able to** find one quick-start command at the top of the README with a documented first search
+**So that** I can try AgentLore in minutes and confirm it works
+
+**Acceptance Criteria:**
+- [ ] README leads with the single `init` command before any other setup content; the Docker/semantic stack is moved to an optional section
+- [ ] First-search walkthrough shows the expected output of the verification step
+- [ ] Troubleshooting table covers each actionable error emitted by LORE-043/044
+- [ ] docs/architecture.md updated for the new CLI building block
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## Sprint 11 — 2026-11-16 → 2026-12-04
+**Goal:** Add reproducer and compatibility metadata to concepts, check it against the target environment before reuse, and keep ratings from overriding known incompatibility (#19).
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-046 | Compatibility and reproducer metadata schema | python-mcp-engineer | planned | — |
+| LORE-047 | Environment detection and compatibility checker | python-mcp-engineer | planned | — |
+| LORE-048 | Compatibility-aware retrieval and ranking | ai-data-specialist | planned | — |
+| LORE-049 | Skills: capture and surface compatibility metadata | skill-engineer | planned | — |
+
+### Notes
+- Resolves the #19 open questions for this release: compatibility is structured metadata only (no inference from reproducers); reproducers are stored and displayed but not executed automatically (sandbox execution is deferred); updating ranges from multi-project evidence is deferred and should be filed as a follow-up issue.
+- Metadata must be backward compatible: existing concepts without it are treated as `unknown`, never `compatible`.
+- LORE-046 first. LORE-047 can start in parallel once the schema is merged; LORE-048 needs both; LORE-049 last.
+- Touches all three backends (selfhosted schema migration, gist body format, semantic index payload) — run the integration tests in Gate 4.
+
+---
+
+## [LORE-046] Compatibility and reproducer metadata schema
+
+**Phase:** 5
+**Priority:** high
+**Effort:** L
+**Agent:** python-mcp-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Reproducibility and compatibility metadata
+
+**As a** contributing agent
+**I want to be able to** attach a minimal reproducer and explicit environment constraints to a concept
+**So that** other agents can judge whether it applies to their project
+
+**Acceptance Criteria:**
+- [ ] Concept model gains `reproducer` (text, or an explicit `none_available` marker) and `compatibility` (structured: language/runtime, libraries with version specifiers, OS/platform, free-text assumptions)
+- [ ] `submit_concept` accepts and validates the new fields on all backends; invalid version specifiers are rejected with a clear error
+- [ ] Selfhosted SQLite schema migrated without data loss; gist body format and semantic index payload carry the fields
+- [ ] Missing or partial metadata is stored as `unknown` and never defaulted to supported
+- [ ] Round-trip tests per backend: submit then get returns identical metadata; legacy concepts load as `unknown`
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-047] Environment detection and compatibility checker
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** python-mcp-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Reproducibility and compatibility metadata
+
+**As a** searching agent
+**I want to be able to** have a concept's constraints compared with my project's environment
+**So that** mismatches and gaps are reported instead of silently ignored
+
+**Acceptance Criteria:**
+- [ ] Detects runtime and library versions from the project (e.g. `pyproject.toml`, lockfiles, `package.json`, running interpreter) through a pluggable detector interface
+- [ ] A pure checker returns `compatible`, `incompatible` (with the violated constraint) or `unknown` (with what is missing) per concept
+- [ ] Uses `packaging` specifiers for version ranges; unparsable or absent constraints yield `unknown`
+- [ ] Tests cover compatible, incompatible and insufficiently specified environments, including boundary versions
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-048] Compatibility-aware retrieval and ranking
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** ai-data-specialist
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Reproducibility and compatibility metadata
+
+**As a** searching agent
+**I want to be able to** have search results ranked and labelled by compatibility separately from ratings
+**So that** a highly rated concept from a different environment is not presented as safe to apply
+
+**Acceptance Criteria:**
+- [ ] `search_concepts` accepts the target environment and returns each result with a compatibility status and reason
+- [ ] Ranking prefers `compatible`, then `unknown`, then `incompatible`; rating only orders results within a status band
+- [ ] A known incompatibility is never promoted by rating; `incompatible` results are flagged and, by default, placed last
+- [ ] Works on selfhosted, gists and semantic backends; semantic server filtering/ordering covered by an integration test
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-049] Skills: capture and surface compatibility metadata
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** S
+**Agent:** skill-engineer
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Reproducibility and compatibility metadata
+
+**As a** agent using Lore skills
+**I want to be able to** be prompted to record a reproducer and constraints on capture, and see compatibility on search
+**So that** the metadata is actually populated and used
+
+**Acceptance Criteria:**
+- [ ] capture-concept skill asks for a minimal reproducer and detected environment constraints, and allows `none available`
+- [ ] search-concepts skill shows each result's compatibility status and warns on mismatch or unknown
+- [ ] The skill instructs the agent to validate an unknown-compatibility workaround before relying on it when feasible
+- [ ] Plugin wiring tests updated; docs and README describe the new fields
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## Sprint 12 — 2026-12-07 → 2026-12-18
+**Goal:** Build the benchmark tooling needed for a controlled evaluation: control condition, matched random-context condition and statistical analysis (#18).
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-050 | Benchmark runner: repeated-attempt control condition | general-purpose | planned | — |
+| LORE-051 | Benchmark runner: matched random-context condition | ai-data-specialist | planned | — |
+| LORE-052 | Statistical analysis: mixed-effects logistic and permutation test | ai-data-specialist | planned | — |
+| LORE-053 | Cross-task knowledge-transfer experiment design | general-purpose | planned | — |
+
+### Notes
+- Both conditions must use the same task, model, 40-turn budget and equivalent starting state; AgentLore series start from a fresh knowledge database.
+- LORE-050 and LORE-051 share runner changes — land LORE-050 first. LORE-052 can proceed in parallel against the existing 10-series results. LORE-053 is design-only; implementation is tracked as a separate story if approved.
+- DoD Gates 3 and 4 waived for benchmark-only stories that change no Lore infrastructure, as in Sprint 4.
+- Related backlog stories LORE-037 (noise resilience) and LORE-028 (30-series extension) share this runner; reuse their flags rather than duplicating, and consider LORE-028 as the volume run for Sprint 13.
+
+---
+
+## [LORE-050] Benchmark runner: repeated-attempt control condition
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** general-purpose
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+
+**As a** Lore developer
+**I want to be able to** run series with AgentLore disabled for every run alongside series with it enabled
+**So that** I can separate the effect of knowledge from the effect of repeated attempts
+
+**Acceptance Criteria:**
+- [ ] Runner supports a `control` condition: no AgentLore tools or concepts in any run of the series, all other settings identical
+- [ ] Task, model and 40-turn budget are enforced to match across conditions; a mismatch fails fast
+- [ ] Results are written per condition and per independent series, each AgentLore series with a fresh knowledge database
+- [ ] Unit tests cover condition selection and the settings-parity check
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-051] Benchmark runner: matched random-context condition
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** M
+**Agent:** ai-data-specialist
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+
+**As a** Lore developer
+**I want to be able to** run a condition that gives the agent unrelated concepts matched to the relevant set by token count
+**So that** I can tell relevant knowledge apart from extra prompt context
+
+**Acceptance Criteria:**
+- [ ] Condition supplies a token-matched dump of unrelated concepts (tolerance documented, e.g. ±10%)
+- [ ] Unrelated concepts are drawn from a documented pool excluding any concept relevant to the task
+- [ ] Selection is seeded and reproducible; the seed and token counts are recorded in each run's results
+- [ ] Runner reports the three conditions (relevant, random-context, none) separately; if infeasible, the reason is documented in BENCHMARK.md
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-052] Statistical analysis: mixed-effects logistic and permutation test
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** M
+**Agent:** ai-data-specialist
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+
+**As a** Lore developer
+**I want to be able to** analyse pass/fail outcomes with series as a random effect and with a permutation test
+**So that** conclusions account for dependence between runs within a series
+
+**Acceptance Criteria:**
+- [ ] Mixed-effects logistic regression of pass/fail on run number and condition, with series as a random effect
+- [ ] Permutation test of the run-number/success relationship that permutes within series
+- [ ] Applied to the existing 10-series data as a baseline and reported with confidence intervals
+- [ ] Output states model assumptions and does not treat runs as independent observations; tests use synthetic data with a known effect
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-053] Cross-task knowledge-transfer experiment design
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** S
+**Agent:** general-purpose
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+
+**As a** Lore developer
+**I want to be able to** have a written design for testing whether concepts learned on one task help on a structurally similar one
+**So that** implementation can be scheduled with a clear protocol
+
+**Acceptance Criteria:**
+- [ ] Design doc in `samples/` chooses the transfer task (evaluating the existing `radev` CLI against a new image-processing CLI) with scope and a test suite outline
+- [ ] Defines conditions: transferred knowledge, no knowledge, and (if feasible) random context
+- [ ] Names the general concepts expected to transfer (input validation, error handling, modular design) and how transfer is measured
+- [ ] Implementation stories are added to the backlog; no experiment is run in this story
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## Sprint 13 — 2026-12-21 → 2027-01-08
+**Goal:** Run the controlled benchmark series, analyse them with the new methods and publish the findings and limitations (#18).
+**Status:** planned
+
+### Stories
+| ID | Title | Agent | Status | Tokens |
+|----|-------|-------|--------|--------|
+| LORE-054 | Run control and experimental benchmark series | general-purpose | planned | — |
+| LORE-055 | Analyse results and update BENCHMARK.md with limitations | ai-data-specialist | planned | — |
+
+### Notes
+- LORE-054 is wall-clock bound (the 30-series estimate in LORE-028 is ~45–60 h); start it on the first day as a background job and begin LORE-055 on partial data.
+- The sprint spans the holiday period, so the dates assume unattended runs. Slip the end date rather than cutting series count below what the analysis in LORE-052 needs.
+- Exit criterion for v1.1.0: #18 is closed only when conclusions are written without overstating causal evidence.
+
+---
+
+## [LORE-054] Run control and experimental benchmark series
+
+**Phase:** 5
+**Priority:** high
+**Effort:** L
+**Agent:** general-purpose
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+**Depends on:** LORE-050, LORE-051, LORE-052
+
+**As a** Lore developer
+**I want to be able to** run multiple independent series for the control, relevant-knowledge and random-context conditions
+**So that** there is enough data to compare conditions
+
+**Acceptance Criteria:**
+- [ ] Series counts per condition are chosen from a power estimate based on LORE-052 and recorded before the runs start
+- [ ] All series use the same task, model and 40-turn budget; AgentLore series use fresh knowledge databases
+- [ ] Raw results are saved per condition and per series, and aggregated into `aggregate.json`
+- [ ] Failed or aborted series are listed, not silently dropped
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-055] Analyse results and update BENCHMARK.md with limitations
+
+**Phase:** 5
+**Priority:** high
+**Effort:** M
+**Agent:** ai-data-specialist
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+**Depends on:** LORE-054
+
+**As a** Lore developer
+**I want to be able to** publish condition-separated results with the new statistical analysis and an honest limitations section
+**So that** readers can judge the evidence without overstatement
+
+**Acceptance Criteria:**
+- [ ] Results reported separately by condition and by series, with the LORE-052 analyses and confidence intervals
+- [ ] BENCHMARK.md compares AgentLore against the repeated-attempt control and the random-context baseline
+- [ ] Limitations section covers single task, single model, sample size and non-causal inference
+- [ ] Issue #18 acceptance criteria are checked off with links to the evidence
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+

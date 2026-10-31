@@ -485,6 +485,16 @@ truth. The server indexes the public corpus and serves vector search.
       this phase makes `auto` the recommended default)
 - [ ] Concept graph browser (read-only web UI) — tracked in #13
 
+### Phase 5 — v1.1.0 (milestone v1.1.0)
+
+- [ ] One-command setup — `uvx mcp-server-lore init` installs, configures MCP, authenticates,
+      verifies — tracked in #22
+- [ ] Reproducibility and compatibility metadata on workarounds — reproducer, version ranges,
+      applicability check, compatibility-aware retrieval — tracked in #19
+- [ ] Benchmark controls and knowledge-transfer evaluation — repeated-attempt control,
+      matched random-context baseline, mixed-effects/permutation analysis, cross-task
+      transfer design — tracked in #18
+
 ---
 
 ## Project Structure
