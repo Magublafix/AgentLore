@@ -351,3 +351,31 @@ class TestSkillDirectoryConventions:
             "Found SKILL.md directly under skills/ (not in a subdirectory). "
             "Each skill must live in its own subdirectory: skills/<name>/SKILL.md"
         )
+
+
+class TestCompatibilitySkillGuidance:
+    """LORE-049: skills prompt for and surface compatibility metadata."""
+
+    @staticmethod
+    def _text(name: str) -> str:
+        return (_SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
+
+    def test_capture_asks_for_reproducer_and_constraints(self):
+        text = self._text("capture-concept")
+        assert "reproducer=" in text
+        assert "none_available" in text
+        assert "compatibility=" in text
+        assert "runtime_version" in text
+
+    def test_capture_does_not_encourage_guessing(self):
+        assert "unknown" in self._text("capture-concept")
+
+    def test_search_surfaces_status_and_warns(self):
+        text = self._text("search-concepts")
+        for token in ("compatibility_check", "compatible", "unknown", "incompatible"):
+            assert token in text
+
+    def test_search_validates_unknown_before_relying(self):
+        text = self._text("search-concepts")
+        assert "before relying on it" in text
+        assert "reproducer" in text

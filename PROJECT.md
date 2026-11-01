@@ -56,8 +56,13 @@ avg_rating           REAL DEFAULT 0,
 usage_count          INTEGER DEFAULT 0,
 time_saved_avg_hours REAL,             -- reported by raters: hours saved vs. from scratch
 created_at           TEXT,
-embedding            BLOB              -- raw float32 BLOB on when_to_use + name; vector queries go through Qdrant
+embedding            BLOB,             -- raw float32 BLOB on when_to_use + name; vector queries go through Qdrant
+reproducer           TEXT,             -- JSON {status: provided|none_available|unknown, text}; NULL = unknown (LORE-046)
+compatibility        TEXT              -- JSON {status, language, runtime_version, libraries, platforms, assumptions}; NULL = unknown (LORE-046)
 ```
+
+Existing databases are migrated idempotently on startup (`ALTER TABLE ... ADD COLUMN`); legacy rows keep all
+data and load `reproducer`/`compatibility` as `unknown`. Shared model and validation: `lore/core/compat.py`.
 
 ### links table
 
@@ -156,6 +161,12 @@ No infrastructure. Each concept is a public gist with two files:
   "when_to_use": "...",
   "dont_use_when": "...",
   "tags": ["cli", "rest-api"],
+  "reproducer": { "status": "provided", "text": "..." },
+  "compatibility": {
+    "status": "declared", "language": "python", "runtime_version": ">=3.11,<4",
+    "libraries": [{ "name": "fastapi", "specifier": ">=0.110" }],
+    "platforms": ["linux"], "assumptions": ["Qdrant reachable"]
+  },
   "links": [
     { "gist_id": "abc123", "rel": "uses", "label": "openapi-generator setup" }
   ]
@@ -220,12 +231,24 @@ Input:
   type      str?       — filter by concept type (project|pattern|tool|testing|architecture)
   language  str?       — filter by language
   limit     int = 3
+  environment {language?, runtime_version?, libraries?: {name: version}, platform?}?
+                       — target environment to check compatibility against
+  project_dir str?     — detect the environment from this directory (ignored if `environment` given)
+  include_incompatible bool = true — false drops incompatible results instead of ranking them last
 
 Output: ranked list of concepts, each with:
   concept_id, name, type, when_to_use, content (markdown),
   avg_rating, usage_count, time_saved_avg_hours,
-  links: [{ rel, label, concept_id, name, type, when_to_use }]
+  compatibility_check: {status: compatible|incompatible|unknown, reason},
+  links: [{ rel, label, concept_id, name, type, when_to_use, compatibility_check }]
 ```
+
+Compatibility-aware ranking (`lore/core/ranking.py`, LORE-048): results are banded
+compatible > unknown > incompatible; rating/relevance only orders within a band, so a highly rated
+concept that is known to be incompatible is flagged and placed last (never promoted). With no
+`environment`/`project_dir`, the MCP process inspects the current directory's manifests and lockfiles
+(files only; not the interpreter; disable with `LORE_COMPAT_AUTODETECT=0`); if nothing is detected every
+result is `unknown` and order is unchanged.
 
 Returns the matched concept **plus its full linked graph** — one call
 gives the agent the blueprint and all related concepts. Logs usage
@@ -254,9 +277,24 @@ Input:
   tags          str[]
   source_url    str?
   links         [{to_id, rel, label}]?   — link to existing concepts
+  reproducer    str?        — minimal reproducer text, or exactly "none_available"
+  compatibility {language?, runtime_version?, libraries?, platforms?, assumptions?}?
+                            — libraries: [{name, specifier}] or {name: specifier};
+                              version specifiers use PEP 440 (`packaging.SpecifierSet`)
 
 Output: concept_id, confirmation
 ```
+
+`reproducer` and `compatibility` are optional. Omitted or partial metadata is stored as `unknown` /
+`partial` and is never treated as supported; an invalid version specifier is rejected with an error
+naming the field. Reproducers are stored and displayed, never executed. `get_concept` and
+`search_concepts` results return both fields in the same canonical shape on every backend.
+
+Applicability checking (`lore/core/environment.py`, LORE-047): detectors read the project's `pyproject.toml`,
+lockfiles, `package.json` and the running interpreter (read-only, no code execution or network) into an
+`Environment`; `check_compatibility(compatibility, env)` returns `compatible`, `incompatible` (violated
+constraint named) or `unknown` (missing information named). Unknown/partial metadata or undetected data
+is never reported as compatible.
 
 Before writing, `submit_concept` runs a content scan across all text fields:
 
@@ -489,7 +527,7 @@ truth. The server indexes the public corpus and serves vector search.
 
 - [x] One-command setup — `uvx mcp-server-lore init` installs, configures MCP, authenticates,
       verifies — tracked in #22
-- [ ] Reproducibility and compatibility metadata on workarounds — reproducer, version ranges,
+- [x] Reproducibility and compatibility metadata on workarounds — reproducer, version ranges,
       applicability check, compatibility-aware retrieval — tracked in #19
 - [ ] Benchmark controls and knowledge-transfer evaluation — repeated-attempt control,
       matched random-context baseline, mixed-effects/permutation analysis, cross-task

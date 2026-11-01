@@ -30,7 +30,14 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from lore.core.compat import (
+    load_compatibility,
+    load_reproducer,
+    normalize_concept_metadata,
+)
 from lore.core.endpoints import gist_web_url
+from lore.core.environment import Environment
+from lore.core.ranking import candidate_limit, rank_by_compatibility
 from lore.core.constants import VALID_LINK_RELS, _parse_name_from_description
 from lore.mcp.backends.gists_client import (
     GistNotFoundError,
@@ -61,6 +68,8 @@ def submit_concept(
     dont_use_when: Optional[str] = None,
     source_url: Optional[str] = None,
     links: Optional[list[dict]] = None,
+    reproducer: Optional[str] = None,
+    compatibility: Optional[dict] = None,
 ) -> dict:
     """Submit a concept as a GitHub Gist.
 
@@ -82,16 +91,25 @@ def submit_concept(
         source_url: Origin URL.  ``None`` if not applicable.
         links: Optional list of link dicts.  Each dict should contain
             ``"gist_id"`` and ``"rel"`` keys.  Defaults to ``[]``.
+        reproducer: Minimal reproducer text, the marker ``"none_available"``,
+            or ``None`` (stored as unknown).  See :mod:`lore.core.compat`.
+        compatibility: Optional structured constraints (language,
+            runtime_version, libraries, platforms, assumptions).  ``None`` is
+            stored as unknown, never as supported.
 
     Returns:
         A dict with ``concept_id`` (the gist id), ``name``, and
         ``source_url`` (the public gist URL).
 
     Raises:
+        MetadataValidationError: (a ``ValueError``) if ``reproducer`` or
+            ``compatibility`` is invalid, e.g. a bad version specifier.
+            Raised before any network call.
         GistAuthError: If the GitHub token is invalid or missing.
         GistRateLimitError: If the GitHub API rate limit is exhausted.
         GistAPIError: On unexpected GitHub API errors.
     """
+    reproducer_meta, compat_meta = normalize_concept_metadata(reproducer, compatibility)
     description = f"[agentlore-concept] {name} [{', '.join(tags)}]"
 
     _PROJECT_URL = "https://github.com/Magublafix/AgentLore"
@@ -105,6 +123,8 @@ def submit_concept(
         "tags": tags,
         "links": links if links is not None else [],
         "project_url": _PROJECT_URL,
+        "reproducer": reproducer_meta,
+        "compatibility": compat_meta,
     }
 
     concept_md = (
@@ -216,7 +236,8 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
     Returns:
         A dict with keys: ``concept_id``, ``name``, ``type``, ``language``,
         ``content``, ``when_to_use``, ``dont_use_when``, ``tags``,
-        ``source_url``, ``avg_rating``, ``avg_hours_saved``, and ``links``.
+        ``source_url``, ``avg_rating``, ``avg_hours_saved``, ``links``,
+        ``reproducer`` and ``compatibility`` (unknown for legacy gists).
         Returns ``None`` if the gist is not found.
     """
     # Fetch the primary gist.
@@ -242,6 +263,7 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
                 **link_entry,
                 "name": _parse_name_from_description(linked_gist.description),
                 "when_to_use": linked_lore_json.get("when_to_use"),
+                "compatibility": load_compatibility(linked_lore_json.get("compatibility")),
             })
         except Exception as exc:
             logger.warning("Failed to resolve link %s: %s", linked_gist_id, exc)
@@ -293,6 +315,8 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
         "time_saved_avg_hours": avg_hours_saved,
         "avg_hours_saved": avg_hours_saved,
         "links": resolved_links,
+        "reproducer": load_reproducer(lore_json.get("reproducer")),
+        "compatibility": load_compatibility(lore_json.get("compatibility")),
     }
 
 
@@ -379,6 +403,8 @@ def search_concepts(
     language: Optional[str] = None,
     limit: int = 3,
     min_rating: float = 2.0,
+    environment: Optional[Environment] = None,
+    include_incompatible: bool = True,
 ) -> dict:
     """Search for Lore concepts stored as GitHub Gists.
 
@@ -408,10 +434,19 @@ def search_concepts(
         limit: Maximum number of matching concepts to return.  Defaults to 3.
         min_rating: Minimum average rating threshold (inclusive).  Defaults
             to 2.0.
+        environment: Optional target :class:`~lore.core.environment.Environment`.
+            Every result gets ``compatibility_check`` (``{status, reason}``) and
+            results are ordered compatible > unknown > incompatible by
+            :func:`lore.core.ranking.rank_by_compatibility` (relevance order is
+            kept within a band).  When the environment is known, up to 4x
+            ``limit`` candidates are fetched before ranking.  ``None`` means
+            every status is ``unknown`` and order is unchanged.
+        include_incompatible: ``False`` drops incompatible results.
 
     Returns:
         A dict with a single key ``"results"`` whose value is a list of
-        concept dicts, each matching the shape returned by :func:`get_concept`.
+        concept dicts, each matching the shape returned by :func:`get_concept`
+        plus ``compatibility_check``.
         Returns ``{"results": []}`` when no concepts match.
 
     Raises:
@@ -440,8 +475,9 @@ def search_concepts(
     seen_ids: set[str] = set()
     results: list[dict] = []
 
+    wanted = candidate_limit(limit, environment)
     for summary in ranked:
-        if len(results) >= limit:
+        if len(results) >= wanted:
             break
 
         gist_id = summary.gist_id
@@ -474,4 +510,8 @@ def search_concepts(
 
         results.append(concept)
 
-    return {"results": results}
+    return {
+        "results": rank_by_compatibility(
+            results, environment, limit=limit, include_incompatible=include_incompatible
+        )
+    }

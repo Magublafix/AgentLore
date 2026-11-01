@@ -34,7 +34,14 @@ Strip all context specific to this session: file names, variable names, internal
 
 The concept body must be useful to any agent working on a similar problem. If you cannot describe it without referencing specifics, it is not ready to submit.
 
-### 3. Gate on LORE_CAPTURE_MODE
+### 3. Record a reproducer and environment constraints
+
+Other agents decide whether a concept applies to their project from this metadata, so capture it while you still have the context.
+
+- **Reproducer:** write the smallest self-contained snippet or command sequence that demonstrates the problem or the fix. Generalize it like the body (no project names, paths or credentials). If you cannot produce one, pass `reproducer="none_available"` explicitly — do not invent one and do not omit it silently.
+- **Compatibility:** record only constraints you actually observed or detected, from the project's manifests, lockfiles or runtime: `language`, `runtime_version` (a PEP 440 specifier such as `>=3.11,<4`), `libraries` (`{"name": "specifier"}`, e.g. `{"sqlalchemy": ">=2.0,<2.1"}`), `platforms` (e.g. `["linux"]`) and free-text `assumptions`. Leave out anything you did not verify; missing metadata is stored as `unknown`, which is safer than a guess. Invalid specifiers are rejected.
+
+### 4. Gate on LORE_CAPTURE_MODE
 
 Read the environment variable `LORE_CAPTURE_MODE`.
 
@@ -45,7 +52,7 @@ Read the environment variable `LORE_CAPTURE_MODE`.
 
 **auto mode:** Skip the confirmation gate. Proceed directly to submission.
 
-### 4. Call submit_concept
+### 5. Call submit_concept
 
 Use the actual MCP tool parameter names:
 
@@ -57,7 +64,11 @@ submit_concept(
   when_to_use="<one sentence: when this concept applies>",
   dont_use_when="<one sentence: when it does not apply>",
   tags=["<tag1>", "<tag2>"],
-  language="<language if language-specific, else omit>"
+  language="<language if language-specific, else omit>",
+  reproducer="<minimal reproducer, or none_available>",
+  compatibility={"language": "python", "runtime_version": ">=3.11",
+                 "libraries": {"<lib>": "<specifier>"}, "platforms": ["linux"],
+                 "assumptions": ["<free-text assumption>"]}
 )
 ```
 
@@ -69,7 +80,7 @@ If the MCP server is unreachable or returns an error:
 - In confirm mode: inform the user that submission failed and the insight was not stored.
 - In auto mode: silently skip, do not surface the error.
 
-### 5. Update the session file
+### 6. Update the session file
 
 On successful submission, append the returned `concept_id` to `~/.lore/session.json`.
 

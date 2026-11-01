@@ -14,6 +14,9 @@ import os
 import re
 from typing import Optional
 
+from lore.core.compat import unknown_compatibility, unknown_reproducer
+from lore.core.environment import Environment
+from lore.core.ranking import rank_by_compatibility
 from lore.seed.concepts import _CONCEPT_DEFS, _LINK_DEFS
 
 SEED_SOURCE = "seed"
@@ -91,6 +94,8 @@ def _to_concept(defn: dict) -> dict:
         "time_saved_avg_hours": None,
         "avg_hours_saved": None,
         "links": _links_for(defn["name"]),
+        "reproducer": unknown_reproducer(),
+        "compatibility": unknown_compatibility(),
         "source": SEED_SOURCE,
         "label": SEED_LABEL,
     }
@@ -109,8 +114,14 @@ def search_concepts(
     language: Optional[str] = None,
     limit: int = 3,
     min_rating: float = 2.0,
+    environment: Optional[Environment] = None,
+    include_incompatible: bool = True,
 ) -> dict:
     """Keyword-search the bundled curated concepts.
+
+    Results carry ``compatibility_check`` and are ordered by
+    :func:`lore.core.ranking.rank_by_compatibility`.  Seeds declare no
+    compatibility metadata, so their status is always ``unknown``.
 
     Same result shape as the gists/semantic backends: ``{"results": [...]}``.
     Seeds are unrated, so ``min_rating`` never excludes them (as for unrated
@@ -131,7 +142,12 @@ def search_concepts(
         if score > 0:
             scored.append((score, defn))
     scored.sort(key=lambda pair: -pair[0])  # stable: ties keep corpus order
-    return {"results": [_to_concept(d) for _, d in scored[: max(limit, 0)]]}
+    results = [_to_concept(d) for _, d in scored]
+    return {
+        "results": rank_by_compatibility(
+            results, environment, limit=limit, include_incompatible=include_incompatible
+        )
+    }
 
 
 def get_concept(concept_id: str) -> Optional[dict]:

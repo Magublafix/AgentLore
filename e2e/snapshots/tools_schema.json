@@ -80,6 +80,22 @@
   "search_concepts": {
     "additionalProperties": false,
     "properties": {
+      "environment": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "include_incompatible": {
+        "default": true,
+        "type": "boolean"
+      },
       "language": {
         "anyOf": [
           {
@@ -101,6 +117,17 @@
       },
       "problem": {
         "type": "string"
+      },
+      "project_dir": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "session_id": {
         "anyOf": [
@@ -133,6 +160,18 @@
   "submit_concept": {
     "additionalProperties": false,
     "properties": {
+      "compatibility": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
       "content": {
         "type": "string"
       },
@@ -175,6 +214,17 @@
       },
       "name": {
         "type": "string"
+      },
+      "reproducer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "source_url": {
         "anyOf": [

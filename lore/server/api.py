@@ -48,6 +48,7 @@ LORE_ADMIN_TOKEN        Token required for DELETE /v1/admin/reset.
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import logging
 import os
 from contextlib import asynccontextmanager, suppress
@@ -60,6 +61,8 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, field_validator
 
+from lore.core.compat import normalize_compatibility, normalize_reproducer
+from lore.core.ranking import candidate_limit, coerce_environment, rank_by_compatibility
 from lore.core.constants import VALID_CONCEPT_TYPES, VALID_LINK_RELS, embedding_text
 from lore.core.scanner import scan_content
 from lore.mcp.embeddings import EmbeddingModel
@@ -94,6 +97,8 @@ class ConceptSubmitRequest(BaseModel):
     source_url: Optional[str] = None
     author: Optional[str] = None
     links: list[LinkIn] = []
+    reproducer: Optional[str] = None
+    compatibility: Optional[dict] = None
 
     @field_validator("type")
     @classmethod
@@ -106,6 +111,19 @@ class ConceptSubmitRequest(BaseModel):
             )
         return v
 
+    @field_validator("reproducer")
+    @classmethod
+    def validate_reproducer(cls, v: Optional[str]) -> Optional[str]:
+        """Reject malformed reproducer input (see :mod:`lore.core.compat`)."""
+        normalize_reproducer(v)
+        return v
+
+    @field_validator("compatibility")
+    @classmethod
+    def validate_compatibility(cls, v: Optional[dict]) -> Optional[dict]:
+        """Reject invalid compatibility metadata, e.g. bad version specifiers."""
+        return normalize_compatibility(v)
+
 
 class SearchRequest(BaseModel):
     """Request body for POST /v1/concepts/search."""
@@ -115,6 +133,15 @@ class SearchRequest(BaseModel):
     language: Optional[str] = None
     limit: int = 3
     min_rating: float = 2.0
+    environment: Optional[dict] = None
+    include_incompatible: bool = True
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: Optional[dict]) -> Optional[dict]:
+        """Reject malformed target environments (422)."""
+        coerce_environment(v)
+        return v
 
 
 class LinkRequest(BaseModel):
@@ -202,6 +229,21 @@ class ConceptUpsertRequest(BaseModel):
     dont_use_when: Optional[str] = None
     gist_updated_at: str
     force: bool = False
+    reproducer: Optional[str] = None
+    compatibility: Optional[dict] = None
+
+    @field_validator("reproducer")
+    @classmethod
+    def validate_reproducer(cls, v: Optional[str]) -> Optional[str]:
+        """Reject malformed reproducer input."""
+        normalize_reproducer(v)
+        return v
+
+    @field_validator("compatibility")
+    @classmethod
+    def validate_compatibility(cls, v: Optional[dict]) -> Optional[dict]:
+        """Reject invalid compatibility metadata."""
+        return normalize_compatibility(v)
 
 
 class RegisterRequest(BaseModel):
@@ -589,6 +631,8 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
             "tags": body.tags,
             "source_url": body.source_url,
             "author": body.author,
+            "reproducer": body.reproducer,
+            "compatibility": body.compatibility,
         }
 
         try:
@@ -676,13 +720,17 @@ def _register_v1_routes(app: FastAPI) -> None:  # noqa: C901 — deliberate, all
         storage: StorageBackend = request.app.state.storage
         model: EmbeddingModel = request.app.state.model
 
+        env = coerce_environment(body.environment)
         query_vector = model.embed(body.problem)
         results = storage.search_concepts(
             query_vector=query_vector,
-            limit=body.limit,
+            limit=candidate_limit(body.limit, env),
             type_filter=body.type,
             language_filter=body.language,
             min_rating=body.min_rating,
+        )
+        results = rank_by_compatibility(
+            results, env, limit=body.limit, include_incompatible=body.include_incompatible
         )
 
         # Log session usage for sqlite_qdrant backend when session header present.
@@ -888,6 +936,8 @@ def _register_gist_routes(app: FastAPI) -> None:
             "when_to_use": body.when_to_use,
             "dont_use_when": body.dont_use_when,
             "gist_updated_at": body.gist_updated_at,
+            "reproducer": body.reproducer,
+            "compatibility": body.compatibility,
         }
 
         # --- Semantic dedup check (skipped when force=True) ---
@@ -917,6 +967,10 @@ def _register_gist_routes(app: FastAPI) -> None:
         request: Request,
         q: str = Query(..., description="Natural-language search query."),
         k: int = Query(3, ge=1, le=50, description="Maximum number of results."),
+        environment: Optional[str] = Query(
+            None, description="JSON target environment {language, runtime_version, libraries, platform}."
+        ),
+        include_incompatible: bool = Query(True, description="False drops incompatible results."),
     ):
         """Search for concepts semantically (gist_qdrant only).
 
@@ -924,9 +978,13 @@ def _register_gist_routes(app: FastAPI) -> None:
             request: FastAPI request.
             q: Natural-language query string.
             k: Maximum number of results (1–50).
+            environment: Optional JSON-encoded target environment; results get
+                ``compatibility_check`` and are ordered compatible > unknown >
+                incompatible (without it all are ``unknown``, order unchanged).
+            include_incompatible: ``false`` drops incompatible results.
 
         Returns:
-            ``{"results": [...]}`` — HTTP 404 for the ``sqlite_qdrant`` backend.
+            ``{"results": [...]}`` — HTTP 422 for a malformed ``environment``; HTTP 404 for the ``sqlite_qdrant`` backend.
         """
         if request.app.state.backend_name != "gist_qdrant":
             return JSONResponse(
@@ -937,13 +995,21 @@ def _register_gist_routes(app: FastAPI) -> None:
         storage: StorageBackend = request.app.state.storage
         model: EmbeddingModel = request.app.state.model
 
+        try:
+            env = coerce_environment(_json.loads(environment)) if environment else None
+        except ValueError as exc:  # includes json.JSONDecodeError
+            return JSONResponse(status_code=422, content={"error": f"invalid environment: {exc}"})
+
         query_vector = model.embed(q)
         results = storage.search_concepts(
             query_vector=query_vector,
-            limit=k,
+            limit=candidate_limit(k, env),
             type_filter=None,
             language_filter=None,
             min_rating=0.0,
+        )
+        results = rank_by_compatibility(
+            results, env, limit=k, include_incompatible=include_incompatible
         )
         return {"results": results}
 

@@ -28,6 +28,7 @@ from statistics import mean
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
+from lore.core.compat import load_compatibility, load_reproducer
 from lore.core.constants import embedding_text
 from lore.mcp.embeddings import EmbeddingModel
 from lore.server.storage.base import StorageBackend
@@ -81,6 +82,8 @@ def _payload_to_result(payload: dict, score: float) -> dict:
         "time_saved_avg_hours": payload.get("avg_hours_saved"),
         "avg_outcome": payload.get("avg_outcome"),
         "avg_hours_saved": payload.get("avg_hours_saved"),
+        "reproducer": load_reproducer(payload.get("reproducer")),
+        "compatibility": load_compatibility(payload.get("compatibility")),
         "content": None,
         "source_url": None,
         "created_at": None,
@@ -240,6 +243,8 @@ class GistQdrantBackend(StorageBackend):
             "when_to_use": payload["when_to_use"],
             "dont_use_when": payload.get("dont_use_when"),
             "gist_updated_at": payload.get("gist_updated_at", ""),
+            "reproducer": load_reproducer(payload.get("reproducer")),
+            "compatibility": load_compatibility(payload.get("compatibility")),
             "avg_outcome": avg_rating,
             "avg_hours_saved": avg_hours_saved,
             "rating_count": 0,

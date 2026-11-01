@@ -59,6 +59,7 @@ from typing import Any
 
 import httpx
 
+from lore.core.compat import load_compatibility, load_reproducer
 from lore.core.endpoints import gist_web_url, github_api_url, same_origin
 from lore.core.constants import _parse_name_from_description
 from lore.server.storage.base import StorageBackend
@@ -306,6 +307,9 @@ def _extract_payload(
         "source_url": metadata.get("source_url"),
         "links": metadata.get("links", []),
         "gist_updated_at": gist.get("updated_at", ""),
+        # Lenient: legacy / malformed metadata becomes unknown, never supported.
+        "reproducer": load_reproducer(metadata.get("reproducer")),
+        "compatibility": load_compatibility(metadata.get("compatibility")),
         "avg_rating": avg_rating,
         "avg_hours_saved": avg_hours_saved,
     }
