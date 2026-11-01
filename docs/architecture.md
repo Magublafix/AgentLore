@@ -105,6 +105,7 @@ lore/
 ├── semantic_server/ # Backend 3: FastAPI + Qdrant (lore.semantic_server.api)
 ├── skills/          # Claude Code skill file + Stop hook
 ├── seed/            # Seed concept graph (6 concepts, 5 links)
+├── setup/           # `mcp-server-lore init` one-command setup (LORE-043)
 └── tests/           # unit/ and integration/
 ```
 
@@ -131,7 +132,7 @@ lore/
 | `server/storage/base.py` | `StorageBackend` ABC — `upsert_concept`, `search_concepts`, `get_concept`, `rate_concept`, `health_check`; all backends implement this interface. `upsert_concept` may return `{"concept_id": ..., "_qdrant_failed": True}` when the SQLite insert succeeds but Qdrant indexing fails. The HTTP layer treats this as HTTP 503 but includes the `concept_id` so callers can retry indexing. See `base.py` for the full contract. |
 | `server/storage/sqlite_qdrant.py` | `SqliteQdrantBackend` — Backend 1 implementation: SQLite + Qdrant; WAL mode; near-duplicate detection at 0.88 cosine threshold |
 | `server/storage/gist_qdrant.py` | `GistQdrantBackend` — Backend 3 implementation: Qdrant-only, denormalized payloads; deterministic point IDs via `uuid5(NAMESPACE_URL, gist_id)`; idempotent upsert via `gist_updated_at` comparison |
-| `server/watcher.py` | **Gist Watcher** — asyncio background task; polls `GET /gists/public?since=<cursor>` for `[lore-concept]` gists; extracts metadata from `lore.json`; calls `storage.upsert_concept()`; persists cursor to `~/.lore/watcher_cursor.json`; deduplicates within each cycle; logs WARNING on bad gists without crashing |
+| `server/watcher.py` | **Gist Watcher** — asyncio background task. At startup a fail-soft **bootstrap** discovers all existing `[agentlore-concept]` gists via the gist web search (`gist.github.com/search`, unofficial; paged, rate-limited, descriptive User-Agent, per-owner cap), fetches each through `GET /gists/{id}` and indexes it. Then it polls `GET /gists/public?since=<cursor>` (capped by GitHub at 30 pages / ~3000 gists / ~13 min of activity, so the interval must stay short; WARNING when the cap is hit); extracts metadata from `lore.json`; calls `storage.upsert_concept()`; persists cursor to `~/.lore/watcher_cursor.json`; logs WARNING on bad gists without crashing |
 
 #### Denormalized Qdrant payload
 
@@ -205,6 +206,33 @@ reconciles SQLite concept_ids against Qdrant point IDs.
 
 ---
 
+### 5.7 Level 2 — Setup Layer
+
+| Component | Responsibility |
+|-----------|---------------|
+| `setup/init.py` | `run_init()` — the `mcp-server-lore init` flow: prerequisite checks, then idempotent MCP registration; flags `--agent`, `--scope`, `--force`, `--dry-run`, `--semantic`, `--semantic-url`, `--yes`, `--store-token`, `--no-verify`; sequence: prerequisites -> GitHub auth -> local state -> registration -> verification; returns an exit code and never raises on expected failures |
+| `setup/checks.py` | Pure prerequisite checks (Python ≥ 3.11, `claude` CLI, `uvx`; Docker only with `--semantic`); each failure carries an actionable `fix` string |
+| `setup/agents.py` | `AgentAdapter` interface (`get_registration` / `register` / `remove`) and `ClaudeCodeAdapter`, which drives the `claude mcp` CLI and parses `claude mcp get` output; `ServerSpec` is the registration Lore wants; new coding agents are added by implementing the interface and listing them in `ADAPTERS` |
+
+| `setup/auth.py` | Init-side token resolution (`LORE_GITHUB_TOKEN` -> `gh auth token` -> hidden `getpass` prompt, only on a TTY and without `--yes`) and read-only validation via `GET /user` (401 and missing `gist` scope give clear errors). No token means read-only demo mode |
+| `setup/state.py` | `ensure_state(home, warn)` — creates `~/.lore/` (0700) and `session.json` (`[]`, 0600, `O_EXCL`) only when absent; never modifies or replaces existing files or writes through a symlink |
+| `setup/verify.py` | `verify_install()` — spawns the *registered* command over stdio with `fastmcp.Client`, asserts the five tools are listed and makes exactly one `search_concepts` call (never submit/link/rate); 30 s timeout; child stderr captured and redacted; `fallback: true` is a warning |
+| `core/auth.py` | `resolve_github_token(env, which, run)` used by the MCP side (`LORE_GITHUB_TOKEN`, else `gh auth token` only when `LORE_TOKEN_FROM_GH=1`) and `redact()` |
+
+Registration of the token: a `gh`-sourced token is never copied into the agent config (`LORE_TOKEN_FROM_GH=1` is registered and the server asks `gh` at runtime); an env- or prompt-sourced token is stored only with `--store-token`, in plain text in the agent config, and is then visible in the argv of `claude mcp add -e` while that command runs. `ServerSpec.secrets` is separate from `env`, ignored by `Registration.matches()`, and every output line (including `claude mcp` stderr) is redacted. With no token, `init` registers `LORE_BACKEND=gists LORE_READ_ONLY=1` (plus `LORE_SEMANTIC_URL` when given). A registration's `LORE_READ_ONLY` state must match the spec, and with `--store-token` the stored `LORE_GITHUB_TOKEN` must equal the current one (compared, never shown), or it is reported as a conflict with the reason. Verification runs with exactly the registered environment: a `gh` token is not injected (the server resolves it via `LORE_TOKEN_FROM_GH`); an unstored env/prompt token is injected in memory only, with an explicit warning. `~/.lore` state is created after the conflict check; a symlinked `~/.lore` to an existing directory is used as-is, a dangling one is left alone with a warning.
+
+### 5.8 Read-only Demo Mode and Seed Corpus
+
+With `LORE_READ_ONLY=1` the tool list is unchanged, but:
+
+- `submit_concept`, `link_concepts`, `rate_concept` return `{"error": "read_only", "tool": ..., "hint": ...}` without raising or calling GitHub (`submit_concept` returns it before the content scan).
+- `search_concepts` / `get_concept` are served by `mcp/backends/seed.py`, which reuses the plain-dict `_CONCEPT_DEFS` / `_LINK_DEFS` from `seed/concepts.py` with keyword scoring (like `backends/gists.py`). It touches no SQLite/Qdrant and imports no sentence-transformers/qdrant/fastapi, so it works in the base `uvx mcp-server-lore` install. Results have the normal result shape plus `source: "seed"` and `label: "curated example"`; IDs are `seed:<slug>` (gist IDs are bare hex, so they cannot collide).
+- When `LORE_SEMANTIC_URL` is also set the semantic server is tried first (retry once); on failure the result comes from the seeds with `fallback: true`. `GistsClient` is never constructed in read-only mode. `get_concept` for a non-seed id returns `{"error": "read_only_lookup_unavailable"}` when a semantic URL is configured (search results already contain the full concept). `min_rating` is honoured; seeds are unrated and therefore always pass, as in the gists backend.
+
+`mcp/server.py:main()` dispatches `init` to `setup.init.run_init`; any other invocation starts the MCP server as before.
+
+---
+
 ## 6. Runtime View
 
 ### 6.1 Concept Search (Backend 1)
@@ -261,19 +289,33 @@ lifespan() creates asyncio.Task(watch_loop(storage, token, interval))
   │
   ▼ [runs concurrently with request handling]
 watch_loop() — runs forever until cancelled
+  │
+  ▼ Bootstrap (once; fail-soft — errors never block the poll loop)
+  1. Skip with WARNING if no token
+  2. Page gist.github.com/search?q="agentlore-concept"&p=N (no auth, token
+     never sent) until an empty page, LORE_BOOTSTRAP_MAX_PAGES, HTTP 429/403
+     or a CAPTCHA page (WARNING; results so far are kept); wait
+     LORE_BOOTSTRAP_DELAY (>= 2 s) between pages; collect owner/gist_id
+  3. Apply per-owner cap (LORE_BOOTSTRAP_MAX_PER_OWNER)
+  4. For each id: GET /gists/<id>; require "[agentlore-concept]" in the
+     description and a valid lore.json; upsert_concept (re-runs report
+     "skipped" = unchanged). The web page is discovery only, never content.
+     Bounds: 100 pages x 10 = 1000 gists; per-owner cap counts candidates
+     before validation. The cursor advances past data the capped feed could
+     not return.
 
   ┌─────────────────────────────────────────────────────────────┐
   │  Per cycle (default: every 300 s)                          │
   │                                                             │
   │  1. Load cursor from ~/.lore/watcher_cursor.json            │
-  │     (default: now - 24h if file absent)                     │
+  │     (default: now - 24h; the feed only reaches ~13 min)     │
   │                                                             │
   │  2. If LORE_GITHUB_TOKEN empty → log WARNING + sleep        │
   │                                                             │
   │  3. GET /gists/public?since=<cursor>&per_page=100           │
-  │     Follow Link rel=next pagination                         │
+  │     Follow Link rel=next (feed cap: 30 pages; WARNING)      │
   │                                                             │
-  │  4. Filter: keep gists with "[lore-concept]" in description │
+  │  4. Filter: keep gists with "[agentlore-concept]" in desc.  │
   │     Dedup by gist_id within this cycle                      │
   │                                                             │
   │  5. For each candidate:                                     │
@@ -437,6 +479,11 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | ADR-011 | API key auth for Backend 3 writes — one key per GitHub user, issued via /auth/register; key stored in ~/.lore/semantic-keys.db (SQLite); read endpoints remain unauthenticated; auth is a no-op for Backend 1 (sqlite_qdrant) | accepted | 2026-07-14 |
 | ADR-012 | Gists backend search uses `GET /gists` list-and-filter, not `GET /search/gists` — the search endpoint returns 404 (non-existent GitHub API); list-and-filter with keyword scoring works correctly and scales to benchmark-scale collections (≤100 gists) | accepted | 2026-07-19 |
 
+| ADR-013 | `init` registers the MCP server through the agent's own CLI (`claude mcp add`) behind an `AgentAdapter` interface, is idempotent, and never overwrites a differing registration without `--force`; unparseable CLI output is an error, never treated as "not registered"; `init` never publishes or rates concepts | accepted | 2026-10-31 |
+| ADR-014 | Read-only demo mode (`LORE_READ_ONLY=1`) with a bundled seed corpus: with no GitHub token `init` still completes, write tools return a typed `read_only` error, and search serves the curated seed concepts (semantic server first when configured). The `gh` token is resolved at runtime (`LORE_TOKEN_FROM_GH=1`) instead of being copied into agent config; env/prompt tokens are stored only with `--store-token` | accepted | 2026-10-31 |
+| ADR-015 | Bootstrap discovers concepts via the gist web search; unofficial and fail-soft. Code search does not index gists and `/gists/public` is capped (~3000 gists / ~13 min), so `gist.github.com/search` is the only way to enumerate existing concepts. It is used for discovery only (content always via the authenticated API), is rate-limited with a descriptive User-Agent, stops on 429/403/CAPTCHA, isolates parsing in one function, and never blocks the poll loop. Bounds: at most `LORE_BOOTSTRAP_MAX_PAGES` (100) pages x 10 = 1000 gists; the per-owner cap (default 300) counts candidates before validation | accepted | 2026-10-31 |
+| ADR-016 | Test-only endpoint overrides, loopback + explicit opt-in. Black-box E2E tests need Lore to talk to local stub servers. `LORE_GITHUB_API_URL` and `LORE_GIST_WEB_URL` (resolved at call time by the single helper `core/endpoints.py`) replace the GitHub API / gist web bases only when `LORE_ALLOW_INSECURE_TEST_URLS=1` is also set and the URL is http(s) with a loopback host (`127.0.0.1`, `localhost`, `::1`) and no userinfo, query or fragment; otherwise the default is used and a WARNING is logged. An honoured override logs a loud WARNING. Likewise `LORE_INIT_UVX_FROM=<local .whl/.tar.gz>` makes `init` register `uvx --from <abs path> mcp-server-lore`; it accepts only an existing local file with that suffix, prints a loud notice, and is ignored with `--local`. Neither hook is in the README or `--help`. Third hook for the semantic-server stack E2E (`e2e/stack/`): `LORE_QDRANT_IN_MEMORY=1` makes the `gist_qdrant` backend factory use `QdrantClient(":memory:")` (no Qdrant service), honoured only with `LORE_ALLOW_INSECURE_TEST_URLS=1` (ignored with a WARNING otherwise; a loud WARNING when active). The store is per-process, so the server must run with a single worker; data is lost on exit | accepted | 2026-11-01 |
+
 *Add new ADRs here as significant decisions are made. Format: one row per decision, link to a detailed ADR file in `docs/adr/` for complex ones.*
 
 ---
@@ -464,6 +511,15 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | R-3 | Embedding model (all-MiniLM-L6-v2) produces poor matches for highly technical queries | Low | Medium | Evaluate at Phase 1; swap model if needed |
 | R-4 | Stop hook fails silently and ratings are never collected | Low | High | Hook must exit 0 but log errors to `~/.lore/hook.log` |
 | R-5 | Concept inserted to SQLite but Qdrant unavailable — concept saved but not searchable | Low | Medium | API returns 503 + concept_id; operator can re-index; future reindex endpoint planned |
+| R-6 | `init` depends on the human-readable output of `claude mcp get`; a Claude Code CLI change could break parsing | Medium | Low | Unrecognised output fails loudly with an "update your CLI" message instead of guessing; parser tested against captured real output |
+| R-7 | Bundled seed corpus goes stale or is mistaken for community content | Medium | Low | Results labelled `source: "seed"` / "curated example"; corpus changes ship with releases; init states that community search needs a semantic server |
+| R-8 | A token stored with `--store-token` sits in plain text in the agent config and in argv of `claude mcp add` during registration | Low | High | Off by default; `gh` tokens never stored; explicit plain-text warning; all output redacted; docs recommend `gh` or env |
+| R-9 | Bootstrap relies on unofficial HTML scraping of `gist.github.com/search`; markup changes or throttling/CAPTCHA can break or truncate discovery | Medium | Medium | Single fixture-tested parser; unexpected markup logs WARNING and returns what was found; a result-less page with block markers (CAPTCHA/rate limit), HTTP 429/403 or a network error stops discovery with WARNING and keeps partial results (result text is never treated as a block marker); poll loop unaffected |
+| R-10 | The public gist feed is capped at 30 pages (~3000 gists, ~13 min); a long poll interval or outage loses concepts until the next bootstrap | Medium | Medium | Keep `LORE_WATCH_INTERVAL` short; WARNING when a poll hits the cap and more pages exist; restart re-runs the bootstrap. The cursor still advances past data the capped feed could not return |
+| R-11 | Spam: one account floods gists carrying the marker | Low | Medium | Marker + valid `lore.json` required; per-owner cap (`LORE_BOOTSTRAP_MAX_PER_OWNER`, default 300) |
+| R-12 | Bootstrap runs before the first poll and can take minutes (2 s x up to 100 pages plus 2-3 API calls per gist), which can exceed the ~13-minute public-feed window on a large corpus, so concepts published meanwhile may fall outside the feed | Low | Medium | Page bound (100 pages x 10 = 1000 gists max); per-owner cap counts candidates before validation; delay is configurable but never below 2 s; consider running the poll concurrently if corpora grow |
+| R-13 | An environment-controlled endpoint URL could redirect token-bearing requests (GitHub token) to an attacker host | Low | High | Override ignored unless `LORE_ALLOW_INSECURE_TEST_URLS=1` AND loopback http(s) host without userinfo/query/fragment; ignored overrides and honoured ones both log a WARNING; resolved in one helper; `requests` and `httpx` strip `Authorization` on cross-origin redirects (covered by tests); `LORE_INIT_UVX_FROM` limited to existing local `.whl`/`.tar.gz` files |
+| R-14 | `LORE_QDRANT_IN_MEMORY=1` set by mistake in production would silently serve an empty, volatile index | Low | Medium | Honoured only with `LORE_ALLOW_INSECURE_TEST_URLS=1` (ignored + WARNING otherwise); loud WARNING at startup when active; not documented in README; multi-worker use yields per-worker empty stores, so tests run a single worker |
 
 ---
 
@@ -479,4 +535,9 @@ Module-level `logger = logging.getLogger(__name__)` throughout. No `print()`. Lo
 | Session file | `~/.lore/session.json` — tracks concept IDs used in the current agent session |
 | Stop hook | Bash script fired by Claude Code when a session ends; collects batch ratings |
 | Seed graph | Six concepts and five links pre-loaded on first run to validate the full retrieval path |
+| Agent adapter | `setup/agents.py` `AgentAdapter` — reads and writes the Lore MCP server registration for one coding agent (Claude Code today) |
 | Content scanner | `core/scanner.py` — checks concept fields for credential patterns, internal URLs, and LORE_BLOCK_PATTERNS before persisting |
+| Read-only mode | `LORE_READ_ONLY=1` — demo mode with no token: write tools return a `read_only` error and search uses the bundled seed corpus |
+| Seed corpus | The curated concept definitions in `seed/concepts.py` served by `mcp/backends/seed.py`; IDs `seed:<slug>`, labelled "curated example" |
+| `LORE_TOKEN_FROM_GH` | `1` makes the MCP server fetch its GitHub token from `gh auth token` at runtime instead of reading it from config |
+| `LORE_ALLOW_INSECURE_TEST_URLS` | Test-only opt-in (`1`) that lets `LORE_GITHUB_API_URL` / `LORE_GIST_WEB_URL` point at a loopback stub server; see ADR-016 |

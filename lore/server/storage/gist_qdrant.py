@@ -143,6 +143,8 @@ class GistQdrantBackend(StorageBackend):
         qdrant_host: Hostname for the Qdrant service.
         qdrant_port: Port number for the Qdrant service.
         model: Pre-loaded :class:`~lore.mcp.embeddings.EmbeddingModel` instance.
+        in_memory: Test-only; use ``QdrantClient(":memory:")`` instead of a
+            remote service (the factory gates this behind ADR-016 env opt-in).
     """
 
     def __init__(
@@ -150,9 +152,14 @@ class GistQdrantBackend(StorageBackend):
         qdrant_host: str,
         qdrant_port: int,
         model: EmbeddingModel,
+        in_memory: bool = False,
     ) -> None:
-        logger.info("Connecting to Qdrant at %s:%s", qdrant_host, qdrant_port)
-        self._qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
+        if in_memory:
+            # Test-only (ADR-016): no Qdrant service, single-process store.
+            self._qdrant = QdrantClient(":memory:")
+        else:
+            logger.info("Connecting to Qdrant at %s:%s", qdrant_host, qdrant_port)
+            self._qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         self._model = model
 
         try:

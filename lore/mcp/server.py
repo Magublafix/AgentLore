@@ -13,6 +13,14 @@ LORE_BACKEND
     Backend selector.  Supported values: ``selfhosted``, ``gists``.
     Default: ``selfhosted``.
 
+LORE_READ_ONLY
+    ``1`` = read-only demo mode: search/get use the bundled curated concepts
+    (or the semantic server), and submit/link/rate return a ``read_only`` error.
+
+LORE_TOKEN_FROM_GH
+    ``1`` = resolve the GitHub token at runtime via ``gh auth token`` when
+    ``LORE_GITHUB_TOKEN`` is unset.
+
 LORE_SELFHOSTED_URL
     Base URL for the selfhosted FastAPI service.
     Default: ``http://localhost:8765``.
@@ -207,6 +215,10 @@ def submit_concept(
         RuntimeError: If the backend returns an unexpected error.
     """
     from lore.core.scanner import scan_content
+    from lore.mcp.backends.seed import read_only_enabled, read_only_error
+
+    if read_only_enabled():
+        return read_only_error("submit_concept")
 
     # Local content scan before any backend call — server-layer responsibility.
     scan_fields: dict[str, str | None] = {
@@ -322,7 +334,15 @@ def rate_concept(
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Entry point: ``init`` runs one-command setup; otherwise start the MCP server."""
+    import sys
+
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "init":
+        from lore.setup.init import run_init
+
+        sys.exit(run_init(args[1:]))
     mcp.run()
 
 

@@ -215,6 +215,32 @@ class RegisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+QDRANT_IN_MEMORY_ENV = "LORE_QDRANT_IN_MEMORY"
+_INSECURE_TEST_ENV = "LORE_ALLOW_INSECURE_TEST_URLS"
+
+
+def _in_memory_qdrant_requested() -> bool:
+    """Return True when the test-only in-memory Qdrant hook is active (ADR-016).
+
+    ``LORE_QDRANT_IN_MEMORY=1`` is honoured only together with
+    ``LORE_ALLOW_INSECURE_TEST_URLS=1``; otherwise it is ignored with a WARNING.
+    The store lives in one process, so run a single worker.
+    """
+    if os.environ.get(QDRANT_IN_MEMORY_ENV) != "1":
+        return False
+    if os.environ.get(_INSECURE_TEST_ENV) != "1":
+        logger.warning(
+            "Ignoring %s=1: %s=1 is not set (test-only hook).",
+            QDRANT_IN_MEMORY_ENV, _INSECURE_TEST_ENV,
+        )
+        return False
+    logger.warning(
+        "TEST-ONLY: %s=1 - using an in-memory Qdrant store. Data is lost on "
+        "exit and only one worker process may be used.", QDRANT_IN_MEMORY_ENV,
+    )
+    return True
+
+
 def _create_backend(model: EmbeddingModel, backend_name: str) -> StorageBackend:
     """Instantiate the appropriate storage backend.
 
@@ -250,6 +276,7 @@ def _create_backend(model: EmbeddingModel, backend_name: str) -> StorageBackend:
             qdrant_host=qdrant_host,
             qdrant_port=qdrant_port,
             model=model,
+            in_memory=_in_memory_qdrant_requested(),
         )
 
     raise ValueError(

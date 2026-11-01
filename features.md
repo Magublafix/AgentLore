@@ -521,3 +521,60 @@ Feature format:
 **What changed:** `docs/phases/phase-3-summary.md` created. Phase 3 is formally closed.
 
 **Implementation notes:** All Phase 3 PROJECT.md checklist items confirmed checked. Coverage at close: 97.15%, 611 tests. Known gap: Phase 2 manual live test (submit/search/star/rate against real GitHub API) not recorded — unit/integration tests cover the same paths.
+
+---
+
+## [LORE-043] `init` command: prerequisite checks and idempotent MCP registration
+
+**Sprint:** 10   **Shipped:** 2026-10-31   **Phase:** 5   **Tokens:** —
+
+**As a** new Lore user
+**I want to be able to** run a single `mcp-server-lore init` command that checks prerequisites and registers the MCP server with Claude Code
+**So that** I do not have to install or edit configuration by hand
+
+**What changed:** New `lore/setup/` package (`checks.py`, `agents.py`, `init.py`). `lore.mcp.server.main()` now dispatches the `init` subcommand and otherwise starts the MCP server as before. `init` checks Python >= 3.11, the `claude` CLI and `uvx` (Docker only with `--semantic`), printing an actionable fix for each failure, then registers `uvx mcp-server-lore` via `claude mcp add` through an `AgentAdapter` interface (Claude Code is the only adapter). Re-running reports "already configured"; a differing registration is reported and left alone unless `--force`; `--dry-run` changes nothing.
+
+**Implementation notes:** Unrecognised or failed `claude mcp get` output raises an error and is never treated as "not registered" (caught in review: it could have overwritten an existing entry). Unknown scopes are never force-removed; non-stdio registrations count as conflicts. Registers `LORE_BACKEND=gists` only — the GitHub token is added in LORE-044. 63 tests in test_setup_init.py (100% of `lore/setup`); 687 passed, 7 skipped, 94.48% total coverage. Tokens not recorded (`/cost` unavailable). Gate 2 review was done by a general-purpose agent following the `test-suite-architect` definition because that agent type was not registered in the session. Follow-up: ASCII fallback for terminals that cannot print the check marks. `uvx mcp-server-lore` itself was not smoke-tested (`uv` not installed in this environment).
+
+---
+
+## [LORE-044] `init` command: GitHub auth, state initialisation and install verification
+
+**Sprint:** 10   **Shipped:** 2026-10-31   **Phase:** 5   **Tokens:** —
+
+**As a** new Lore user
+**I want to be able to** have `init` handle GitHub authentication, create local state and verify the install end-to-end
+**So that** the setup ends with proof that search works
+
+**What changed:** `mcp-server-lore init` now resolves a GitHub token (env, then `gh auth token`, then a TTY-only prompt), creates `~/.lore/` state only when absent, registers the server, and verifies it by spawning the registered command over stdio, listing the five tools and running one `search_concepts` call. New flags: `--yes`, `--no-verify`, `--semantic-url`, `--store-token`. With no token it registers a read-only demo (`LORE_READ_ONLY=1`): the tool list is unchanged, `submit_concept`, `link_concepts` and `rate_concept` return a typed `read_only` error, and search reads a bundled curated corpus (labelled as examples) or the semantic server when `LORE_SEMANTIC_URL` is set. New modules: `lore/core/auth.py`, `lore/mcp/backends/seed.py`, `lore/setup/{auth,state,verify}.py`; `gists_client.py`, `router.py`, `server.py`, `agents.py`, `init.py` extended. Also isolated the test suite from the real home directory (`lore/tests/conftest.py` sets `HOME` to a temp dir before collection).
+
+**Implementation notes:** A `gh`-sourced token is never copied into the agent config (the server resolves it at runtime via `LORE_TOKEN_FROM_GH=1`); env/prompt tokens are stored only with `--store-token`, and all output, including `claude mcp` errors, is redacted. The acceptance criterion for demo mode was reworded from "public gists" to "bundled curated concepts" because the gists backend only searches the caller's own gists and community-wide search needs a semantic server (see #25 / LORE-056 for the bootstrap defect). 774 tests pass, 94.80% total coverage. Tokens not recorded (`/cost` unavailable). The Gate 2 reviews were done by general-purpose agents following the `test-suite-architect` definition (that agent type was not registered in the session); two review rounds, final verdict APPROVED. `fastmcp>=3.0.0` floor was verified by the implementing agent against 2.3.0, 2.10.0, 2.14.5 and 3.0.0 only; versions between 3.0.0 and 4.1.4 were not tried. `init` has been exercised only in dry-run/isolated-HOME mode, never against the real agent config. Known follow-ups: the Stop hook (`.claude/hooks/lore-stop.sh`) ignores `LORE_READ_ONLY`; ASCII fallback for terminals that cannot print the check marks; `verify.py` error branches at 81% coverage; two slow subprocess tests.
+
+---
+
+## [LORE-045] README quick start and first-search walkthrough
+
+**Sprint:** 10   **Shipped:** 2026-10-31   **Phase:** 5   **Tokens:** —
+
+**As a** developer discovering AgentLore
+**I want to be able to** find one quick-start command at the top of the README with a documented first search
+**So that** I can try AgentLore in minutes and confirm it works
+
+**What changed:** `README.md` now leads with `uvx mcp-server-lore init`, followed by what `init` does, every flag, safe-by-default and idempotency behaviour, the read-only demo mode, a first-search walkthrough with real captured output, and a troubleshooting table with one row per actionable `init` message. The Docker semantic stack moved to an optional later section. Added `init --local` (registers the checkout's interpreter via `python -m lore.mcp.server` and skips the `uvx` prerequisite) so the pre-release fallback (venv, clone, `pip install -e .`, `init --local`) really runs the checkout instead of released 1.0.1. Added a refusal for `--store-token` and credentialed or secret-bearing `--semantic-url` values at `--scope project`, since project scope writes `.mcp.json`, which is normally committed (found during review, not in the original acceptance criteria).
+
+**Implementation notes:** `init` is NOT in the released PyPI 1.0.1 package, so the headline `uvx mcp-server-lore init` only works after the next release is published and `pyproject.toml` is bumped (still 1.0.1); the README says this plainly. The fallback was verified in an isolated HOME with the real `claude` CLI; the README walkthrough output was captured from a shim, not a real `uvx`. The `--local` README text and the final guard hardening were not re-reviewed after the last change. Reviews were done by general-purpose agents following the `test-suite-architect` definition (that agent type was not registered). Tokens not recorded.
+
+---
+
+## [LORE-056] Watcher bootstrap: discover all existing concepts via gist web search
+
+**Sprint:** 10   **Shipped:** 2026-10-31   **Phase:** 5   **Tokens:** —
+
+**As a** semantic server operator
+**I want to be able to** have the watcher bootstrap find every existing public AgentLore concept on first start
+**So that** a fresh server's index is complete without a list of known contributors
+
+**What changed:** `lore/server/watcher.py` bootstrap now pages through `https://gist.github.com/search?q="agentlore-concept"` until an empty page, collects `owner/gist_id` (id validated as hex before use), fetches each gist through the authenticated API and indexes it through the existing `_extract_payload` / `upsert_concept` path. Rate-limited (default 2 s, clamped), descriptive User-Agent, stops with a WARNING on 429/403 (logging Retry-After) or a result-less block page, per-owner cap (default 300, case-insensitive), 100-page bound, fail-soft (never blocks the poll loop). Code-search bootstrap and the unused `_fetch_authenticated_gists` were removed. Parser isolated in `_parse_search_page` with fixtures in `lore/tests/fixtures/`. Fixed a real bug: `_fetch_public_gists` warned at GitHub's 30-page cap but kept paging (infinite loop in the test, error on page 31 in production). `docs/architecture.md`: ADR-015, risks R-9, R-10, R-11, R-12.
+
+**Implementation notes:** The web search is unofficial HTML scraping and may break or be throttled (R-9); the public feed only exposes about the last 3,000 gists (about 13 minutes), so the poll interval must stay short and the cursor still advances past data the capped feed could not return (R-10). The bootstrap runs before the first poll and can take minutes on a large corpus (R-12). Discovery is bounded at 1,000 gists (100 pages of 10). Test fixtures are trimmed captures, not full pages, and no live end-to-end bootstrap against GitHub was run in this environment (no GitHub login). Test suite now isolates `HOME`, scrubs Lore/GitHub env vars and keeps the model cache at its real `HF_HOME`; 838 tests pass offline, 95.65% coverage. Open points not in this story: write-through from `submit_concept`, poll-gap recovery, deleting indexed gists that now 404. Tokens not recorded; reviews by general-purpose agents following the `test-suite-architect` definition.
+

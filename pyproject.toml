@@ -13,7 +13,7 @@ authors = [
     {name = "magublafix"},
 ]
 dependencies = [
-    "fastmcp>=0.1.0",
+    "fastmcp>=3.0.0",
     "httpx>=0.27.0",
     "requests>=2.31.0",
     "pydantic>=2.6.0",
@@ -53,3 +53,7 @@ packages = ["lore"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "e2e: black-box test of the built wheel with the real claude CLI (run with: pytest e2e -m e2e)",
+    "e2e_stack: semantic-server stack E2E with stub GitHub and in-memory Qdrant (run with: pytest e2e/stack -m e2e_stack)",
+]

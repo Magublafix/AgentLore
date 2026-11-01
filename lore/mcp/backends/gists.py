@@ -30,6 +30,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from lore.core.endpoints import gist_web_url
 from lore.core.constants import VALID_LINK_RELS, _parse_name_from_description
 from lore.mcp.backends.gists_client import (
     GistNotFoundError,
@@ -122,7 +123,7 @@ def submit_concept(
     return {
         "concept_id": gist_id,
         "name": name,
-        "source_url": f"https://gist.github.com/{gist_id}",
+        "source_url": f"{gist_web_url()}/{gist_id}",
     }
 
 
@@ -287,7 +288,7 @@ def get_concept(client: GistsClient, concept_id: str) -> dict | None:
         "when_to_use": lore_json["when_to_use"],
         "dont_use_when": lore_json.get("dont_use_when"),
         "tags": lore_json.get("tags", []),
-        "source_url": f"https://gist.github.com/{concept_id}",
+        "source_url": f"{gist_web_url()}/{concept_id}",
         "avg_rating": avg_rating,
         "time_saved_avg_hours": avg_hours_saved,
         "avg_hours_saved": avg_hours_saved,

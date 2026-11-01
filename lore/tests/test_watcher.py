@@ -549,7 +549,7 @@ async def test_cancelled_error_propagates():
         # _run_poll_cycle is also patched to avoid network calls.
         with patch.object(
             watcher_module, "_run_poll_cycle", new_callable=AsyncMock
-        ):
+        ), patch.object(watcher_module, "_run_bootstrap", new_callable=AsyncMock):
             with pytest.raises(asyncio.CancelledError):
                 await watch_loop(storage, "token", interval=300)
 
@@ -563,7 +563,7 @@ async def test_watch_loop_cancelled_during_poll():
 
     with patch.object(
         watcher_module, "_run_poll_cycle", side_effect=_cancel_poll
-    ):
+    ), patch.object(watcher_module, "_run_bootstrap", new_callable=AsyncMock):
         with pytest.raises(asyncio.CancelledError):
             await watch_loop(storage, "token", interval=300)
 

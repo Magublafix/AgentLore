@@ -19,7 +19,14 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import logging
+
 import requests
+
+from lore.core.auth import resolve_github_token
+from lore.core.endpoints import DEFAULT_GITHUB_API_URL, github_api_url, same_origin
+
+_log = logging.getLogger(__name__)
 
 
 def _parse_next_link(link_header: str) -> str | None:
@@ -150,7 +157,7 @@ class GistsClient:
             at construction time.
     """
 
-    _base_url: str = "https://api.github.com"
+    _base_url: str = DEFAULT_GITHUB_API_URL
 
     def __init__(self) -> None:
         """Initialise the client and validate the GitHub token.
@@ -159,7 +166,8 @@ class GistsClient:
             GistAuthError: If ``LORE_GITHUB_TOKEN`` is not set or if the token
                 fails the ``GET /user`` validation call.
         """
-        token = os.environ.get("LORE_GITHUB_TOKEN")
+        self._base_url = github_api_url()
+        token = resolve_github_token()
         if not token:
             raise GistAuthError(
                 "LORE_GITHUB_TOKEN is not set. "
@@ -324,6 +332,12 @@ class GistsClient:
 
             link_header = resp.headers.get("Link", "")
             url = _parse_next_link(link_header) if link_header else None
+            if url and not same_origin(url, self._base_url):
+                _log.warning(
+                    "Ignoring cross-origin rel=next link in GET /gists; "
+                    "stopping pagination."
+                )
+                url = None
 
         return results
 

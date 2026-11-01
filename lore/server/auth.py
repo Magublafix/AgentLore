@@ -15,6 +15,8 @@ from typing import Optional
 
 import httpx
 
+from lore.core.endpoints import github_api_url
+
 
 class KeyStore:
     """SQLite-backed API key store for the Lore semantic server.
@@ -121,7 +123,7 @@ def verify_github_token(github_token: str) -> dict:
         httpx.HTTPError: On network failure or timeout.
     """
     response = httpx.get(
-        "https://api.github.com/user",
+        f"{github_api_url()}/user",
         headers={
             "Authorization": f"token {github_token}",
             "Accept": "application/vnd.github+json",
