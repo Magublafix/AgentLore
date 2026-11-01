@@ -29,9 +29,13 @@ Repo Settings -> Secrets and variables -> Actions -> New repository secret `ANTH
 
 Download the `canary-log` artifact (stream-json log, stderr, summary) from the run.
 
-## Status: unverified against real output
+## Status: verified once against a real session
 
-The parser and workflow have NOT been run against a real Claude session. The stream-json samples in the tests are hand-built from the documented format (`assistant` messages with `tool_use` blocks, `user` messages with `tool_result` blocks, final `result` event). The first live run will likely need adjustments (event shapes, `--permission-mode dontAsk` behaviour with `--allowedTools`, model id, whether `claude mcp get` prints "Connected").
+First live run: 2026-11-01, on a throwaway branch (workflow run 41318311513). The parser and workflow worked unchanged: `claude-haiku-5-5` found the tool through Claude Code's tool search (`ToolSearch`, then `mcp__lore__search_concepts` with `{"problem": "REST CLI"}`), the tool result was not an error and contained the seed concept "REST CLI around a REST API", 3 turns, about $0.0016, no API key in the log. `--permission-mode dontAsk` with `--allowedTools mcp__lore__search_concepts` let the MCP tool run headless, and `claude mcp get lore` reported Connected.
+
+This is one successful run, not a track record: the model's choice to call the tool is non-deterministic, and Claude Code's stream-json shape can change between versions (the CLI is pinned in the workflow). Not yet exercised: the model-retry path, the `report` (issue-opening) job, and the scheduled trigger.
+
+**Running it:** `workflow_dispatch` only works for workflows that exist on the default branch, so before the first merge the canary can only be tried from a throwaway branch with a temporary `push` trigger (as was done once). After the workflow is on the default branch use `gh workflow run e2e-claude.yml`.
 
 ## Key-leak scan and model retry
 
