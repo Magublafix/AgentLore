@@ -502,7 +502,9 @@ class Sandbox:
     def home_hash(self) -> dict:
         """Everything in HOME / claude config except caches, logs and claude's own backups."""
         return {
-            "home": _tree(self.home, skip=(".cache", ".local/share")),
+            # macOS: the claude CLI writes MCP connection logs under Library/Caches while it
+            # health-checks servers (observed on the first CI run); that is claude's own cache.
+            "home": _tree(self.home, skip=(".cache", ".local/share", "Library/Caches", "Library/Logs")),
             # claude rewrites volatile counters in .claude.json on every call: compare its servers instead
             "claude_cfg": _tree(self.claude_config, skip=("backups", ".claude.json")),
             "registrations": json.dumps(self.registrations(), sort_keys=True),
