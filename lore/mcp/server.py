@@ -93,6 +93,9 @@ def search_concepts(
     limit: int = 3,
     min_rating: float = 2.0,
     session_id: Optional[str] = None,
+    environment: Optional[dict] = None,
+    project_dir: Optional[str] = None,
+    include_incompatible: bool = True,
 ) -> dict:
     """Search for concepts semantically similar to a problem description.
 
@@ -112,12 +115,28 @@ def search_concepts(
             filtering.  Default 2.0.
         session_id: Optional session identifier.  When provided, usage is
             logged in the backend for analytics.
+        environment: Optional target environment to check compatibility
+            against: ``{"language": "python", "runtime_version": "3.12.1",
+            "libraries": {"fastapi": "0.110.0"}, "platform": "linux"}`` (all
+            keys optional; library values are concrete versions).
+        project_dir: Optional project directory; its manifests/lockfiles are
+            read to detect the environment.  Ignored when ``environment`` is given.
+            If neither is given, the MCP process's current directory is
+            inspected (manifests/lockfiles only; disable with
+            ``LORE_COMPAT_AUTODETECT=0``).  Nothing detected -> ``unknown``.
+        include_incompatible: Default ``True``: incompatible results are kept,
+            flagged and placed last.  ``False`` drops them.
 
     Returns:
         A dict with a ``results`` key containing a list of concept records.
         Each record has ``concept_id``, ``name``, ``type``, ``when_to_use``,
         ``content``, ``avg_rating``, ``usage_count``, ``time_saved_avg_hours``,
-        and ``links`` (list of linked concept summaries).
+        ``links`` (linked concept summaries, each with its own
+        ``compatibility_check``) and ``compatibility_check``
+        (``{"status": "compatible"|"incompatible"|"unknown", "reason": str}``).
+        Results are ordered compatible > unknown > incompatible; rating/relevance
+        only orders within a status band, so a highly rated incompatible
+        concept is never ranked above a compatible or unknown one.
     """
     return _router.search_concepts(
         problem=problem,
@@ -126,6 +145,9 @@ def search_concepts(
         limit=limit,
         min_rating=min_rating,
         session_id=session_id,
+        environment=environment,
+        project_dir=project_dir,
+        include_incompatible=include_incompatible,
     )
 
 
@@ -179,6 +201,8 @@ def submit_concept(
     dont_use_when: Optional[str] = None,
     source_url: Optional[str] = None,
     links: Optional[list[dict]] = None,
+    reproducer: Optional[str] = None,
+    compatibility: Optional[dict] = None,
 ) -> dict:
     """Submit a new concept to the knowledge graph after mandatory content scanning.
 
@@ -202,6 +226,17 @@ def submit_concept(
             keys ``to_id`` (str), ``rel`` (str), and optionally ``label``
             (str).  Valid ``rel`` values: ``uses``, ``tested_by``, ``extends``,
             ``alternative_to``, ``requires``.
+        reproducer: Minimal reproducer text, or the exact string
+            ``"none_available"`` if the author states none exists.  Omit if
+            unknown (stored as ``unknown``).  Stored and displayed only; never
+            executed.  Optional.
+        compatibility: Environment constraints, all keys optional:
+            ``language`` (str, e.g. ``"python"``), ``runtime_version``
+            (PEP 440 specifier, e.g. ``">=3.11,<4"``), ``libraries`` (list of
+            ``{"name": str, "specifier": str}`` or a name->specifier mapping),
+            ``platforms`` (list of OS names, e.g. ``["linux", "macos"]``),
+            ``assumptions`` (list of free-text strings).  Missing/partial
+            metadata is stored as ``unknown`` — never as supported.  Optional.
 
     Returns:
         On success (HTTP 201): a dict with ``concept_id`` and ``name``.
@@ -211,9 +246,12 @@ def submit_concept(
 
     Raises:
         ValueError: If the content scan detects credentials, internal URLs,
-            or custom blocklist patterns.
+            or custom blocklist patterns, or if ``reproducer`` /
+            ``compatibility`` is invalid (e.g. an unparsable version
+            specifier such as ``">=abc"``).
         RuntimeError: If the backend returns an unexpected error.
     """
+    from lore.core.compat import normalize_concept_metadata
     from lore.core.scanner import scan_content
     from lore.mcp.backends.seed import read_only_enabled, read_only_error
 
@@ -234,6 +272,9 @@ def submit_concept(
             f"Violations: {violations}"
         )
 
+    # Validate metadata locally (same function the backends use) before any call.
+    normalize_concept_metadata(reproducer, compatibility)
+
     return _router.submit_concept(
         name=name,
         type=type,
@@ -244,6 +285,8 @@ def submit_concept(
         dont_use_when=dont_use_when,
         source_url=source_url,
         links=links,
+        reproducer=reproducer,
+        compatibility=compatibility,
     )
 
 

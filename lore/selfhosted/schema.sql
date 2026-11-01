@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS concepts (
     usage_count          INTEGER DEFAULT 0,
     time_saved_avg_hours REAL,
     created_at           TEXT,
-    embedding            BLOB                -- raw float32 BLOB (when_to_use + name); vector queries go through Qdrant
+    embedding            BLOB,               -- raw float32 BLOB (when_to_use + name); vector queries go through Qdrant
+    reproducer           TEXT,               -- JSON (lore.core.compat); NULL = unknown (LORE-046)
+    compatibility        TEXT                -- JSON (lore.core.compat); NULL = unknown (LORE-046)
 );
 
 CREATE TABLE IF NOT EXISTS links (

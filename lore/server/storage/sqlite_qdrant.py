@@ -23,6 +23,7 @@ from typing import Optional
 
 from qdrant_client import QdrantClient
 
+from lore.core.compat import normalize_compatibility, normalize_reproducer
 from lore.mcp.embeddings import EmbeddingModel
 from lore.mcp.models import Concept, Link, Rating
 from lore.selfhosted.db import (
@@ -69,6 +70,8 @@ def _concept_to_dict(concept: Concept) -> dict:
         "usage_count": concept.usage_count,
         "time_saved_avg_hours": concept.time_saved_avg_hours,
         "created_at": concept.created_at,
+        "reproducer": concept.reproducer,
+        "compatibility": concept.compatibility,
     }
 
 
@@ -99,6 +102,7 @@ def _link_to_dict(link: Link, conn: Optional[sqlite3.Connection] = None) -> dict
             d["name"] = linked.name
             d["type"] = linked.type
             d["when_to_use"] = linked.when_to_use
+            d["compatibility"] = linked.compatibility
     return d
 
 
@@ -197,6 +201,8 @@ class SqliteQdrantBackend(StorageBackend):
             tags=payload.get("tags", []),
             source_url=payload.get("source_url"),
             author=payload.get("author"),
+            reproducer=normalize_reproducer(payload.get("reproducer")),
+            compatibility=normalize_compatibility(payload.get("compatibility")),
         )
 
         insert_concept(self._conn, concept)

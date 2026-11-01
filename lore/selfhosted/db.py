@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from lore.core.compat import dump_metadata, load_compatibility, load_reproducer
 from lore.mcp.models import Concept, Link, Rating
 
 
@@ -60,6 +61,10 @@ def _concept_from_row(row: sqlite3.Row) -> Concept:
         time_saved_avg_hours=row["time_saved_avg_hours"],
         created_at=row["created_at"] or "",
         embedding=row["embedding"],
+        reproducer=load_reproducer(row["reproducer"] if "reproducer" in row.keys() else None),
+        compatibility=load_compatibility(
+            row["compatibility"] if "compatibility" in row.keys() else None
+        ),
     )
 
 
@@ -85,6 +90,31 @@ def _rating_from_row(row: sqlite3.Row) -> Rating:
         notes=row["notes"],
         rated_at=row["rated_at"] or "",
     )
+
+
+#: Columns added after the first release: (name, SQL type).  Applied by
+#: :func:`_migrate` to databases created before they existed.
+_ADDED_CONCEPT_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("reproducer", "TEXT"),
+    ("compatibility", "TEXT"),
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Idempotently add columns introduced after v1 to ``concepts`` (LORE-046).
+
+    Existing rows keep all data; the new columns are NULL, which loads as
+    ``unknown`` metadata.  Safe to run on every start.
+    """
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(concepts)")}
+    for name, sql_type in _ADDED_CONCEPT_COLUMNS:
+        if name not in existing:
+            try:
+                conn.execute(f"ALTER TABLE concepts ADD COLUMN {name} {sql_type}")
+            except sqlite3.OperationalError:
+                # Another process migrated concurrently.
+                if name not in {r[1] for r in conn.execute("PRAGMA table_info(concepts)")}:
+                    raise
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +148,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
 
     schema_sql = _schema_path().read_text()
     conn.executescript(schema_sql)
+    _migrate(conn)
     conn.commit()
 
     return conn
@@ -151,11 +182,13 @@ def insert_concept(conn: sqlite3.Connection, concept: Concept) -> str:
         INSERT INTO concepts (
             concept_id, name, type, content, language, when_to_use,
             dont_use_when, tags, source_url, author, avg_rating,
-            usage_count, time_saved_avg_hours, created_at, embedding
+            usage_count, time_saved_avg_hours, created_at, embedding,
+            reproducer, compatibility
         ) VALUES (
             :concept_id, :name, :type, :content, :language, :when_to_use,
             :dont_use_when, :tags, :source_url, :author, :avg_rating,
-            :usage_count, :time_saved_avg_hours, :created_at, :embedding
+            :usage_count, :time_saved_avg_hours, :created_at, :embedding,
+            :reproducer, :compatibility
         )
         """,
         {
@@ -174,6 +207,8 @@ def insert_concept(conn: sqlite3.Connection, concept: Concept) -> str:
             "time_saved_avg_hours": concept.time_saved_avg_hours,
             "created_at": created_at,
             "embedding": concept.embedding,
+            "reproducer": dump_metadata(concept.reproducer),
+            "compatibility": dump_metadata(concept.compatibility),
         },
     )
     conn.commit()

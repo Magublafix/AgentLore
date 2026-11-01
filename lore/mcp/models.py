@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from lore.core.compat import unknown_compatibility, unknown_reproducer
+
 
 @dataclass
 class Concept:
@@ -36,6 +38,12 @@ class Concept:
         created_at: ISO-8601 UTC timestamp string.
         embedding: Raw float32 BLOB, or None before the embedding pipeline
             has run.
+        reproducer: Canonical reproducer dict (``status`` of ``provided`` |
+            ``none_available`` | ``unknown``, plus ``text``).  See
+            :mod:`lore.core.compat`.  Defaults to unknown.
+        compatibility: Canonical compatibility dict (language, runtime_version,
+            libraries, platforms, assumptions, status).  Defaults to unknown —
+            never to "supported".
     """
 
     concept_id: str
@@ -53,6 +61,8 @@ class Concept:
     time_saved_avg_hours: float | None = None
     created_at: str = ""
     embedding: bytes | None = None
+    reproducer: dict = field(default_factory=unknown_reproducer)
+    compatibility: dict = field(default_factory=unknown_compatibility)
 
 
 @dataclass

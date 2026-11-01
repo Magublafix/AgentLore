@@ -40,6 +40,16 @@ from typing import Optional
 import httpx
 
 from lore.core.auth import resolve_github_token
+from lore.core.compat import normalize_concept_metadata
+from lore.core.environment import Environment
+from lore.core.ranking import (
+    candidate_limit,
+    environment_to_dict,
+    has_environment_info,
+    needs_annotation,
+    rank_by_compatibility,
+    resolve_environment,
+)
 from lore.mcp.backends import gists as gists_backend
 from lore.mcp.backends import seed as seed_backend
 from lore.mcp.backends.gists_client import GistsClient
@@ -152,6 +162,8 @@ class BackendRouter:
         language: Optional[str],
         limit: int,
         min_rating: float,
+        env: Optional[Environment] = None,
+        include_incompatible: bool = True,
     ) -> dict:
         """Call the semantic search server and return results.
 
@@ -177,7 +189,11 @@ class BackendRouter:
             httpx.HTTPError: On any transport-level failure (connection refused,
                 timeout, etc.) so the caller can apply a graceful fallback.
         """
-        params = {"q": problem, "k": limit}
+        params: dict = {"q": problem, "k": limit}
+        if env is not None and has_environment_info(env):
+            params["environment"] = _json.dumps(environment_to_dict(env))
+        if not include_incompatible:
+            params["include_incompatible"] = "false"
         with httpx.Client(
             base_url=self._semantic_url,  # type: ignore[arg-type]
             timeout=self._semantic_timeout,
@@ -193,6 +209,8 @@ class BackendRouter:
         language: Optional[str],
         limit: int,
         min_rating: float,
+        env: Optional[Environment] = None,
+        include_incompatible: bool = True,
     ) -> dict:
         """Read-only search: semantic server first (if configured), then bundled seeds.
 
@@ -204,11 +222,14 @@ class BackendRouter:
             self._semantic_url = semantic_url
             for attempt in range(2):
                 try:
-                    return self._semantic_search(problem, type, language, limit, min_rating)
+                    return self._semantic_search(
+                        problem, type, language, limit, min_rating, env, include_incompatible
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Semantic server attempt %d failed (%s).", attempt + 1, exc)
         result = seed_backend.search_concepts(
-            problem, type=type, language=language, limit=limit, min_rating=min_rating
+            problem, type=type, language=language, limit=limit, min_rating=min_rating,
+            environment=env, include_incompatible=include_incompatible,
         )
         if semantic_url:
             result["fallback"] = True
@@ -306,8 +327,18 @@ class BackendRouter:
         limit: int = 3,
         min_rating: float = 2.0,
         session_id: Optional[str] = None,
+        environment: Optional[dict] = None,
+        project_dir: Optional[str] = None,
+        include_incompatible: bool = True,
     ) -> dict:
         """Route ``search_concepts`` to the configured backend.
+
+        The target environment is resolved once here (see
+        :func:`lore.core.ranking.resolve_environment`: explicit ``environment``
+        > ``project_dir`` detection > cwd manifests/lockfiles) and forwarded, so
+        all backends rank identically.  If a remote server's response lacks
+        ``compatibility_check`` (older server), annotation and ordering are
+        applied locally.
 
         Args:
             problem: Natural language description of the problem to search for.
@@ -316,16 +347,45 @@ class BackendRouter:
             limit: Maximum number of results to return.
             min_rating: Minimum average rating threshold.
             session_id: Optional session identifier for analytics logging.
+            environment: Optional ``{language, runtime_version, libraries, platform}``.
+            project_dir: Optional directory to detect the environment from.
+            include_incompatible: ``False`` drops incompatible results; default
+                keeps them flagged and last.
 
         Returns:
-            A dict with a ``results`` key containing matching concept records.
+            A dict with a ``results`` key containing matching concept records,
+            each with ``compatibility_check`` ``{status, reason}``.
 
         Raises:
-            ValueError: For unknown backend values.
+            ValueError: For unknown backend values or a malformed ``environment``.
             RuntimeError: On selfhosted HTTP errors or gists rate limit.
         """
+        env = resolve_environment(environment, project_dir)
+        result = self._search_routed(
+            problem, type, language, limit, min_rating, session_id, env, include_incompatible
+        )
+        if needs_annotation(result.get("results", [])):
+            result["results"] = rank_by_compatibility(
+                result["results"], env, limit=limit, include_incompatible=include_incompatible
+            )
+        return result
+
+    def _search_routed(
+        self,
+        problem: str,
+        type: Optional[str],
+        language: Optional[str],
+        limit: int,
+        min_rating: float,
+        session_id: Optional[str],
+        env: Environment,
+        include_incompatible: bool,
+    ) -> dict:
+        """Dispatch a search to the backend with an already-resolved environment."""
         if seed_backend.read_only_enabled():
-            return self._read_only_search(problem, type, language, limit, min_rating)
+            return self._read_only_search(
+                problem, type, language, limit, min_rating, env, include_incompatible
+            )
 
         if self._backend == "selfhosted":
             payload: dict = {
@@ -333,6 +393,10 @@ class BackendRouter:
                 "limit": limit,
                 "min_rating": min_rating,
             }
+            if has_environment_info(env):
+                payload["environment"] = environment_to_dict(env)
+            if not include_incompatible:
+                payload["include_incompatible"] = False
             if type is not None:
                 payload["type"] = type
             if language is not None:
@@ -351,7 +415,9 @@ class BackendRouter:
             if self._semantic_url:
                 for attempt in range(2):  # try up to twice before falling back
                     try:
-                        return self._semantic_search(problem, type, language, limit, min_rating)
+                        return self._semantic_search(
+                            problem, type, language, limit, min_rating, env, include_incompatible
+                        )
                     except Exception as exc:  # noqa: BLE001
                         if attempt == 0:
                             logger.warning(
@@ -371,6 +437,8 @@ class BackendRouter:
                 language=language,
                 limit=limit,
                 min_rating=min_rating,
+                environment=env,
+                include_incompatible=include_incompatible,
             )
             if self._semantic_url:
                 result["fallback"] = True
@@ -434,6 +502,8 @@ class BackendRouter:
         source_url: Optional[str] = None,
         links: Optional[list[dict]] = None,
         force: bool = False,
+        reproducer: Optional[str] = None,
+        compatibility: Optional[dict] = None,
     ) -> dict:
         """Route ``submit_concept`` to the configured backend.
 
@@ -449,6 +519,11 @@ class BackendRouter:
             links: Optional list of initial link dicts.
             force: When ``True``, bypass the dedup check and upsert regardless
                 of similarity to existing concepts.
+            reproducer: Minimal reproducer text, ``"none_available"``, or
+                ``None`` (stored as unknown).  Optional.
+            compatibility: Structured constraints dict (see
+                :mod:`lore.core.compat`).  Optional; ``None`` is stored as
+                unknown.
 
         Returns:
             On success: a dict with at least ``concept_id`` and ``name``.
@@ -456,12 +531,16 @@ class BackendRouter:
         Raises:
             DuplicateConceptError: When the backend detects a near-duplicate
                 concept and ``force`` is ``False``.
-            ValueError: On 422 from selfhosted (backend scanner rejection),
-                or for unknown backend values.
+            ValueError: On 422 from selfhosted (scanner rejection or invalid
+                reproducer/compatibility metadata), on invalid metadata
+                detected locally, or for unknown backend values.
             RuntimeError: On unexpected selfhosted HTTP errors.
         """
         if seed_backend.read_only_enabled():
             return seed_backend.read_only_error("submit_concept")
+
+        # Validate metadata locally so every backend rejects identically.
+        normalize_concept_metadata(reproducer, compatibility)
 
         if self._backend == "selfhosted":
             payload: dict = {
@@ -480,6 +559,10 @@ class BackendRouter:
                 payload["source_url"] = source_url
             if force:
                 payload["force"] = True
+            if reproducer is not None:
+                payload["reproducer"] = reproducer
+            if compatibility is not None:
+                payload["compatibility"] = compatibility
 
             with self._client() as client:
                 response = client.post("/v1/concepts", json=payload)
@@ -488,6 +571,10 @@ class BackendRouter:
                     raise DuplicateConceptError(data.get("similar", []))
                 if response.status_code == 422:
                     data = response.json()
+                    if "error" not in data and "detail" in data:
+                        raise ValueError(
+                            f"Submission rejected: invalid field(s) — {data['detail']}"
+                        )
                     raise ValueError(
                         f"Submission rejected by backend scanner: "
                         f"{data.get('error', 'unknown')} "
@@ -511,6 +598,8 @@ class BackendRouter:
                 dont_use_when=dont_use_when,
                 source_url=source_url,
                 links=links,
+                reproducer=reproducer,
+                compatibility=compatibility,
             )
 
         raise ValueError(f"Unknown LORE_BACKEND: {self._backend!r}")

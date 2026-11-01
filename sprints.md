@@ -668,15 +668,15 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 11 — 2026-11-16 → 2026-12-04
 **Goal:** Add reproducer and compatibility metadata to concepts, check it against the target environment before reuse, and keep ratings from overriding known incompatibility (#19).
-**Status:** planned
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-046 | Compatibility and reproducer metadata schema | python-mcp-engineer | planned | — |
-| LORE-047 | Environment detection and compatibility checker | python-mcp-engineer | planned | — |
-| LORE-048 | Compatibility-aware retrieval and ranking | ai-data-specialist | planned | — |
-| LORE-049 | Skills: capture and surface compatibility metadata | skill-engineer | planned | — |
+| LORE-046 | Compatibility and reproducer metadata schema | python-mcp-engineer | done | — |
+| LORE-047 | Environment detection and compatibility checker | python-mcp-engineer | done | — |
+| LORE-048 | Compatibility-aware retrieval and ranking | ai-data-specialist | done | — |
+| LORE-049 | Skills: capture and surface compatibility metadata | skill-engineer | done | — |
 
 ### Notes
 - Resolves the #19 open questions for this release: compatibility is structured metadata only (no inference from reproducers); reproducers are stored and displayed but not executed automatically (sandbox execution is deferred); updating ranges from multi-project evidence is deferred and should be filed as a follow-up issue.

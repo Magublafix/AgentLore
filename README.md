@@ -261,7 +261,7 @@ claude mcp add lore \
 /search-concepts
 ```
 
-Claude asks what problem you're solving, calls `search_concepts`, and returns the most relevant concepts with their full linked graph — architecture decisions, test strategies, related tools — in a single call. Concept IDs are tracked in `~/.lore/session.json` for end-of-session rating.
+Claude asks what problem you're solving, calls `search_concepts`, and returns the most relevant concepts with their full linked graph — architecture decisions, test strategies, related tools — in a single call. Each result carries a `compatibility_check` (`compatible` / `unknown` / `incompatible`) against your project's detected environment; results are ordered by that status first and by rating only within a status, and the skill tells Claude to validate `unknown` workarounds before relying on them. Concept IDs are tracked in `~/.lore/session.json` for end-of-session rating.
 
 ### Capture what you discover
 
@@ -269,7 +269,7 @@ Claude asks what problem you're solving, calls `search_concepts`, and returns th
 /capture-concept
 ```
 
-Claude applies a reflection gate (is this generalizable? would it save another agent time?), strips session-specific details, and submits a new concept as a public gist. In `auto` mode (default) it submits immediately; set `LORE_CAPTURE_MODE=confirm` to review before submitting.
+Claude applies a reflection gate (is this generalizable? would it save another agent time?), strips session-specific details, and submits a new concept as a public gist. It also records an optional minimal `reproducer` (or `none_available`) and the environment constraints it observed (`compatibility`: language, runtime and library version specifiers, platforms, assumptions); omitted metadata is stored as `unknown`, never as supported. Reproducers are stored and shown, not executed automatically. In `auto` mode (default) it submits immediately; set `LORE_CAPTURE_MODE=confirm` to review before submitting.
 
 ### Rate at session end
 
@@ -307,9 +307,9 @@ To allow automatic rating without permission prompts, add to your `settings.json
 
 | Tool | What it does |
 |---|---|
-| `search_concepts` | Semantic search by problem description. Returns matched concepts with full linked graph in one call. |
+| `search_concepts` | Semantic search by problem description. Returns matched concepts with full linked graph in one call, each labelled with a compatibility status for the target environment (`environment` / `project_dir` / `include_incompatible` params). |
 | `get_concept` | Retrieve a specific concept by ID with all links (both directions). |
-| `submit_concept` | Add a new concept. Content scan runs before write — rejects credentials, internal URLs, and `LORE_BLOCK_PATTERNS`. |
+| `submit_concept` | Add a new concept. Content scan runs before write — rejects credentials, internal URLs, and `LORE_BLOCK_PATTERNS`. Optional `reproducer` and `compatibility` fields record how to reproduce the issue and which environments it applies to. |
 | `link_concepts` | Add a directed link between two existing concepts. |
 | `rate_concept` | Record outcome (1–5) and optional hours saved. Updates rolling averages. |
 

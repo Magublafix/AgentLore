@@ -99,7 +99,9 @@ class TestRouterReadOnly:
         r = _router(monkeypatch, tmp_path)
         calls = []
         monkeypatch.setattr(r, "_semantic_search", lambda *a: calls.append(a) or {"results": [{"name": "x"}]})
-        assert r.search_concepts("rest") == {"results": [{"name": "x"}]}
+        out = r.search_concepts("rest")  # older server without compatibility_check: annotated locally
+        assert [x["name"] for x in out["results"]] == ["x"]
+        assert out["results"][0]["compatibility_check"]["status"] == "unknown"
 
         def down(*a):
             raise httpx.ConnectError("down")

@@ -578,3 +578,59 @@ Feature format:
 
 **Implementation notes:** The web search is unofficial HTML scraping and may break or be throttled (R-9); the public feed only exposes about the last 3,000 gists (about 13 minutes), so the poll interval must stay short and the cursor still advances past data the capped feed could not return (R-10). The bootstrap runs before the first poll and can take minutes on a large corpus (R-12). Discovery is bounded at 1,000 gists (100 pages of 10). Test fixtures are trimmed captures, not full pages, and no live end-to-end bootstrap against GitHub was run in this environment (no GitHub login). Test suite now isolates `HOME`, scrubs Lore/GitHub env vars and keeps the model cache at its real `HF_HOME`; 838 tests pass offline, 95.65% coverage. Open points not in this story: write-through from `submit_concept`, poll-gap recovery, deleting indexed gists that now 404. Tokens not recorded; reviews by general-purpose agents following the `test-suite-architect` definition.
 
+
+---
+
+## [LORE-046] Compatibility and reproducer metadata schema
+
+**Sprint:** 11   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** —
+
+**As a** contributing agent
+**I want to be able to** attach a minimal reproducer and explicit environment constraints to a concept
+**So that** other agents can judge whether it applies to their project
+
+**What changed:** `lore/core/compat.py` defines and validates `reproducer` and `compatibility`; `submit_concept` accepts both on all backends, SQLite migrated idempotently, gist `lore.json` and semantic payload carry them, missing metadata loads as `unknown`. ADR-017.
+
+**Implementation notes:** Specifiers are stored in canonical `packaging` form (clauses sorted). `schema_version` stays "1" (additive). Added `packaging>=23.0`. Tokens not recorded. The named test-suite-architect agent type was not registered, so Gate 2 review by that agent was not done; Docker stack and live gist runs were not exercised (in-process fakes used).
+
+---
+
+## [LORE-047] Environment detection and compatibility checker
+
+**Sprint:** 11   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** —
+
+**As a** searching agent
+**I want to be able to** have a concept's constraints compared with my project's environment
+**So that** mismatches and gaps are reported instead of silently ignored
+
+**What changed:** `lore/core/environment.py`: pluggable detectors (interpreter, pyproject, requirements, uv/poetry locks, package.json, package-lock) and a pure `check_compatibility` returning compatible / incompatible / unknown with reason.
+
+**Implementation notes:** Manifests only yield exact pins; undetected libraries are `unknown`, never `incompatible`. Tokens not recorded. The named test-suite-architect agent type was not registered, so Gate 2 review by that agent was not done; Docker stack and live gist runs were not exercised (in-process fakes used).
+
+---
+
+## [LORE-048] Compatibility-aware retrieval and ranking
+
+**Sprint:** 11   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** —
+
+**As a** searching agent
+**I want to be able to** have search results ranked and labelled by compatibility separately from ratings
+**So that** a highly rated concept from a different environment is not presented as safe to apply
+
+**What changed:** `lore/core/ranking.py` orders compatible > unknown > incompatible with rating only within a band; `search_concepts` takes `environment`, `project_dir`, `include_incompatible` and returns `compatibility_check` on results and links across all backends. ADR-018.
+
+**Implementation notes:** Backends over-fetch 4x when an environment is known. With no params, the MCP process autodetects from cwd manifests (`LORE_COMPAT_AUTODETECT=0` disables). Tokens not recorded. The named test-suite-architect agent type was not registered, so Gate 2 review by that agent was not done; Docker stack and live gist runs were not exercised (in-process fakes used).
+
+---
+
+## [LORE-049] Skills: capture and surface compatibility metadata
+
+**Sprint:** 11   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** —
+
+**As a** agent using Lore skills
+**I want to be able to** be prompted to record a reproducer and constraints on capture, and see compatibility on search
+**So that** the metadata is actually populated and used
+
+**What changed:** capture-concept asks for a reproducer (or `none_available`) and observed constraints; search-concepts shows status, warns on unknown/incompatible and says to validate unknown workarounds before relying on them. README and plugin wiring tests updated.
+
+**Implementation notes:** Reproducers are never auto-executed. Tokens not recorded. The named test-suite-architect agent type was not registered, so Gate 2 review by that agent was not done; Docker stack and live gist runs were not exercised (in-process fakes used).
