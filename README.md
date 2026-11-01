@@ -151,7 +151,7 @@ Describe a problem (for example "building a REST CLI around a REST API") and Cla
 |---|---|---|
 | `Python X is too old (need >= 3.11)` | Python older than 3.11 | Install Python 3.11+ from <https://www.python.org/downloads/> |
 | `Claude Code CLI ('claude') not found on PATH` | `claude` CLI missing | Install Claude Code from <https://claude.ai/code>, then re-run |
-| `'uvx' not found on PATH` | `uv` not installed | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `'uvx' not found on PATH` | `uv` not installed | `curl -LsSf https://astral.sh/uv/install.sh \| sh`, or re-run with `--local` to register this Python interpreter instead |
 | `Docker not found on PATH (needed for the semantic search stack)` | `--semantic` given without Docker | Install Docker from <https://docs.docker.com/get-docker/>, or omit `--semantic` |
 | `Setup stopped: fix the issues above and re-run.` | One or more prerequisite checks failed | Apply the `fix:` shown under each `✗` line |
 | `GitHub rejected the token (401 Bad credentials)` | Token expired, revoked or mistyped | Create a new token with the `gist` scope at <https://github.com/settings/tokens/new?scopes=gist&description=AgentLore> |
@@ -163,6 +163,7 @@ Describe a problem (for example "building a REST CLI around a REST API") and Cla
 | `registered in read-only mode, but a token is now available` | You added a token after a demo install | Re-run with `--force` |
 | `registered with a token, but no token is available now (read-only mode)` | The token (env/`gh`) is gone | Restore the token (`gh auth login` or set `LORE_GITHUB_TOKEN`), or re-run with `--force` to switch to demo mode |
 | `registered as a http/sse server, not a local stdio command` | `lore` was added as a remote server | Re-run with `--force` (or `claude mcp remove lore -s <scope>`) |
+| `--store-token needs a token` | `--store-token` was given but no token was found (no `LORE_GITHUB_TOKEN`, no `gh` login, no prompt input) | Set `LORE_GITHUB_TOKEN`, run `gh auth login`, or drop `--store-token` for the read-only demo |
 | `refusing to store a token with project scope` | `--store-token` combined with `--scope project` would put the token in `.mcp.json` | Use `--scope user` or `local`, or drop `--store-token` and set `LORE_GITHUB_TOKEN` in the environment |
 | `a project-scope 'lore' registration already exists` | `--store-token` was given while a `lore` entry already lives in `.mcp.json` | Run `claude mcp remove lore -s project`, or drop `--store-token` |
 | `refusing to register this semantic URL with project scope` | The URL contains `user:pw@`, a query string or a fragment, which would be written verbatim to `.mcp.json` | Use a plain `https://host` URL, or `--scope user` / `local` |

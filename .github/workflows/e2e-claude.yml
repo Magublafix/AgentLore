@@ -1,0 +1,234 @@
+name: E2E Claude canary
+
+# Optional, NON-BLOCKING canary: a real headless Claude Code session (driven by a model via
+# the ANTHROPIC_API_KEY repo secret) must call the Lore `search_concepts` MCP tool registered
+# by `mcp-server-lore init`. See e2e/CANARY.md.
+#
+# SECURITY: deliberately NO pull_request / pull_request_target trigger. Code from PRs
+# (especially forks) must never run in a job that can see the API key.
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # daily, off-peak (UTC)
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model id or alias (default claude-haiku-5-5)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-claude-canary
+  cancel-in-progress: false
+
+env:
+  CLAUDE_CODE_VERSION: "2.1.316" # pinned, keep in sync with e2e.yml
+  CANARY_MODEL_DEFAULT: "claude-haiku-5-5"
+  CANARY_MODEL_FALLBACK: "haiku"
+
+jobs:
+  build:
+    name: Build wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: Upload wheel (not published anywhere)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canary-dist
+          path: dist/
+          retention-days: 1
+          if-no-files-found: error
+
+  canary:
+    name: Claude canary
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - name: Skip notice (secret not configured)
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::ANTHROPIC_API_KEY is not set; Claude canary skipped (not a failure)."
+
+      - name: Checkout
+        if: env.HAS_KEY == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download wheel
+        if: env.HAS_KEY == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: canary-dist
+          path: ${{ runner.temp }}/dist
+
+      - name: Set up Python
+        if: env.HAS_KEY == 'true'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        if: env.HAS_KEY == 'true'
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Set up Node
+        if: env.HAS_KEY == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code CLI (pinned)
+        if: env.HAS_KEY == 'true'
+        timeout-minutes: 5
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      - name: Isolated environment for the CLI
+        if: env.HAS_KEY == 'true'
+        shell: bash
+        run: |
+          set -eu
+          iso="$RUNNER_TEMP/canary-home"
+          mkdir -p "$iso/home" "$iso/config" "$iso/cache" "$iso/data" "$iso/claude" "$RUNNER_TEMP/canary-out"
+          {
+            echo "HOME=$iso/home"
+            echo "XDG_CONFIG_HOME=$iso/config"
+            echo "XDG_CACHE_HOME=$iso/cache"
+            echo "XDG_DATA_HOME=$iso/data"
+            echo "CLAUDE_CONFIG_DIR=$iso/claude"
+            echo "DISABLE_AUTOUPDATER=1"
+            echo "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+            echo "CANARY_OUT=$RUNNER_TEMP/canary-out"
+          } >> "$GITHUB_ENV"
+
+      - name: Register Lore via init (no key needed)
+        if: env.HAS_KEY == 'true'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -eu
+          claude --version
+          wheel=$(ls "$RUNNER_TEMP"/dist/*.whl)
+          export LORE_INIT_UVX_FROM="$wheel"
+          timeout 240 uvx --from "$wheel" mcp-server-lore init --yes --scope user
+          out=$(timeout 120 claude mcp get lore)
+          echo "$out"
+          echo "$out" | grep -q "Connected"
+
+      - name: Run headless Claude and assert tool use
+        if: env.HAS_KEY == 'true'
+        timeout-minutes: 8
+        shell: bash
+        env:
+          # The ONLY step that sees the key.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INPUT_MODEL: ${{ inputs.model }}
+        run: |
+          set -u
+          echo "::add-mask::$ANTHROPIC_API_KEY"
+          # Run from an empty directory: the repo checkout would make Claude Code load this
+          # project's CLAUDE.md, .claude/ settings, agents and hooks into the session.
+          repo="$GITHUB_WORKSPACE"
+          mkdir -p "$RUNNER_TEMP/canary-cwd"
+          cd "$RUNNER_TEMP/canary-cwd"
+          model="${INPUT_MODEL:-${CANARY_MODEL:-$CANARY_MODEL_DEFAULT}}"
+          prompt='Use the lore search_concepts tool to search for "REST CLI" and reply with only the name of the first concept returned.'
+          log="$CANARY_OUT/stream.jsonl"
+          err="$CANARY_OUT/stderr.txt"
+          run_claude() {
+            timeout 300 claude -p "$prompt" --model "$1" \
+              --allowedTools mcp__lore__search_concepts \
+              --permission-mode dontAsk \
+              --output-format stream-json --verbose --no-session-persistence \
+              --max-budget-usd 0.25 >"$2" 2>"$3" </dev/null
+          }
+          rc=0; run_claude "$model" "$log" "$err" || rc=$?
+          if [ "$rc" -ne 0 ] && python "$repo/e2e/canary/parse.py" "$log" --stderr "$err" --model-rejected; then
+            echo "::warning::model '$model' rejected (rc=$rc); retrying with '$CANARY_MODEL_FALLBACK' (first log kept)"
+            model="$CANARY_MODEL_FALLBACK"
+            log="$CANARY_OUT/stream.retry.jsonl"
+            err="$CANARY_OUT/stderr.retry.txt"
+            rc=0; run_claude "$model" "$log" "$err" || rc=$?
+          fi
+          echo "model used: $model (claude exit code $rc)"
+          pyrc=0
+          python "$repo/e2e/canary/parse.py" "$log" --summary "$CANARY_OUT/summary.txt" \
+            --secret-env ANTHROPIC_API_KEY || pyrc=$?
+          [ "$pyrc" -eq 0 ] || exit "$pyrc"
+          [ "$rc" -eq 0 ] || { echo "::error::claude exited $rc"; exit 1; }
+
+      - name: Scan outputs for the key (always runs before upload)
+        id: scan
+        if: always() && env.HAS_KEY == 'true'
+        timeout-minutes: 2
+        shell: bash
+        env:
+          # Second (and last) step that sees the key; masked, never echoed.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -u
+          echo "::add-mask::$ANTHROPIC_API_KEY"
+          [ -n "${CANARY_OUT:-}" ] && [ -d "$CANARY_OUT" ] || exit 0
+          if grep -rqF -- "$ANTHROPIC_API_KEY" "$CANARY_OUT"; then
+            rm -rf "${CANARY_OUT:?}"/*
+            echo "::error::API key found in canary outputs; all files deleted"
+            exit 1
+          fi
+
+      - name: Upload canary log and summary
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canary-log
+          path: ${{ runner.temp }}/canary-out/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  report:
+    name: Report failure
+    needs: canary
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          title="Claude canary failing"
+          body="The scheduled Claude canary failed: ${RUN_URL}"
+          num=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"$title\")][0].number // empty")
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

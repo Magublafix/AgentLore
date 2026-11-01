@@ -81,6 +81,7 @@ def build_spec(
     store_token: bool,
     semantic_url: Optional[str],
     local: bool = False,
+    uvx_from: Optional[str] = None,
 ) -> ServerSpec:
     """Choose the registration for the token situation.
 
@@ -101,7 +102,32 @@ def build_spec(
         return ServerSpec(
             command=sys.executable, args=("-m", "lore.mcp.server"), env=env, secrets=secrets
         )
+    if uvx_from:
+        return ServerSpec(args=("--from", uvx_from, "mcp-server-lore"), env=env, secrets=secrets)
     return ServerSpec(env=env, secrets=secrets)
+
+
+_FORWARDED_TEST_ENV = ("LORE_ALLOW_INSECURE_TEST_URLS", "LORE_GITHUB_API_URL", "LORE_GIST_WEB_URL")
+UVX_FROM_ENV = "LORE_INIT_UVX_FROM"  # test-only hook, deliberately undocumented outside ADR-016
+
+
+def resolve_uvx_from(value: str) -> str:
+    """Validate ``LORE_INIT_UVX_FROM``: an existing local ``.whl`` / ``.tar.gz`` file.
+
+    Returns the absolute path. Raises :class:`ValueError` (message safe to show)
+    for URLs, directories, missing files or any other file type.
+    """
+    if "://" in value:
+        raise ValueError(f"{UVX_FROM_ENV} must be a local file path, not a URL")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path = Path(os.path.abspath(path))
+    if not path.name.endswith((".whl", ".tar.gz")):
+        raise ValueError(f"{UVX_FROM_ENV} must name a .whl or .tar.gz file")
+    if not path.is_file():
+        raise ValueError(f"{UVX_FROM_ENV} does not point to an existing file: {path}")
+    return str(path)
 
 
 def run_init(
@@ -138,6 +164,16 @@ def run_init(
         out(_PROJECT_URL_REFUSAL)
         return 1
 
+    uvx_from: Optional[str] = None
+    if env.get(UVX_FROM_ENV) and not args.local:
+        try:
+            uvx_from = resolve_uvx_from(env[UVX_FROM_ENV])
+        except ValueError as exc:
+            out(f"  ✗ {exc}")
+            return 1
+        out(f"  ! TEST-ONLY: {UVX_FROM_ENV} is set; registering 'uvx --from {uvx_from} mcp-server-lore' "
+            "instead of the published package")
+
     out("Checking prerequisites")
     if not _print_checks((checks_fn or run_checks)(semantic=args.semantic, **({"local": True} if args.local else {})), out):
         out("\nSetup stopped: fix the issues above and re-run.")
@@ -151,6 +187,10 @@ def run_init(
     )
     if token.token:
         secrets.append(token.token)
+    if token.token is None and args.store_token:
+        out("  ✗ --store-token needs a token: set LORE_GITHUB_TOKEN, log in with "
+            "`gh auth login`, or drop --store-token for the read-only demo")
+        return 1
     if token.token is None:
         out("  - no GitHub token found: continuing in READ-ONLY DEMO mode")
     elif args.dry_run:
@@ -164,7 +204,7 @@ def run_init(
         out(f"  ✓ token from {_SOURCE_LABEL[token.source]} is valid"
             + (f" (GitHub user {login})" if login else ""))
 
-    spec = spec or build_spec(token, args.store_token, semantic_url, args.local)
+    spec = spec or build_spec(token, args.store_token, semantic_url, args.local, uvx_from)
     secrets.extend(spec.secret_values())
     if spec.secrets and args.scope == "project":
         out(_PROJECT_TOKEN_REFUSAL)
@@ -250,6 +290,10 @@ def run_init(
         child_env["LORE_GITHUB_TOKEN"] = token.token  # in memory only
         out("  ! verification used the token from your shell/prompt, which is not in the agent "
             "config: the agent needs LORE_GITHUB_TOKEN in its environment, or re-run with --store-token")
+    # Test-only endpoint overrides reach the verification child only, never the registration.
+    for key in _FORWARDED_TEST_ENV:
+        if env.get(key):
+            child_env[key] = env[key]
     result = (verify_fn or verify_mod.verify_install)(
         spec.command, list(spec.args), child_env, secrets=secrets
     )

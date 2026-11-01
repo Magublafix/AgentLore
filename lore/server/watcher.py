@@ -59,13 +59,13 @@ from typing import Any
 
 import httpx
 
+from lore.core.endpoints import gist_web_url, github_api_url, same_origin
 from lore.core.constants import _parse_name_from_description
 from lore.server.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
 
 _CURSOR_PATH = Path("~/.lore/watcher_cursor.json").expanduser()
-_GITHUB_API_BASE = "https://api.github.com"
 _LORE_CONCEPT_MARKER = "[agentlore-concept]"
 
 
@@ -131,7 +131,7 @@ async def _fetch_public_gists(
     """
     all_gists: list[dict[str, Any]] = []
     url: str | None = (
-        f"{_GITHUB_API_BASE}/gists/public?since={since}&per_page=100"
+        f"{github_api_url()}/gists/public?since={since}&per_page=100"
     )
     pages = 0
 
@@ -144,6 +144,12 @@ async def _fetch_public_gists(
         # Parse Link header for next page URL.
         link_header = response.headers.get("Link", "")
         url = _parse_next_link(link_header)
+        if url and not same_origin(url, github_api_url()):
+            logger.warning(
+                "Ignoring cross-origin rel=next link in the public gist feed; "
+                "stopping pagination with %d page(s).", pages,
+            )
+            break
 
         if pages >= _PUBLIC_FEED_MAX_PAGES:
             if url:
@@ -186,7 +192,7 @@ async def _fetch_full_gist(
     gist_id: str,
 ) -> dict[str, Any]:
     """Fetch the full gist object (including file contents) from GitHub."""
-    response = await client.get(f"{_GITHUB_API_BASE}/gists/{gist_id}")
+    response = await client.get(f"{github_api_url()}/gists/{gist_id}")
     response.raise_for_status()
     return response.json()
 
@@ -203,7 +209,7 @@ async def _fetch_rating_aggregates(
     Returns (None, None) if there are no rating comments or on fetch failure.
     """
     try:
-        response = await client.get(f"{_GITHUB_API_BASE}/gists/{gist_id}/comments")
+        response = await client.get(f"{github_api_url()}/gists/{gist_id}/comments")
         response.raise_for_status()
         comments = response.json()
     except Exception as exc:  # noqa: BLE001
@@ -309,7 +315,6 @@ def _extract_payload(
 # Bootstrap phase (LORE-056)
 # ---------------------------------------------------------------------------
 
-_GIST_SEARCH_URL = "https://gist.github.com/search"
 _GIST_SEARCH_QUERY = '"agentlore-concept"'
 _USER_AGENT = (
     "AgentLore-watcher/1.0 (+https://github.com/Magublafix/AgentLore; "
@@ -437,7 +442,7 @@ async def _discover_concept_gists(
             await sleep(delay)
         try:
             response = await web_client.get(
-                _GIST_SEARCH_URL, params={"q": _GIST_SEARCH_QUERY, "p": page}
+                f"{gist_web_url()}/search", params={"q": _GIST_SEARCH_QUERY, "p": page}
             )
         except httpx.HTTPError as exc:
             logger.warning(

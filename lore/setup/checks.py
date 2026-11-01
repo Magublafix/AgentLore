@@ -63,7 +63,8 @@ def check_uvx(which: Which = shutil.which) -> Check:
         "uvx",
         False,
         "'uvx' not found on PATH (needed to launch mcp-server-lore)",
-        "Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh",
+        "Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh "
+        "(or re-run with --local to register this Python interpreter instead)",
     )
 
 

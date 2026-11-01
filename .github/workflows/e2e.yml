@@ -1,0 +1,230 @@
+name: E2E
+
+# Black-box tests of `mcp-server-lore init` against the BUILT wheel with the real
+# `claude` CLI. Nothing is published anywhere: the wheel only lives in a short-lived
+# Actions artifact. Test-only hooks: LORE_INIT_UVX_FROM, LORE_ALLOW_INSECURE_TEST_URLS (ADR-016).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pinned: bump deliberately, not on every run.
+  CLAUDE_CODE_VERSION: "2.1.316"
+
+jobs:
+  build:
+    name: Build wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      wheel-sha256: ${{ steps.hash.outputs.sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Record checksums
+        id: hash
+        run: |
+          cd dist
+          sha256sum * | tee SHA256SUMS
+          echo "sha256=$(sha256sum ./*.whl | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload dist (not published anywhere)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          retention-days: 3
+          if-no-files-found: error
+
+  e2e-init:
+    name: init E2E (${{ matrix.os }}, py${{ matrix.python }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.11", experimental: false }
+          - { os: ubuntu-latest, python: "3.14", experimental: false }
+          - { os: macos-latest, python: "3.14", experimental: true }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: ${{ runner.temp }}/dist
+
+      - name: Verify wheel checksum
+        shell: bash
+        env:
+          EXPECTED: ${{ needs.build.outputs.wheel-sha256 }}
+        run: |
+          set -eu
+          wheel=$(ls "$RUNNER_TEMP"/dist/*.whl)
+          if command -v sha256sum >/dev/null; then actual=$(sha256sum "$wheel" | cut -d' ' -f1); else actual=$(shasum -a 256 "$wheel" | cut -d' ' -f1); fi
+          test "$actual" = "$EXPECTED"
+          echo "LORE_E2E_WHEEL=$wheel" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code CLI (pinned)
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      - name: Install test dependencies
+        run: python -m pip install pytest
+
+      - name: Canary parser unit tests
+        run: python -m pytest e2e/canary -q -p no:cacheprovider
+
+      - name: Isolated environment for the CLI
+        shell: bash
+        run: |
+          set -eu
+          iso="$RUNNER_TEMP/e2e-home"
+          mkdir -p "$iso/home" "$iso/config" "$iso/cache" "$iso/data" "$iso/claude"
+          {
+            echo "HOME=$iso/home"
+            echo "XDG_CONFIG_HOME=$iso/config"
+            echo "XDG_CACHE_HOME=$iso/cache"
+            echo "XDG_DATA_HOME=$iso/data"
+            echo "CLAUDE_CONFIG_DIR=$iso/claude"
+            echo "DISABLE_AUTOUPDATER=1"
+            echo "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+            echo "LORE_E2E_UV_CACHE=$RUNNER_TEMP/uv-cache"
+          } >> "$GITHUB_ENV"
+
+      - name: Warm the uv cache (generous, once)
+        timeout-minutes: 10
+        shell: bash
+        env:
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
+        run: uvx --from "$LORE_E2E_WHEEL" mcp-server-lore init --help </dev/null >/dev/null
+
+      - name: Tool versions
+        run: |
+          claude --version
+          uv --version
+          python --version
+
+      - name: Run init E2E suite
+        run: python -m pytest e2e/test_init_core.py e2e/test_init_edges.py -m e2e -ra --maxfail=3 -p no:cacheprovider
+
+      - name: Upload redacted logs on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs-${{ matrix.os }}-py${{ matrix.python }}
+          path: e2e/out/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  e2e-stack:
+    name: semantic-server stack E2E (py3.14)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+      LORE_STACK_REQUIRE_INSTALLED: "1"
+      EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: ${{ runner.temp }}/dist
+
+      - name: Verify wheel checksum
+        shell: bash
+        env:
+          EXPECTED: ${{ needs.build.outputs.wheel-sha256 }}
+        run: |
+          set -eu
+          wheel=$(ls "$RUNNER_TEMP"/dist/*.whl)
+          test "$(sha256sum "$wheel" | cut -d' ' -f1)" = "$EXPECTED"
+          echo "LORE_E2E_WHEEL=$wheel" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install wheel with the selfhosted extra (CPU torch)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "${LORE_E2E_WHEEL}[selfhosted]" pytest \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Cache embedding model
+        id: hf-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.HF_HOME }}
+          key: hf-${{ runner.os }}-${{ env.EMBEDDING_MODEL }}
+
+      - name: Download embedding model (cache miss)
+        if: steps.hf-cache.outputs.cache-hit != 'true'
+        run: python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
+
+      - name: Run stack E2E (single process, in-memory Qdrant, no Docker)
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: python -m pytest e2e/stack -m e2e_stack -ra --maxfail=3 -p no:cacheprovider
+
+      - name: Upload redacted logs on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-stack-logs
+          path: e2e/out/stack/
+          retention-days: 7
+          if-no-files-found: ignore

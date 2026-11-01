@@ -1,0 +1,212 @@
+{
+  "get_concept": {
+    "additionalProperties": false,
+    "properties": {
+      "concept_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "concept_id"
+    ],
+    "type": "object"
+  },
+  "link_concepts": {
+    "additionalProperties": false,
+    "properties": {
+      "from_id": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "rel": {
+        "type": "string"
+      },
+      "to_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "from_id",
+      "to_id",
+      "rel",
+      "label"
+    ],
+    "type": "object"
+  },
+  "rate_concept": {
+    "additionalProperties": false,
+    "properties": {
+      "concept_id": {
+        "type": "string"
+      },
+      "hours_saved": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "notes": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "outcome": {
+        "type": "integer"
+      },
+      "session_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "concept_id",
+      "outcome",
+      "session_id"
+    ],
+    "type": "object"
+  },
+  "search_concepts": {
+    "additionalProperties": false,
+    "properties": {
+      "language": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "limit": {
+        "default": 3,
+        "type": "integer"
+      },
+      "min_rating": {
+        "default": 2.0,
+        "type": "number"
+      },
+      "problem": {
+        "type": "string"
+      },
+      "session_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "problem"
+    ],
+    "type": "object"
+  },
+  "submit_concept": {
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "type": "string"
+      },
+      "dont_use_when": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "links": {
+        "anyOf": [
+          {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "name": {
+        "type": "string"
+      },
+      "source_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "tags": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": {
+        "type": "string"
+      },
+      "when_to_use": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "type",
+      "content",
+      "when_to_use",
+      "tags"
+    ],
+    "type": "object"
+  }
+}

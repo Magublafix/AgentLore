@@ -17,9 +17,9 @@ from typing import Callable, Mapping, Optional
 import requests
 
 from lore.core.auth import gh_auth_token
+from lore.core.endpoints import github_api_url
 
 TOKEN_URL = "https://github.com/settings/tokens/new?scopes=gist&description=AgentLore"
-USER_URL = "https://api.github.com/user"
 
 SOURCE_ENV = "env"
 SOURCE_GH = "gh"
@@ -90,7 +90,7 @@ def validate_token(token: str, http: Optional[Http] = None) -> Optional[str]:
     http = http or requests.get
     try:
         resp = http(
-            USER_URL,
+            github_api_url() + "/user",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
             timeout=10,
         )
