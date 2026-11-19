@@ -1,0 +1,9 @@
+{"recorded": "2026-11-19T09:46:52Z",
+ "note": "Fresh benchmark set; legacy 10 series kept in results_legacy_10series (different environment).",
+ "llm_endpoint": "http://192.168.1.38:8080 (llama.cpp, served model id qwen3.5-35b-a3b; quantization not reported by server)",
+ "model_name_in_requests": "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+ "backend": "selfhosted: sqlite_qdrant with embedded on-disk Qdrant (bench_server.py), no gists",
+ "python": "Python 3.12.3",
+ "packages": {"anthropic": "2.10.0", "numpy": "2.5.4", "pillow": "13.0.0", "pytest": "9.2.0", "pytest-timeout": "2.4.0", "qdrant-client": "1.20.0", "scikit-image": "0.26.0", "sentence-transformers": "6.2.0", "shapely": "2.2.0", "trimesh": "5.2.1"},
+ "git_head": "307a56a + uncommitted Sprint 12 changes",
+ "planned_series_per_condition": 5}
