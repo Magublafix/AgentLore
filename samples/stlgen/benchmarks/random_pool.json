@@ -1,0 +1,251 @@
+[
+  {
+    "name": "Retry HTTP calls with exponential backoff and jitter",
+    "type": "pattern",
+    "content": "Retry only idempotent requests and only on 429/502/503/504 or connection resets. Double the delay each attempt up to a cap and add random jitter so many clients do not retry in lockstep. Honour a Retry-After header when present. Give up after a fixed attempt count and surface the last error.",
+    "when_to_use": "When calling a flaky remote HTTP service from a long-running job.",
+    "tags": [
+      "http",
+      "retry",
+      "resilience"
+    ]
+  },
+  {
+    "name": "Index columns used in WHERE and JOIN, not every column",
+    "type": "pattern",
+    "content": "A database index speeds reads on the indexed columns but slows every write and consumes disk. Index columns that appear in selective WHERE clauses and join keys, put the most selective column first in composite indexes, and verify with the query planner rather than guessing.",
+    "when_to_use": "When a SQL query on a large table is slow.",
+    "tags": [
+      "sql",
+      "database",
+      "performance"
+    ]
+  },
+  {
+    "name": "Use parameterized queries to prevent SQL injection",
+    "type": "pattern",
+    "content": "Never build SQL by concatenating user input. Pass values as bound parameters so the driver sends them separately from the statement text. Identifiers such as table names cannot be bound; validate them against an allow-list instead.",
+    "when_to_use": "When any user-controlled value reaches a database query.",
+    "tags": [
+      "sql",
+      "security"
+    ]
+  },
+  {
+    "name": "Rebase a feature branch before opening a review",
+    "type": "pattern",
+    "content": "Rebasing replays your commits on top of the latest main so the review diff contains only your changes and history stays linear. Never rebase commits others have already pulled. Use force-with-lease when pushing the rewritten branch to avoid clobbering a teammate's push.",
+    "when_to_use": "When preparing a git branch for code review.",
+    "tags": [
+      "git",
+      "workflow"
+    ]
+  },
+  {
+    "name": "Cache invalidation: prefer short TTLs over manual purges",
+    "type": "pattern",
+    "content": "Manual invalidation requires every writer to know every cache key it affects, which rots. A short time-to-live bounds staleness without coordination. Add explicit invalidation only for the few keys where staleness is unacceptable, and key caches by a version or content hash.",
+    "when_to_use": "When designing a read-through cache for application data.",
+    "tags": [
+      "cache",
+      "architecture"
+    ]
+  },
+  {
+    "name": "Idempotency keys make payment retries safe",
+    "type": "pattern",
+    "content": "Have the client send a unique key per logical operation. The server stores the key with the result and returns the stored result for any repeat, so a timeout followed by a retry cannot charge twice. Expire keys after a day or so and scope them per account.",
+    "when_to_use": "When an API performs a non-repeatable side effect such as charging a card.",
+    "tags": [
+      "api",
+      "payments",
+      "reliability"
+    ]
+  },
+  {
+    "name": "Structured logging beats free-text logs",
+    "type": "pattern",
+    "content": "Emit one JSON object per event with stable field names: timestamp, level, request id, and event name. Machines can then filter and aggregate without regex. Keep messages short and put variable data in fields, never in the message string.",
+    "when_to_use": "When logs need to be searched or aggregated across services.",
+    "tags": [
+      "logging",
+      "observability"
+    ]
+  },
+  {
+    "name": "Blue-green deployment for zero-downtime releases",
+    "type": "pattern",
+    "content": "Run two identical production environments. Deploy to the idle one, smoke-test it, then switch the load balancer. Rollback is flipping the switch back. Database schema changes must be backward compatible with both versions for the overlap.",
+    "when_to_use": "When a release must not interrupt live traffic.",
+    "tags": [
+      "deployment",
+      "devops"
+    ]
+  },
+  {
+    "name": "Debounce rapid UI events, throttle continuous ones",
+    "type": "pattern",
+    "content": "Debounce waits until input stops for a delay before firing, which suits search-as-you-type. Throttle fires at most once per interval, which suits scroll and resize handlers. Choosing the wrong one makes the interface feel laggy or floods the backend.",
+    "when_to_use": "When a browser event handler triggers expensive work.",
+    "tags": [
+      "javascript",
+      "frontend",
+      "performance"
+    ]
+  },
+  {
+    "name": "Sliding-window rate limiting with a token bucket",
+    "type": "pattern",
+    "content": "A token bucket refills at a steady rate and each request spends a token, allowing short bursts while capping the average rate. Store the bucket per client key in a shared store with atomic updates so multiple servers agree. Return 429 with a Retry-After header.",
+    "when_to_use": "When protecting an API from abusive or runaway clients.",
+    "tags": [
+      "api",
+      "rate-limit"
+    ]
+  },
+  {
+    "name": "Use a dead-letter queue for poison messages",
+    "type": "pattern",
+    "content": "A message that always fails will block or endlessly retry in a queue consumer. After a bounded number of attempts move it to a separate dead-letter queue with the error attached, alert on its depth, and replay after fixing the cause.",
+    "when_to_use": "When consuming messages from a broker such as SQS or RabbitMQ.",
+    "tags": [
+      "queue",
+      "messaging",
+      "reliability"
+    ]
+  },
+  {
+    "name": "Principle of least privilege for service credentials",
+    "type": "pattern",
+    "content": "Give each service its own credential with only the permissions it needs, scoped to specific resources. Shared admin keys make breaches wide and audits meaningless. Rotate secrets on a schedule and load them from a secret manager rather than source control.",
+    "when_to_use": "When provisioning access for an application or pipeline.",
+    "tags": [
+      "security",
+      "iam"
+    ]
+  },
+  {
+    "name": "Time-series downsampling keeps dashboards fast",
+    "type": "pattern",
+    "content": "Store raw points for a short retention window and roll them up into minute, hour and day aggregates (min, max, mean, count) for longer ranges. Query the coarsest resolution that still shows the chart's pixels. Keep max alongside mean so spikes are not averaged away.",
+    "when_to_use": "When charting months of metrics data.",
+    "tags": [
+      "metrics",
+      "time-series",
+      "performance"
+    ]
+  },
+  {
+    "name": "Feature flags decouple deploy from release",
+    "type": "pattern",
+    "content": "Ship code dark behind a flag, enable it for staff, then a percentage of users, then everyone. A flag is also a kill switch. Delete the flag and dead branch once the rollout is complete or the codebase fills with stale conditionals.",
+    "when_to_use": "When rolling out a risky change gradually.",
+    "tags": [
+      "release",
+      "workflow"
+    ]
+  },
+  {
+    "name": "Normalize timestamps to UTC at the boundary",
+    "type": "pattern",
+    "content": "Store and transmit instants in UTC with an explicit offset or Z suffix, and convert to a local zone only when displaying. Naive local times break across daylight-saving changes and servers in different regions. Keep the user's zone separately for scheduling recurring events.",
+    "when_to_use": "When handling dates that cross systems or time zones.",
+    "tags": [
+      "datetime",
+      "correctness"
+    ]
+  },
+  {
+    "name": "Pagination with cursors instead of offsets",
+    "type": "pattern",
+    "content": "Offset pagination re-scans skipped rows and shows duplicates or gaps when data changes between pages. A cursor encodes the last seen sort key so the next query seeks directly to it. Require a unique, indexed sort key and return an opaque next cursor.",
+    "when_to_use": "When an API lists a large, changing collection.",
+    "tags": [
+      "api",
+      "pagination",
+      "database"
+    ]
+  },
+  {
+    "name": "Circuit breaker stops cascading failures",
+    "type": "pattern",
+    "content": "After a threshold of consecutive failures the breaker opens and calls fail immediately instead of waiting on timeouts. After a cool-down it lets one trial call through; success closes it again. This protects both the caller's threads and the struggling dependency.",
+    "when_to_use": "When a service depends on another that may become slow or unavailable.",
+    "tags": [
+      "resilience",
+      "microservices"
+    ]
+  },
+  {
+    "name": "Write the failing regression test before the bugfix",
+    "type": "pattern",
+    "content": "Reproduce the reported bug as an automated test that fails for the stated reason, then fix the code until it passes. This proves the test can catch the bug and prevents it quietly returning. Keep the test small and name it after the symptom.",
+    "when_to_use": "When fixing a defect in an existing codebase.",
+    "tags": [
+      "testing",
+      "workflow"
+    ]
+  },
+  {
+    "name": "Docker images: order layers from least to most volatile",
+    "type": "pattern",
+    "content": "Each instruction creates a cacheable layer. Copy dependency manifests and install dependencies before copying application source so ordinary code edits reuse the dependency layer. Use a multi-stage build to leave compilers out of the final image.",
+    "when_to_use": "When container builds are slow or images are large.",
+    "tags": [
+      "docker",
+      "devops",
+      "performance"
+    ]
+  },
+  {
+    "name": "Prefer composition over deep inheritance",
+    "type": "pattern",
+    "content": "Deep class hierarchies couple subclasses to parent internals and make behaviour hard to trace. Build objects from small collaborators passed in at construction, and keep inheritance for genuine is-a relationships with a stable base. Composition also makes tests easier because collaborators can be swapped.",
+    "when_to_use": "When a class hierarchy has grown three or more levels deep.",
+    "tags": [
+      "design",
+      "oop"
+    ]
+  },
+  {
+    "name": "Use database transactions around multi-step writes",
+    "type": "pattern",
+    "content": "If a business operation touches several rows or tables, wrap it in one transaction so a failure rolls everything back. Keep transactions short, avoid network calls inside them, and pick the weakest isolation level that preserves correctness to limit lock contention.",
+    "when_to_use": "When an operation must update multiple records atomically.",
+    "tags": [
+      "database",
+      "correctness"
+    ]
+  },
+  {
+    "name": "Back-pressure: bound every queue",
+    "type": "pattern",
+    "content": "An unbounded in-memory queue hides a slow consumer until the process runs out of memory. Give queues a maximum size and decide explicitly what happens when full: block the producer, drop oldest, or reject with an error that propagates to the caller.",
+    "when_to_use": "When a producer can outpace its consumer.",
+    "tags": [
+      "concurrency",
+      "reliability"
+    ]
+  },
+  {
+    "name": "Blameless post-incident reviews find systemic causes",
+    "type": "pattern",
+    "content": "Review outages by reconstructing the timeline and asking what conditions made the human action reasonable, not who erred. Produce a short list of concrete follow-ups with owners and dates. Naming people teaches teams to hide information.",
+    "when_to_use": "When writing up a production incident.",
+    "tags": [
+      "process",
+      "reliability"
+    ]
+  },
+  {
+    "name": "Content-hash static assets for permanent caching",
+    "type": "pattern",
+    "content": "Embed a hash of the file contents in the asset name so a changed file gets a new URL. The old URL can then be served with a far-future immutable cache header, while the HTML that references it stays short-lived. Browsers never serve stale scripts after a deploy.",
+    "when_to_use": "When serving JavaScript and CSS bundles behind a CDN.",
+    "tags": [
+      "frontend",
+      "cache",
+      "performance"
+    ]
+  }
+]

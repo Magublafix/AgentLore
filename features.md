@@ -634,3 +634,59 @@ Feature format:
 **What changed:** capture-concept asks for a reproducer (or `none_available`) and observed constraints; search-concepts shows status, warns on unknown/incompatible and says to validate unknown workarounds before relying on them. README and plugin wiring tests updated.
 
 **Implementation notes:** Reproducers are never auto-executed. Tokens not recorded. The named test-suite-architect agent type was not registered, so Gate 2 review by that agent was not done; Docker stack and live gist runs were not exercised (in-process fakes used).
+
+---
+
+## [LORE-050] Benchmark runner: repeated-attempt control condition
+
+**Sprint:** 12   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** not recorded
+
+**As a** Lore developer
+**I want to be able to** run series with AgentLore disabled for every run alongside series with it enabled
+**So that** I can separate the effect of knowledge from the effect of repeated attempts
+
+**What changed:** `run.py --condition control` runs a series with no AgentLore tools, concepts, capture or wrapup. Task hash, model and turn budget are stored per condition and a mismatch with results on disk aborts before any run. Results go to `results/control/series_NNN/` with their own `aggregate.json`.
+
+**Implementation notes:** Logic in `benchmarks/bench_conditions.py` (`settings_fingerprint`, `check_parity`, `condition_results_dir`); legacy aggregates without `task_sha256` are compared on model and turn budget only. Control prompt/tools are separate constants (`TASK_PROMPT_BASELINE`, `TOOLS_BASELINE`) so no Lore wording leaks in. Tests in `lore/tests/test_benchmark_conditions.py`. Not run against a live model. The `test-suite-architect` review was not done (agent type not registered here); DoD Gates 3 and 4 for Lore infrastructure are waived for benchmark-only stories, as in Sprint 4.
+
+---
+
+## [LORE-051] Benchmark runner: matched random-context condition
+
+**Sprint:** 12   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** not recorded
+
+**As a** Lore developer
+**I want to be able to** run a condition that gives the agent unrelated concepts matched to the relevant set by token count
+**So that** I can tell relevant knowledge apart from extra prompt context
+
+**What changed:** `--condition random` gives the agent a seeded dump of unrelated concepts in its system prompt, token-matched (±10 %) to what the relevant condition retrieved for the same series/run (`--match-series`) or to a fixed `--random-target-tokens`. Seed, target, achieved tokens and concept names are written to each run's results; `bench_stats` reports relevant, random-context and none separately.
+
+**Implementation notes:** Pool is `benchmarks/random_pool.json` (24 concepts), filtered in code of any task keyword. Tokens are estimated as `ceil(chars/4)` on both sides. The relevant condition now records `context_tokens`; pre-Sprint-12 series lack it. The pool totals ~2,300 tokens, so larger relevant contexts raise `InfeasibleMatch` (documented in BENCHMARK.md) instead of silently under-matching. The `test-suite-architect` review was not done (agent type not registered here); DoD Gates 3 and 4 for Lore infrastructure are waived for benchmark-only stories, as in Sprint 4.
+
+---
+
+## [LORE-052] Statistical analysis: mixed-effects logistic and permutation test
+
+**Sprint:** 12   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** not recorded
+
+**As a** Lore developer
+**I want to be able to** analyse pass/fail outcomes with series as a random effect and with a permutation test
+**So that** conclusions account for dependence between runs within a series
+
+**What changed:** `benchmarks/bench_stats.py` fits pass/fail on run number and condition with a per-series random intercept and runs a within-series permutation test, with Wald and series-bootstrap 95 % intervals and an explicit assumptions list. On the existing 10 series: run-number odds ratio about 1.14 (95 % CI about 1.02–1.28) and within-series slope about +2.6 points per run.
+
+**Implementation notes:** Mixed model written with numpy/scipy (Gauss–Hermite marginal likelihood, weak ridge prior) because statsmodels is not a dependency. Synthetic-data tests check recovery of a known run effect, condition effect and sigma, null behaviour and within-series permutation; the condition-effect check is replicated because a single dataset misses a 95 % CI about 5 % of the time. The baseline is an association within one condition and does not separate knowledge from practice. The `test-suite-architect` review was not done (agent type not registered here); DoD Gates 3 and 4 for Lore infrastructure are waived for benchmark-only stories, as in Sprint 4.
+
+---
+
+## [LORE-053] Cross-task knowledge-transfer experiment design
+
+**Sprint:** 12   **Shipped:** 2026-11-01   **Phase:** 5   **Tokens:** not recorded
+
+**As a** Lore developer
+**I want to be able to** have a written design for testing whether concepts learned on one task help on a structurally similar one
+**So that** implementation can be scheduled with a clear protocol
+
+**What changed:** `samples/TRANSFER_EXPERIMENT.md` defines the transfer task (a new `imgtool` image CLI, with `radev` as a second source), a test-suite outline, the transfer / none / random-context conditions, the general concepts expected to transfer, how transfer is measured and the pre-registered interpretation. Implementation stories LORE-057 to LORE-059 were added to the backlog. No experiment was run.
+
+**Implementation notes:** Uses a frozen read-only knowledge snapshot for the transfer arm so it is not confounded with within-task accumulation. The `test-suite-architect` review was not done (agent type not registered here); DoD Gates 3 and 4 for Lore infrastructure are waived for benchmark-only stories, as in Sprint 4.

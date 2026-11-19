@@ -16,10 +16,19 @@ Progression tests:
 All concept operations go through the selfhosted Lore API (LORE_API_URL,
 default http://localhost:8765).  No direct SQLite access.
 
+Conditions (--condition, see bench_conditions.py):
+  agentlore  relevant knowledge — the design above (default)
+  control    no AgentLore tools, concepts, capture or wrapup in any run
+  random     no AgentLore tools; seeded, token-matched dump of unrelated concepts
+Task, model and turn budget must match across conditions; a mismatch with results already on
+disk aborts before any run starts.
+
 Usage:
   python benchmarks/run.py --all             # all 10 runs in sequence
   python benchmarks/run.py --run 1           # single run
   python benchmarks/run.py --dry-run --run 1
+  python benchmarks/run.py --series 5 --condition control
+  python benchmarks/run.py --series 5 --condition random --match-series 1
 """
 
 from __future__ import annotations
@@ -41,6 +50,9 @@ from urllib.parse import quote as _quote
 
 from lore.core.constants import VALID_CONCEPT_TYPES as _VALID_CONCEPT_TYPES
 
+sys.path.insert(0, str(Path(__file__).parent))
+import bench_conditions as bc  # noqa: E402  (condition / parity / random-context helpers)
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -57,6 +69,7 @@ LOCAL_BASE_URL = os.environ.get("LORE_LOCAL_BASE_URL", "http://localhost:11434")
 LOCAL_MODEL    = os.environ.get("LORE_LOCAL_MODEL", "qwen2.5-coder:32b")
 # Selfhosted Lore API — all concept operations go through here.
 LORE_API_URL   = os.environ.get("LORE_API_URL", "http://localhost:8765")
+# Optional bearer key for a local server started with --api-key (env only, never stored in results).
 LOCAL_MAX_TOKENS = 8192
 
 # Prepended to the system prompt for local models to encourage immediate tool use.
@@ -91,7 +104,7 @@ SESSION_FILE = Path(os.environ.get("LORE_SESSION_FILE", "~/.lore/session.json"))
 REPO_ROOT = Path(__file__).parents[3]
 SKILLS_DIR = REPO_ROOT / "skills"
 SAMPLES_DIR = Path(__file__).parent.parent
-RESULTS_DIR = SAMPLES_DIR / "results"
+RESULTS_DIR = Path(os.environ.get("LORE_BENCH_RESULTS_DIR") or SAMPLES_DIR / "results")
 TEST_FILE = SAMPLES_DIR / "tests" / "test_text2stl_cli.py"
 CONFTEST_FILE = SAMPLES_DIR / "tests" / "conftest.py"
 
@@ -116,6 +129,10 @@ _NOISE_GIST_IDS: list[str] = []
 
 # Concept IDs submitted during the current run (reset each run).
 _RUN_SUBMITTED_IDS: list[str] = []
+
+# Characters of search_concepts output returned to the agent this run (reset each run).
+# Converted to tokens with bc.estimate_tokens so the random-context condition can match it.
+_RUN_CONTEXT_TEXT: list[str] = []
 
 # Lazily initialised GistsClient — created on first gists-backend call.
 _gists_client_instance = None
@@ -229,6 +246,8 @@ discover them — do NOT wait for tests to pass. When all 13 tests pass, call `s
 
 TASK_PROMPT_NO_LORE   = _TASK + (_CAPTURE_SUFFIX_LOCAL if PROVIDER == "local" else _CAPTURE_SUFFIX)
 TASK_PROMPT_WITH_LORE = _TASK + (_SEARCH_SUFFIX_LOCAL  if PROVIDER == "local" else _SEARCH_SUFFIX)
+# control / random-context conditions: no mention of Lore, search or capture.
+TASK_PROMPT_BASELINE  = _TASK + "\nWhen all 13 tests pass, call `submit`.\n"
 
 # Forced capture prompt — injected into the same conversation after the main loop
 WRAPUP_HISTORY_TURNS = 15  # coding session turns to include as wrapup context
@@ -363,6 +382,7 @@ TOOL_WEB_SEARCH = {
 
 TOOLS_NO_LORE   = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
 TOOLS_WITH_LORE = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_SEARCH_CONCEPTS, TOOL_SUBMIT_CONCEPT, TOOL_WEB_SEARCH]
+TOOLS_BASELINE  = [TOOL_BASH, TOOL_WRITE_FILE, TOOL_READ_FILE, TOOL_SUBMIT, TOOL_WEB_SEARCH]
 TOOLS_WRAPUP    = [TOOL_READ_FILE, TOOL_RATE_CONCEPT, TOOL_SUBMIT_CONCEPT, TOOL_FINISH_WRAPUP]
 
 # ---------------------------------------------------------------------------
@@ -395,6 +415,21 @@ def build_system_with_lore() -> str:
         "---\n\n"
         "LORE_CAPTURE_MODE is set to `auto` — skip all confirmation prompts."
     )
+
+
+def build_system_baseline(context: str = "") -> str:
+    """System prompt for the control and random-context conditions (no Lore skills or tools).
+
+    Args:
+        context: Pre-rendered unrelated concepts (random-context condition); empty for control.
+    """
+    system = (
+        "You are an expert Python developer. Implement the CLI exactly as specified. "
+        "Use the provided tools to write files and run shell commands."
+    )
+    if context:
+        system += f"\n\n---\n# Reference notes\n\n{context}\n---"
+    return system
 
 
 def build_system_wrapup() -> str:
@@ -764,7 +799,9 @@ def handle_tool(name: str, inputs: dict, workdir: Path | None) -> str:
         return "Wrapup complete — concepts captured and rated."
 
     if name == "search_concepts":
-        return handle_search_concepts(inputs)
+        result = handle_search_concepts(inputs)
+        _RUN_CONTEXT_TEXT.append(result)
+        return result
 
     if name == "submit_concept":
         return handle_submit_concept(inputs)
@@ -931,7 +968,7 @@ def _run_agent_anthropic(
     _TOOLS_REGISTRY_NAMES = {t["name"] for t in tools}
 
     if PROVIDER == "local":
-        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key="ollama", timeout=900.0)
+        client = anthropic.Anthropic(base_url=LOCAL_BASE_URL, api_key=os.environ.get("LORE_LOCAL_API_KEY") or "ollama", timeout=900.0)
         model, max_tok = LOCAL_MODEL, LOCAL_MAX_TOKENS
     else:
         client = anthropic.Anthropic()
@@ -1263,6 +1300,9 @@ def step_run(
     series_num: int = 1,
     inject_noise_n: int = 0,
     noise_injected: int = 0,
+    condition: str = "agentlore",
+    random_target_tokens: int | None = None,
+    random_seed: int = bc.DEFAULT_SEED,
 ) -> dict | None:
     """Execute a single benchmark run.
 
@@ -1274,17 +1314,35 @@ def step_run(
         output_dir: Directory to write run*.md into. Defaults to RESULTS_DIR.
         inject_noise_n: Number of wrong concepts to inject (run 1 only).
         noise_injected: Pre-computed count to carry on runs 2–10 for reporting.
+        condition: ``agentlore`` (relevant knowledge), ``control`` (no Lore at all) or
+            ``random`` (token-matched unrelated concepts). See ``bench_conditions``.
+        random_target_tokens: Token budget the random context must match (``random`` only).
+        random_seed: Base seed; the per-(series, run) seed is derived from it and recorded.
     """
-    lore_active = run_num > 1
+    baseline = condition != "agentlore"
+    lore_active = (run_num > 1) and not baseline
+    random_ctx: list[dict] = []
+    random_tokens = 0
+    run_seed = bc.run_seed(random_seed, series_num, run_num)
 
-    if run_num == 1:
+    if condition == "random":
+        if random_target_tokens is None:
+            raise ValueError("random condition requires random_target_tokens")
+        random_ctx, random_tokens = bc.select_random_context(
+            bc.load_pool(), random_target_tokens, run_seed)
+
+    if run_num == 1 and not baseline:
         _clear_db()
         if inject_noise_n > 0:
             noise_injected = _inject_noise_concepts(inject_noise_n)
 
-    concepts_in_db = len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else _count_concepts()
+    # Baseline conditions never touch the knowledge store.
+    concepts_in_db = 0 if baseline else (
+        len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else _count_concepts())
 
     lore_label = f"Lore ON ({concepts_in_db} concepts)" if lore_active else "no Lore"
+    if baseline:
+        lore_label = f"condition={condition}" + (f" ({random_tokens} ctx tokens)" if random_ctx else "")
     model_name = LOCAL_MODEL if PROVIDER == "local" else MODEL
     print(f"\n{'='*60}\n  Run {run_num} — {lore_label}  |  {max_turns} turns  |  {model_name}\n{'='*60}")
 
@@ -1295,17 +1353,24 @@ def step_run(
     global _CURRENT_SESSION_ID, _RUN_SUBMITTED_IDS
     _CURRENT_SESSION_ID = f"benchmark-s{series_num}-r{run_num}"
     _RUN_SUBMITTED_IDS = []
+    _RUN_CONTEXT_TEXT.clear()
 
-    SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SESSION_FILE.write_text("[]")
+    if not baseline:
+        SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SESSION_FILE.write_text("[]")
     concepts_before = concepts_in_db
     gists_before = len(_SERIES_GIST_IDS) if _ACTIVE_BACKEND == "gists" else 0
 
-    system      = build_system_with_lore() if lore_active else build_system_no_lore()
+    if baseline:
+        system      = build_system_baseline(bc.format_context(random_ctx))
+        tools       = TOOLS_BASELINE
+        task_prompt = TASK_PROMPT_BASELINE
+    else:
+        system      = build_system_with_lore() if lore_active else build_system_no_lore()
+        tools       = TOOLS_WITH_LORE if lore_active else TOOLS_NO_LORE
+        task_prompt = TASK_PROMPT_WITH_LORE if lore_active else TASK_PROMPT_NO_LORE
     if PROVIDER == "local":
         system = LOCAL_SYSTEM_PREFIX + system
-    tools       = TOOLS_WITH_LORE if lore_active else TOOLS_NO_LORE
-    task_prompt = TASK_PROMPT_WITH_LORE if lore_active else TASK_PROMPT_NO_LORE
 
     workdir = Path(tempfile.mkdtemp(prefix=f"lore_stlgen_run{run_num}_"))
     _ALL_WORKDIRS.append(workdir)
@@ -1325,16 +1390,26 @@ def step_run(
     passed, test_out = run_tests(workdir)
 
     # Unified wrapup: rate used concepts and capture new ones in one call with session context.
-    w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose, messages)
+    if baseline:
+        w_in = w_out = w_turns = 0  # no capture or rating without Lore
+    else:
+        w_in, w_out, w_turns = run_wrapup_phase(run_num, verbose, messages)
     in_tok  += w_in
     out_tok += w_out
 
-    if _ACTIVE_BACKEND == "gists":
+    if baseline:
+        concepts_captured = 0
+    elif _ACTIVE_BACKEND == "gists":
         concepts_captured = len(_SERIES_GIST_IDS) - gists_before
     else:
         concepts_captured = _count_concepts() - concepts_before
 
+    # Context the agent was given: retrieved concepts (relevant) or the random dump.
+    context_tokens = random_tokens if condition == "random" else sum(
+        bc.estimate_tokens(t) for t in _RUN_CONTEXT_TEXT)
+
     result = {
+        "condition": condition,
         "run": run_num,
         "backend": _ACTIVE_BACKEND,
         "lore_active": lore_active,
@@ -1350,7 +1425,15 @@ def step_run(
         "task_submitted": submitted,
         "tests_passed": passed,
         "noise_injected": noise_injected,
+        "context_tokens": context_tokens,
     }
+    if condition == "random":
+        result.update({
+            "random_seed": run_seed,
+            "random_target_tokens": random_target_tokens,
+            "random_concepts": [c["name"] for c in random_ctx],
+            "token_tolerance": bc.TOKEN_TOLERANCE,
+        })
     _write_run_md(result, test_out, output_dir=output_dir)
     _print_summary(result)
     return result
@@ -1589,6 +1672,8 @@ def _write_run_md(r: dict, test_out: str, output_dir: Path | None = None) -> Non
         f"| Field | Value |\n|-------|-------|\n"
         f"| Date | {datetime.now().strftime('%Y-%m-%d %H:%M')} |\n"
         f"| Backend | {backend} |\n"
+        f"| Condition | {r.get('condition', 'agentlore')} |\n"
+        f"| Context tokens supplied | {r.get('context_tokens', 0)} |\n"
         f"| Model | {LOCAL_MODEL if PROVIDER == 'local' else MODEL} |\n"
         f"| Lore search active | {lore} |\n"
         f"| Web search active | yes |\n"
@@ -1673,8 +1758,31 @@ def _write_comparison(results: list[dict], output_dir: Path | None = None) -> No
 # Multi-series helpers
 # ---------------------------------------------------------------------------
 
-def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budget: int) -> None:
-    """Append a completed series to results/aggregate.json.
+def _append_run_log(series_dir: Path, series_num: int, run_num: int, res: dict, condition: str) -> None:
+    """Append one finished run to ``series_dir/runs.jsonl`` as soon as it completes.
+
+    Survives a crash mid-series, so partial series stay inspectable even though the
+    series only enters ``aggregate.json`` once complete.  Best effort: never raises.
+    """
+    try:
+        series_dir.mkdir(parents=True, exist_ok=True)
+        rec = {"series": series_num, "run": run_num, "condition": condition,
+               "logged": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+               **{k: v for k, v in res.items() if isinstance(v, (str, int, float, bool, type(None)))}}
+        with (series_dir / "runs.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec) + "\n")
+    except OSError as exc:  # pragma: no cover - disk full / permissions
+        print(f"  [WARN] could not write runs.jsonl: {exc}", flush=True)
+
+
+def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budget: int,
+                          condition: str = "agentlore",
+                          failed_runs: list[dict] | None = None) -> None:
+    """Append a completed series to the condition's ``aggregate.json``.
+
+    The file lives in ``bc.condition_results_dir(RESULTS_DIR, condition)`` — ``results/`` for
+    ``agentlore`` (legacy location), ``results/<condition>/`` otherwise.  The parity settings
+    (task hash, model, turn budget) are stored under ``settings``.
 
     Loads existing data if the file exists and appends the new series block.
     Top-level metadata (model, turn_budget, generated) is updated on each write.
@@ -1683,9 +1791,13 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
         series_id: 1-based series number.
         series_results: List of run result dicts for this series.
         turn_budget: The --max-turns value used for this run.
+        condition: Experimental condition the series belongs to.
+        failed_runs: Runs that crashed or returned no result (``run``, ``reason``); stored
+            under ``failed_runs`` so aborted runs are listed, never silently dropped.
     """
-    agg_path = RESULTS_DIR / "aggregate.json"
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    cond_dir = bc.condition_results_dir(RESULTS_DIR, condition)
+    agg_path = cond_dir / "aggregate.json"
+    cond_dir.mkdir(parents=True, exist_ok=True)
 
     # Load existing data or start fresh
     if agg_path.exists():
@@ -1701,7 +1813,9 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
     noise_injected_series = series_results[0].get("noise_injected", 0) if series_results else 0
     new_series = {
         "series_id": series_id,
+        "condition": condition,
         "noise_injected": noise_injected_series,
+        "failed_runs": list(failed_runs or []),
         "runs": [
             {
                 "run": r["run"],
@@ -1719,16 +1833,25 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
                 "task_submitted": r["task_submitted"],
                 "tests_passed": r["tests_passed"],
                 "noise_injected": r.get("noise_injected", 0),
+                "context_tokens": r.get("context_tokens", 0),
+                **({k: r[k] for k in ("random_seed", "random_target_tokens", "random_concepts",
+                                      "token_tolerance") if k in r}),
             }
             for r in series_results
         ],
     }
+    # A re-run of a series number supersedes the earlier entry instead of duplicating it,
+    # so resuming/re-running can never double-count a series in the analysis.
+    existing_series = [s for s in existing_series if s.get("series_id") != series_id]
     existing_series.append(new_series)
+    existing_series.sort(key=lambda s: s.get("series_id", 0))
 
     model_name = LOCAL_MODEL if PROVIDER == "local" else MODEL
     output = {
         "model": model_name,
         "turn_budget": turn_budget,
+        "condition": condition,
+        "settings": bc.settings_fingerprint(_TASK, model_name, turn_budget),
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "series": existing_series,
     }
@@ -1829,7 +1952,42 @@ def main() -> None:
                         help="Inject N wrong concepts (from noise_concepts.json) before the series "
                              "starts. Each is rated 3/5. Cleaned up at series end alongside real "
                              "concepts. Only meaningful with --series or --all.")
+    parser.add_argument("--condition", choices=list(bc.CONDITIONS), default="agentlore",
+                        help="agentlore = relevant knowledge (default); control = no Lore in any run; "
+                             "random = token-matched unrelated concepts (needs --match-series or "
+                             "--random-target-tokens).")
+    parser.add_argument("--random-seed", type=int, default=bc.DEFAULT_SEED, metavar="N",
+                        help="Base seed for random-context selection (recorded per run).")
+    parser.add_argument("--match-series", type=int, metavar="N",
+                        help="random condition: take per-run token targets from relevant series N "
+                             "(advances by one for each further series).")
+    parser.add_argument("--random-target-tokens", type=int, metavar="N",
+                        help="random condition: fixed token target for every run.")
     args = parser.parse_args()
+
+    if args.condition == "random" and args.match_series is None and args.random_target_tokens is None:
+        parser.error("--condition random needs --match-series or --random-target-tokens")
+
+    # Fail fast if settings differ from any condition already on disk.
+    model_name = LOCAL_MODEL if PROVIDER == "local" else MODEL
+    try:
+        bc.check_parity(
+            bc.settings_fingerprint(_TASK, model_name, args.max_turns),
+            bc.load_other_settings(RESULTS_DIR, args.condition),
+        )
+    except bc.ParityError as exc:
+        parser.error(str(exc))
+
+    cond = args.condition
+    cond_dir = bc.condition_results_dir(RESULTS_DIR, cond)
+
+    def _random_target(offset: int, run_num: int) -> int | None:
+        """Token target for a random-context run (None for other conditions)."""
+        if cond != "random":
+            return None
+        if args.random_target_tokens is not None:
+            return args.random_target_tokens
+        return bc.relevant_context_tokens(RESULTS_DIR, args.match_series + offset, run_num)
 
     global _ACTIVE_BACKEND, _gists_client_instance
     _ACTIVE_BACKEND = args.backend
@@ -1843,13 +2001,16 @@ def main() -> None:
         all_series_results: list[list[dict]] = []
 
         for series_num in range(start_series, start_series + n_series):
-            series_dir = RESULTS_DIR / f"series_{series_num:03d}"
+            series_dir = cond_dir / f"series_{series_num:03d}"
             print(f"\n{'#'*60}")
             print(f"  SERIES {series_num}/{start_series + n_series - 1}")
             print(f"  Output dir: {series_dir}")
             print(f"{'#'*60}")
 
             series_results: list[dict] = []
+            failed_runs: list[dict] = []
+            if not args.dry_run:
+                (series_dir / "runs.jsonl").unlink(missing_ok=True)  # restart of a partial series
             _series_noise_count: int = 0
             for run_num in range(1, 11):
                 try:
@@ -1862,16 +2023,26 @@ def main() -> None:
                         series_num=series_num,
                         inject_noise_n=args.inject_noise if run_num == 1 else 0,
                         noise_injected=_series_noise_count if run_num > 1 else 0,
+                        condition=cond,
+                        random_target_tokens=_random_target(series_num - start_series, run_num),
+                        random_seed=args.random_seed,
                     )
                 except Exception as _run_exc:
                     import traceback as _tb
                     print(f"\n[FATAL] S{series_num}R{run_num} crashed: {_run_exc}", flush=True)
                     print(_tb.format_exc(), flush=True)
+                    failed_runs.append({"run": run_num, "error_type": type(_run_exc).__name__,
+                                        "reason": str(_run_exc)})
                     res = None
+                else:
+                    if not res and not args.dry_run:
+                        failed_runs.append({"run": run_num, "error_type": "NoResult",
+                                            "reason": "step_run returned no result"})
                 if res:
                     if run_num == 1:
                         _series_noise_count = res.get("noise_injected", 0)
                     series_results.append(res)
+                    _append_run_log(series_dir, series_num, run_num, res, cond)
                 if args.inter_run_delay > 0 and run_num < 10 and not args.dry_run:
                     print(
                         f"\n  [inter-run] waiting {args.inter_run_delay}s for watcher "
@@ -1883,8 +2054,12 @@ def main() -> None:
             if len(series_results) >= 2:
                 _write_comparison(series_results, output_dir=series_dir)
 
-            if series_results and not args.dry_run:
-                _write_aggregate_json(series_num, series_results, args.max_turns)
+            if failed_runs:
+                print(f"\n  [WARN] S{series_num}: {len(failed_runs)} failed run(s): "
+                      f"{[f['run'] for f in failed_runs]}", flush=True)
+            if (series_results or failed_runs) and not args.dry_run:
+                _write_aggregate_json(series_num, series_results, args.max_turns,
+                                      condition=cond, failed_runs=failed_runs)
 
             passes = sum(1 for r in series_results if r.get("tests_passed"))
             print(f"\n@@SERIES_COMPLETE@@:{series_num}/{n_series}:passes={passes}/{len(series_results)}", flush=True)
@@ -1895,7 +2070,7 @@ def main() -> None:
             _print_series_summary(all_series_results)
 
         _cleanup_all_workdirs()
-        if _ACTIVE_BACKEND == "gists":
+        if _ACTIVE_BACKEND == "gists" and cond == "agentlore":
             _cleanup_series_gists()
 
     else:
@@ -1910,6 +2085,10 @@ def main() -> None:
                 max_turns=args.max_turns,
                 inject_noise_n=args.inject_noise if run_num == runs[0] else 0,
                 noise_injected=_run_noise_count if run_num != runs[0] else 0,
+                output_dir=cond_dir if cond != "agentlore" else None,
+                condition=cond,
+                random_target_tokens=_random_target(0, run_num),
+                random_seed=args.random_seed,
             )
             if res:
                 if run_num == runs[0]:
@@ -1924,13 +2103,13 @@ def main() -> None:
                 time.sleep(args.inter_run_delay)
 
         if len(results) >= 2:
-            _write_comparison(results)
+            _write_comparison(results, output_dir=cond_dir if cond != "agentlore" else None)
 
         _cleanup_all_workdirs()
         # Only wipe gists when the full series (--all) completes. A single
         # --run N invocation must leave gists in place so a subsequent
         # --run N+1 (separate process) can still search them.
-        if _ACTIVE_BACKEND == "gists" and args.all:
+        if _ACTIVE_BACKEND == "gists" and args.all and cond == "agentlore":
             _cleanup_series_gists()
 
 

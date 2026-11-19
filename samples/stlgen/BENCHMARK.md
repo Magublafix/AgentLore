@@ -42,6 +42,48 @@ The benchmark uses a **series × run** design with 10 series and 10 runs per ser
 
 **Model:** `unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M`, a quantized local LLM served via `llama-server` (llama.cpp's Anthropic-compatible endpoint).
 
+## Controlled Conditions (tooling added in Sprint 12)
+
+The 10-series results above compare run 1 (no Lore) with runs 2–10 (Lore on). Run number and
+knowledge are confounded there: later runs also benefit from simply having had more attempts. The
+runner now supports two additional conditions so the effects can be separated (`--condition`):
+
+| Condition | Report name | What the agent gets |
+|-----------|-------------|---------------------|
+| `agentlore` | relevant | The original design: search, capture and wrapup, fresh knowledge DB per series |
+| `control` | none | No AgentLore tools, concepts, capture or wrapup in any run — repeated attempts only |
+| `random` | random-context | No AgentLore tools; a seeded dump of **unrelated** concepts token-matched to the relevant context for the same series/run |
+
+Rules enforced by the runner:
+
+- Same task text, model and 40-turn budget in every condition. The task hash, model and turn budget
+  are stored under `settings` in each condition's `aggregate.json`; starting a condition whose
+  settings differ from results already on disk aborts before any run.
+- Results live in `results/` (relevant, legacy location), `results/control/` and `results/random/`,
+  each with `series_NNN/` directories and its own `aggregate.json`. AgentLore series start from a
+  fresh knowledge database; control and random series never touch the knowledge store.
+- Random-context selection draws from `benchmarks/random_pool.json` (24 concepts on topics such as
+  HTTP retries, SQL indexing, deployment). Anything mentioning a task keyword (STL, mesh, font,
+  packaging, CLI, pytest …) is excluded in code. Tolerance is ±10 % of the target, with tokens
+  estimated as `ceil(chars / 4)` for both sides. The per-run seed (derived from `--random-seed`,
+  series and run), the target, achieved tokens and the concept names are recorded in the run result.
+- The relevant condition now records `context_tokens` (size of everything `search_concepts`
+  returned in the run). Series run before Sprint 12 do not have it, so a random-context series must
+  either match a newly run relevant series (`--match-series N`) or use a fixed
+  `--random-target-tokens`.
+- **Feasibility limit:** the pool totals about 2,300 estimated tokens. If a run's relevant context is
+  larger, selection fails with an explicit `InfeasibleMatch` error rather than silently using a
+  smaller dump; the pool must then be extended before that run can be matched.
+
+Analysis is in `benchmarks/bench_stats.py` (mixed-effects logistic regression with series as a
+random effect, plus a within-series permutation test and series-level bootstrap CIs). It states its
+assumptions in its output and does not treat runs in a series as independent. Baseline on the
+existing 10 series (179 runs): `python benchmarks/bench_stats.py` gives a run-number odds ratio of
+about 1.14 per run (95% CI roughly 1.02–1.28, between-series SD ≈ 1.4) and a within-series slope of
+about +2.6 percentage points per run (bootstrap CI above zero). That is an association with run
+number inside the AgentLore condition only; without the control and random-context series it does
+not separate knowledge from practice, and no causal claim is made here.
+
 ## Results
 
 ### Series-Level Pass Rates

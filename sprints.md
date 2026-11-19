@@ -793,17 +793,19 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 
 ## Sprint 12 — 2026-12-07 → 2026-12-18
 **Goal:** Build the benchmark tooling needed for a controlled evaluation: control condition, matched random-context condition and statistical analysis (#18).
-**Status:** planned
+**Status:** done
 
 ### Stories
 | ID | Title | Agent | Status | Tokens |
 |----|-------|-------|--------|--------|
-| LORE-050 | Benchmark runner: repeated-attempt control condition | general-purpose | planned | — |
-| LORE-051 | Benchmark runner: matched random-context condition | ai-data-specialist | planned | — |
-| LORE-052 | Statistical analysis: mixed-effects logistic and permutation test | ai-data-specialist | planned | — |
-| LORE-053 | Cross-task knowledge-transfer experiment design | general-purpose | planned | — |
+| LORE-050 | Benchmark runner: repeated-attempt control condition | general-purpose | done | — |
+| LORE-051 | Benchmark runner: matched random-context condition | ai-data-specialist | done | — |
+| LORE-052 | Statistical analysis: mixed-effects logistic and permutation test | ai-data-specialist | done | — |
+| LORE-053 | Cross-task knowledge-transfer experiment design | general-purpose | done | — |
 
 ### Notes
+- Delivered; `test-suite-architect` approved (10 main()-level tests added covering per-series DB reset, parity for all conditions, seed reproducibility, match-series tolerance). Token recording (`/cost`) is still outstanding, so the "tokens recorded" DoD boxes are left unchecked deliberately. No live LLM series were run; the runner paths are covered with a faked agent loop.
+- Carry-over to LORE-054: in `run.py` main(), an `InfeasibleMatch` raised mid-series is caught by the generic crash handler and the run is dropped; LORE-054 requires failed runs to be listed, so fix this there.
 - Both conditions must use the same task, model, 40-turn budget and equivalent starting state; AgentLore series start from a fresh knowledge database.
 - LORE-050 and LORE-051 share runner changes — land LORE-050 first. LORE-052 can proceed in parallel against the existing 10-series results. LORE-053 is design-only; implementation is tracked as a separate story if approved.
 - DoD Gates 3 and 4 waived for benchmark-only stories that change no Lore infrastructure, as in Sprint 4.
@@ -824,16 +826,16 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **So that** I can separate the effect of knowledge from the effect of repeated attempts
 
 **Acceptance Criteria:**
-- [ ] Runner supports a `control` condition: no AgentLore tools or concepts in any run of the series, all other settings identical
-- [ ] Task, model and 40-turn budget are enforced to match across conditions; a mismatch fails fast
-- [ ] Results are written per condition and per independent series, each AgentLore series with a fresh knowledge database
-- [ ] Unit tests cover condition selection and the settings-parity check
+- [x] Runner supports a `control` condition: no AgentLore tools or concepts in any run of the series, all other settings identical
+- [x] Task, model and 40-turn budget are enforced to match across conditions; a mismatch fails fast
+- [x] Results are written per condition and per independent series, each AgentLore series with a fresh knowledge database
+- [x] Unit tests cover condition selection and the settings-parity check
 
 **DoD:**
 - [ ] AC above met — tokens recorded
-- [ ] Tests written + test-suite-architect approved
-- [ ] docs/architecture.md, PROJECT.md, docstrings updated
-- [ ] pytest --cov=lore --cov-fail-under=80 passes
+- [x] Tests written + test-suite-architect approved
+- [x] docs/architecture.md, PROJECT.md, docstrings updated
+- [x] pytest --cov=lore --cov-fail-under=80 passes
 
 ---
 
@@ -850,16 +852,16 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **So that** I can tell relevant knowledge apart from extra prompt context
 
 **Acceptance Criteria:**
-- [ ] Condition supplies a token-matched dump of unrelated concepts (tolerance documented, e.g. ±10%)
-- [ ] Unrelated concepts are drawn from a documented pool excluding any concept relevant to the task
-- [ ] Selection is seeded and reproducible; the seed and token counts are recorded in each run's results
-- [ ] Runner reports the three conditions (relevant, random-context, none) separately; if infeasible, the reason is documented in BENCHMARK.md
+- [x] Condition supplies a token-matched dump of unrelated concepts (tolerance documented, e.g. ±10%)
+- [x] Unrelated concepts are drawn from a documented pool excluding any concept relevant to the task
+- [x] Selection is seeded and reproducible; the seed and token counts are recorded in each run's results
+- [x] Runner reports the three conditions (relevant, random-context, none) separately; if infeasible, the reason is documented in BENCHMARK.md
 
 **DoD:**
 - [ ] AC above met — tokens recorded
-- [ ] Tests written + test-suite-architect approved
-- [ ] docs/architecture.md, PROJECT.md, docstrings updated
-- [ ] pytest --cov=lore --cov-fail-under=80 passes
+- [x] Tests written + test-suite-architect approved
+- [x] docs/architecture.md, PROJECT.md, docstrings updated
+- [x] pytest --cov=lore --cov-fail-under=80 passes
 
 ---
 
@@ -876,16 +878,16 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **So that** conclusions account for dependence between runs within a series
 
 **Acceptance Criteria:**
-- [ ] Mixed-effects logistic regression of pass/fail on run number and condition, with series as a random effect
-- [ ] Permutation test of the run-number/success relationship that permutes within series
-- [ ] Applied to the existing 10-series data as a baseline and reported with confidence intervals
-- [ ] Output states model assumptions and does not treat runs as independent observations; tests use synthetic data with a known effect
+- [x] Mixed-effects logistic regression of pass/fail on run number and condition, with series as a random effect
+- [x] Permutation test of the run-number/success relationship that permutes within series
+- [x] Applied to the existing 10-series data as a baseline and reported with confidence intervals
+- [x] Output states model assumptions and does not treat runs as independent observations; tests use synthetic data with a known effect
 
 **DoD:**
 - [ ] AC above met — tokens recorded
-- [ ] Tests written + test-suite-architect approved
-- [ ] docs/architecture.md, PROJECT.md, docstrings updated
-- [ ] pytest --cov=lore --cov-fail-under=80 passes
+- [x] Tests written + test-suite-architect approved
+- [x] docs/architecture.md, PROJECT.md, docstrings updated
+- [x] pytest --cov=lore --cov-fail-under=80 passes
 
 ---
 
@@ -902,16 +904,16 @@ Anything relevant to this sprint: blockers, scope changes, deferred items.
 **So that** implementation can be scheduled with a clear protocol
 
 **Acceptance Criteria:**
-- [ ] Design doc in `samples/` chooses the transfer task (evaluating the existing `radev` CLI against a new image-processing CLI) with scope and a test suite outline
-- [ ] Defines conditions: transferred knowledge, no knowledge, and (if feasible) random context
-- [ ] Names the general concepts expected to transfer (input validation, error handling, modular design) and how transfer is measured
-- [ ] Implementation stories are added to the backlog; no experiment is run in this story
+- [x] Design doc in `samples/` chooses the transfer task (evaluating the existing `radev` CLI against a new image-processing CLI) with scope and a test suite outline
+- [x] Defines conditions: transferred knowledge, no knowledge, and (if feasible) random context
+- [x] Names the general concepts expected to transfer (input validation, error handling, modular design) and how transfer is measured
+- [x] Implementation stories are added to the backlog; no experiment is run in this story
 
 **DoD:**
 - [ ] AC above met — tokens recorded
-- [ ] Tests written + test-suite-architect approved
-- [ ] docs/architecture.md, PROJECT.md, docstrings updated
-- [ ] pytest --cov=lore --cov-fail-under=80 passes
+- [x] Tests written + test-suite-architect approved
+- [x] docs/architecture.md, PROJECT.md, docstrings updated
+- [x] pytest --cov=lore --cov-fail-under=80 passes
 
 ---
 

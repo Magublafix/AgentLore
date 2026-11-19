@@ -179,3 +179,83 @@ The 10-series run established clear directional signals (R1 10% vs Lore-ON 60%, 
 
 ---
 
+
+---
+
+## [LORE-057] `imgtool` transfer target task: spec, fixtures and tests
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** M
+**Agent:** general-purpose
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+
+
+**As a** Lore developer
+**I want to be able to** have a fixed `imgtool` CLI task with a pytest suite and image fixtures
+**So that** the transfer experiment has a target task of known difficulty
+
+**Acceptance Criteria:**
+- [ ] `samples/imgtool/` with README, fixtures and ~14 tests as outlined in `samples/TRANSFER_EXPERIMENT.md`
+- [ ] A reference solution passes every test (kept out of the agent's workdir)
+- [ ] Task prompt written in the same shape as the stlgen `_TASK`, with the same 40-turn budget
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-058] Runner: frozen read-only knowledge snapshot and concept tagging
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** M
+**Agent:** ai-data-specialist
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+**Depends on:** LORE-050, LORE-051, LORE-057
+
+
+**As a** Lore developer
+**I want to be able to** run a series against a frozen snapshot of concepts captured on another task
+**So that** the transfer condition can be tested without within-task accumulation
+
+**Acceptance Criteria:**
+- [ ] Snapshot exported from a completed series; its id and hash are recorded in each run's results
+- [ ] Snapshot is read-only for the series: captures and ratings do not modify it
+- [ ] Concepts are tagged general or domain-specific before the experiment, and retrieval logs record the tag per retrieved concept
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
+
+---
+
+## [LORE-059] Run and analyse the cross-task transfer experiment
+
+**Phase:** 5
+**Priority:** medium
+**Effort:** L
+**Agent:** general-purpose
+**Phase item:** `PROJECT.md` §Development Phases > Phase 5 > Benchmark controls and knowledge-transfer evaluation
+**Depends on:** LORE-052, LORE-057, LORE-058
+
+
+**As a** Lore developer
+**I want to be able to** run transfer, none and random-context series on `imgtool` and analyse them
+**So that** I know whether captured concepts transfer to a similar task
+
+**Acceptance Criteria:**
+- [ ] Series count per condition chosen from a power estimate before running
+- [ ] Results analysed with the LORE-052 methods, with the pre-registered interpretation in `samples/TRANSFER_EXPERIMENT.md`
+- [ ] Findings written without overstating causal evidence; limitations listed
+
+**DoD:**
+- [ ] AC above met — tokens recorded
+- [ ] Tests written + test-suite-architect approved
+- [ ] docs/architecture.md, PROJECT.md, docstrings updated
+- [ ] pytest --cov=lore --cov-fail-under=80 passes
