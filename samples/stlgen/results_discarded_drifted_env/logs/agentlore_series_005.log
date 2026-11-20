@@ -1,0 +1,183 @@
+
+=== attempt 1 2026-11-20 03:28:29 ===
+
+############################################################
+  SERIES 5/5
+  Output dir: /workspace/AgentLore/samples/stlgen/results/series_005
+############################################################
+  [reset] concept DB cleared — 26 concepts removed.
+  [reset] Qdrant collection wiped — will recreate on first index.
+
+============================================================
+  Run 1 — no Lore  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run1_dopc_jxe
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run1.md
+
+Run 1: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=394.4s
+
+============================================================
+  Run 2 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run2_075lshy4
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run2.md
+
+Run 2: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 3 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run3_7wlrlh4k
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run3.md
+
+Run 3: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 4 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run4_g_s_x18f
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run4.md
+
+Run 4: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 5 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run5_xbsmvi4o
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run5.md
+
+Run 5: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 6 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run6_c16csi7a
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run6.md
+
+Run 6: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 7 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run7_gvofs9dr
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run7.md
+
+Run 7: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 8 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run8_8pgghc2c
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run8.md
+
+Run 8: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 9 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run9_uqnnaic3
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run9.md
+
+Run 9: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 10 — Lore ON (0 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run10_6vfjs_6m
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 1 messages)...
+  [wrapup] [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+  [wrapup] done — 0 total concepts in DB (0 turns, 0 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_005/run10.md
+
+Run 10: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+Comparison → /workspace/AgentLore/samples/stlgen/results/series_005/comparison.md
+
+Aggregate → /workspace/AgentLore/samples/stlgen/results/aggregate.json
+
+@@SERIES_COMPLETE@@:5/1:passes=0/10
+
+=================================================================
+  Multi-Series Summary (1 series x 10 runs)
+=================================================================
+ Run | Pass rate | Avg turns (pass) | Avg tokens | Avg elapsed
+-----+-----------+------------------+------------+------------
+   1 |        0% |                — |          0 |        6.6m
+   2 |        0% |                — |          0 |        6.6m
+   3 |        0% |                — |          0 |        6.6m
+   4 |        0% |                — |          0 |        6.6m
+   5 |        0% |                — |          0 |        6.6m
+   6 |        0% |                — |          0 |        6.6m
+   7 |        0% |                — |          0 |        6.6m
+   8 |        0% |                — |          0 |        6.6m
+   9 |        0% |                — |          0 |        6.6m
+  10 |        0% |                — |          0 |        6.6m
+
+=== series discarded: no run made a model turn (check LLM endpoint/key) ===

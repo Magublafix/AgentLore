@@ -1,0 +1,2 @@
+{"condition": "agentlore", "series": 2, "attempt": 1, "added": ["setuptools"], "removed": [], "changed": ["trimesh: 5.2.1 -> 4.12.2"]}
+{"condition": "agentlore", "series": 3, "attempt": 1, "added": [], "removed": [], "changed": ["opencv-python-headless: 5.1.0.95 -> 4.10.0.84"]}

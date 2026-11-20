@@ -1,0 +1,12 @@
+{
+  "model": "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+  "turn_budget": 40,
+  "condition": "random",
+  "settings": {
+    "task_sha256": "645653dd65a098c625c6af3a8e815845e53e6adfb2cc3179b57bb7b3da5ec5da",
+    "model": "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+    "turn_budget": 40
+  },
+  "generated": "2026-11-20 04:46 UTC",
+  "series": []
+}

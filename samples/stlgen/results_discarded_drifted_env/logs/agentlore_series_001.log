@@ -1,0 +1,626 @@
+
+=== attempt 1 2026-11-19 16:28:02 ===
+
+############################################################
+  SERIES 1/1
+  Output dir: /workspace/AgentLore/samples/stlgen/results/series_001
+############################################################
+  [reset] concept DB cleared — 13 concepts removed.
+  [reset] Qdrant collection wiped — will recreate on first index.
+
+============================================================
+  Run 1 — no Lore  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run1_9sjwxeit
+  turn 01/40 | finish=tool_use | in=2628 out=34 | tools=bash
+  turn 02/40 | finish=tool_use | in=1048 out=40 | tools=bash
+  turn 03/40 | finish=tool_use | in=1081 out=46 | tools=bash
+  turn 04/40 | finish=tool_use | in=991 out=60 | tools=bash
+  turn 05/40 | finish=tool_use | in=1053 out=48 | tools=bash
+  turn 06/40 | finish=tool_use | in=1017 out=48 | tools=bash
+  turn 07/40 | finish=tool_use | in=1013 out=62 | tools=bash
+  turn 08/40 | finish=tool_use | in=40 out=43 | tools=bash
+  turn 09/40 | finish=tool_use | in=23 out=40 | tools=bash
+  turn 10/40 | finish=tool_use | in=24 out=39 | tools=bash
+  turn 11/40 | finish=tool_use | in=23 out=45 | tools=bash
+  turn 12/40 | finish=tool_use | in=105 out=220 | tools=write_file
+  turn 13/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 14/40 | finish=tool_use | in=21 out=74 | tools=write_file
+  turn 15/40 | finish=tool_use | in=32 out=77 | tools=bash
+  turn 16/40 | finish=tool_use | in=57 out=44 | tools=bash
+  turn 17/40 | finish=tool_use | in=226 out=192 | tools=bash
+  turn 18/40 | finish=tool_use | in=882 out=368 | tools=bash
+  turn 19/40 | finish=tool_use | in=1442 out=43 | tools=bash
+  turn 20/40 | finish=tool_use | in=23 out=350 | tools=bash
+  turn 21/40 | finish=tool_use | in=105 out=470 | tools=bash
+  turn 22/40 | finish=tool_use | in=77 out=656 | tools=bash
+  turn 23/40 | finish=tool_use | in=711 out=727 | tools=bash
+  turn 24/40 | finish=tool_use | in=72 out=685 | tools=bash
+  turn 25/40 | finish=tool_use | in=106 out=760 | tools=bash
+  turn 26/40 | finish=tool_use | in=171 out=640 | tools=bash
+  turn 27/40 | finish=tool_use | in=154 out=1161 | tools=bash
+  turn 28/40 | finish=tool_use | in=289 out=1151 | tools=bash
+  turn 29/40 | finish=tool_use | in=399 out=1079 | tools=bash
+  turn 30/40 | finish=tool_use | in=265 out=843 | tools=bash
+  turn 31/40 | finish=tool_use | in=324 out=863 | tools=bash
+  turn 32/40 | finish=tool_use | in=705 out=617 | tools=bash
+  turn 33/40 | finish=tool_use | in=834 out=1053 | tools=bash
+  turn 34/40 | finish=tool_use | in=346 out=117 | tools=bash
+  turn 35/40 | finish=tool_use | in=508 out=48 | tools=bash
+  turn 36/40 | finish=tool_use | in=662 out=980 | tools=bash
+  turn 37/40 | finish=tool_use | in=284 out=972 | tools=bash
+  turn 38/40 | finish=tool_use | in=224 out=879 | tools=bash
+  turn 39/40 | finish=tool_use | in=1061 out=1093 | tools=bash
+  turn 40/40 | finish=tool_use | in=70 out=51 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=21058 out=280 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=tool_use | in=70 out=259 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=tool_use | in=70 out=273 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=70 out=259 | tools=submit_concept
+  [wrapup] turn 05/30 | finish=tool_use | in=73 out=238 | tools=submit_concept
+  [wrapup] turn 06/30 | finish=tool_use | in=67 out=236 | tools=submit_concept
+  [wrapup] turn 07/30 | finish=tool_use | in=70 out=224 | tools=submit_concept
+  [wrapup] turn 08/30 | finish=tool_use | in=74 out=229 | tools=submit_concept
+  [wrapup] turn 09/30 | finish=tool_use | in=68 out=214 | tools=submit_concept
+  [wrapup] [concept cap reached: 9/9 submitted — injecting finish_wrapup prompt]
+  [wrapup] turn 10/30 | finish=tool_use | in=2889 out=124 | tools=finish_wrapup
+  [wrapup] done — 9 total concepts in DB (10 turns, 26,845 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run1.md
+
+Run 1: turns=40/40  tokens=62,720  tests=PASS  submitted=✗  concepts+=9  elapsed=965.1s
+
+============================================================
+  Run 2 — Lore ON (9 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run2_t63delpc
+  turn 01/40 | finish=tool_use | in=3448 out=52 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=64 | tools=read_file
+  turn 03/40 | finish=tool_use | in=3933 out=202 | tools=write_file
+  turn 04/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 05/40 | finish=tool_use | in=21 out=61 | tools=write_file
+  turn 06/40 | finish=tool_use | in=32 out=1895 | tools=write_file
+  turn 07/40 | finish=tool_use | in=32 out=38 | tools=bash
+  turn 08/40 | finish=tool_use | in=96 out=43 | tools=bash
+  turn 09/40 | finish=tool_use | in=295 out=43 | tools=bash
+  turn 10/40 | finish=tool_use | in=252 out=65 | tools=bash
+  turn 11/40 | finish=tool_use | in=23 out=58 | tools=bash
+  turn 12/40 | finish=tool_use | in=36 out=59 | tools=bash
+  turn 13/40 | finish=tool_use | in=177 out=77 | tools=bash
+  turn 14/40 | finish=tool_use | in=216 out=2131 | tools=write_file
+  turn 15/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 16/40 | finish=tool_use | in=60 out=43 | tools=bash
+  turn 17/40 | finish=tool_use | in=187 out=81 | tools=bash
+  turn 18/40 | finish=tool_use | in=31 out=79 | tools=bash
+  turn 19/40 | finish=tool_use | in=37 out=72 | tools=bash
+  turn 20/40 | finish=tool_use | in=25 out=69 | tools=bash
+  turn 21/40 | finish=tool_use | in=23 out=58 | tools=bash
+  turn 22/40 | finish=tool_use | in=19 out=1897 | tools=write_file
+  turn 23/40 | finish=tool_use | in=32 out=61 | tools=bash
+  turn 24/40 | finish=tool_use | in=71 out=40 | tools=bash
+  turn 25/40 | finish=tool_use | in=71 out=66 | tools=bash
+  turn 26/40 | finish=tool_use | in=1083 out=45 | tools=bash
+  turn 27/40 | finish=tool_use | in=780 out=116 | tools=bash
+  turn 28/40 | finish=tool_use | in=30 out=117 | tools=bash
+  turn 29/40 | finish=tool_use | in=35 out=457 | tools=bash
+  turn 30/40 | finish=tool_use | in=71 out=354 | tools=bash
+  turn 31/40 | finish=tool_use | in=46 out=512 | tools=bash
+  turn 32/40 | finish=tool_use | in=71 out=534 | tools=bash
+  turn 33/40 | finish=tool_use | in=268 out=461 | tools=bash
+  turn 34/40 | finish=tool_use | in=109 out=512 | tools=bash
+  turn 35/40 | finish=tool_use | in=58 out=1491 | tools=write_file
+  turn 36/40 | finish=tool_use | in=32 out=61 | tools=bash
+  turn 37/40 | finish=tool_use | in=71 out=44 | tools=bash
+  turn 38/40 | finish=tool_use | in=28 out=54 | tools=bash
+  turn 39/40 | finish=tool_use | in=521 out=433 | tools=bash
+  turn 40/40 | finish=tool_use | in=222 out=1139 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=max_tokens | in=12183 out=8192 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=max_tokens | in=416 out=8192 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=tool_use | in=87 out=227 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=303 out=229 | tools=submit_concept
+  [wrapup] turn 05/30 | finish=tool_use | in=70 out=209 | tools=submit_concept
+  [wrapup] turn 06/30 | finish=tool_use | in=71 out=148 | tools=finish_wrapup
+  [wrapup] done — 12 total concepts in DB (6 turns, 30,327 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run2.md
+
+Run 2: turns=40/40  tokens=56,611  tests=FAIL  submitted=✗  concepts+=3  elapsed=756.8s
+
+============================================================
+  Run 3 — Lore ON (12 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run3_paivbkxj
+  turn 01/40 | finish=tool_use | in=3448 out=28 | tools=bash
+  turn 02/40 | finish=tool_use | in=105 out=34 | tools=bash
+  turn 03/40 | finish=tool_use | in=1048 out=51 | tools=search_concepts
+  turn 04/40 | finish=tool_use | in=23 out=41 | tools=bash
+  turn 05/40 | finish=tool_use | in=40 out=33 | tools=bash
+  turn 06/40 | finish=tool_use | in=31 out=42 | tools=bash
+  turn 07/40 | finish=tool_use | in=260 out=44 | tools=bash
+  turn 08/40 | finish=tool_use | in=226 out=40 | tools=bash
+  turn 09/40 | finish=tool_use | in=694 out=47 | tools=bash
+  turn 10/40 | finish=tool_use | in=164 out=114 | tools=bash
+  turn 11/40 | finish=tool_use | in=21 out=199 | tools=write_file
+  turn 12/40 | finish=tool_use | in=29 out=61 | tools=write_file
+  turn 13/40 | finish=tool_use | in=32 out=5080 | tools=write_file
+  turn 14/40 | finish=tool_use | in=5139 out=39 | tools=bash
+  turn 15/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 16/40 | finish=tool_use | in=537 out=43 | tools=bash
+  turn 17/40 | finish=tool_use | in=25 out=76 | tools=bash
+  turn 18/40 | finish=tool_use | in=34 out=64 | tools=bash
+  turn 19/40 | finish=tool_use | in=1122 out=51 | tools=bash
+  turn 20/40 | finish=tool_use | in=505 out=2222 | tools=write_file
+  turn 21/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 22/40 | finish=tool_use | in=85 out=56 | tools=bash
+  turn 23/40 | finish=tool_use | in=129 out=47 | tools=bash
+  turn 24/40 | finish=tool_use | in=194 out=42 | tools=bash
+  turn 25/40 | finish=tool_use | in=60 out=56 | tools=bash
+  turn 26/40 | finish=tool_use | in=129 out=44 | tools=bash
+  turn 27/40 | finish=tool_use | in=93 out=56 | tools=bash
+  turn 28/40 | finish=tool_use | in=21 out=42 | tools=bash
+  turn 29/40 | finish=tool_use | in=60 out=56 | tools=bash
+  turn 30/40 | finish=tool_use | in=131 out=2174 | tools=write_file
+  turn 31/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 32/40 | finish=tool_use | in=60 out=56 | tools=bash
+  turn 33/40 | finish=tool_use | in=43 out=44 | tools=bash
+  turn 34/40 | finish=tool_use | in=102 out=46 | tools=bash
+  turn 35/40 | finish=tool_use | in=97 out=44 | tools=bash
+  turn 36/40 | finish=tool_use | in=73 out=70 | tools=bash
+  turn 37/40 | finish=tool_use | in=209 out=43 | tools=bash
+  turn 38/40 | finish=tool_use | in=109 out=43 | tools=bash
+  turn 39/40 | finish=tool_use | in=28 out=55 | tools=bash
+  turn 40/40 | finish=tool_use | in=70 out=65 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=7292 out=317 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=tool_use | in=420 out=287 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=tool_use | in=73 out=255 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=69 out=238 | tools=submit_concept
+  [wrapup] turn 05/30 | finish=tool_use | in=69 out=230 | tools=submit_concept
+  [wrapup] turn 06/30 | finish=tool_use | in=70 out=294 | tools=submit_concept
+  [wrapup] turn 07/30 | finish=tool_use | in=70 out=216 | tools=submit_concept
+  [wrapup] turn 08/30 | finish=tool_use | in=67 out=222 | tools=submit_concept
+  [wrapup] turn 09/30 | finish=tool_use | in=72 out=266 | tools=submit_concept
+  [wrapup] [concept cap reached: 9/9 submitted — injecting finish_wrapup prompt]
+  [wrapup] turn 10/30 | finish=tool_use | in=2970 out=122 | tools=finish_wrapup
+  [wrapup] done — 21 total concepts in DB (10 turns, 13,619 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run3.md
+
+Run 3: turns=40/40  tokens=40,600  tests=FAIL  submitted=✗  concepts+=9  elapsed=650.3s
+
+============================================================
+  Run 4 — Lore ON (21 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run4_f6h4nfps
+  turn 01/40 | finish=tool_use | in=3448 out=34 | tools=bash
+  turn 02/40 | finish=tool_use | in=1048 out=40 | tools=bash
+  turn 03/40 | finish=tool_use | in=1143 out=48 | tools=bash
+  turn 04/40 | finish=tool_use | in=1018 out=40 | tools=bash
+  turn 05/40 | finish=tool_use | in=1032 out=66 | tools=search_concepts
+  turn 06/40 | finish=tool_use | in=23 out=28 | tools=bash
+  turn 07/40 | finish=tool_use | in=105 out=41 | tools=bash
+  turn 08/40 | finish=tool_use | in=40 out=42 | tools=bash
+  turn 09/40 | finish=tool_use | in=260 out=41 | tools=bash
+  turn 10/40 | finish=tool_use | in=21 out=39 | tools=bash
+  turn 11/40 | finish=tool_use | in=23 out=51 | tools=bash
+  turn 12/40 | finish=tool_use | in=165 out=43 | tools=bash
+  turn 13/40 | finish=tool_use | in=226 out=55 | tools=bash
+  turn 14/40 | finish=tool_use | in=216 out=43 | tools=bash
+  turn 15/40 | finish=tool_use | in=23 out=49 | tools=bash
+  turn 16/40 | finish=tool_use | in=315 out=51 | tools=bash
+  turn 17/40 | finish=tool_use | in=518 out=48 | tools=bash
+  turn 18/40 | finish=tool_use | in=22 out=44 | tools=bash
+  turn 19/40 | finish=tool_use | in=57 out=49 | tools=bash
+  turn 20/40 | finish=tool_use | in=21 out=74 | tools=bash
+  turn 21/40 | finish=tool_use | in=23 out=64 | tools=bash
+  turn 22/40 | finish=tool_use | in=45 out=46 | tools=bash
+  turn 23/40 | finish=tool_use | in=22 out=44 | tools=bash
+  turn 24/40 | finish=tool_use | in=21 out=117 | tools=bash
+  turn 25/40 | finish=tool_use | in=61 out=129 | tools=bash
+  turn 26/40 | finish=tool_use | in=21 out=153 | tools=bash
+  turn 27/40 | finish=tool_use | in=567 out=267 | tools=bash
+  turn 28/40 | finish=tool_use | in=21 out=32 | tools=bash
+  turn 29/40 | finish=tool_use | in=21 out=71 | tools=bash
+  turn 30/40 | finish=tool_use | in=21 out=460 | tools=bash
+  turn 31/40 | finish=tool_use | in=21 out=4146 | tools=bash
+  turn 32/40 | finish=tool_use | in=21 out=39 | tools=bash
+  turn 33/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 34/40 | finish=tool_use | in=565 out=50 | tools=bash
+  turn 35/40 | finish=tool_use | in=39 out=127 | tools=bash
+  turn 36/40 | finish=tool_use | in=144 out=586 | tools=bash
+  turn 37/40 | finish=tool_use | in=138 out=2127 | tools=bash
+  turn 38/40 | finish=tool_use | in=21 out=50 | tools=bash
+  turn 39/40 | finish=tool_use | in=48 out=103 | tools=bash
+  turn 40/40 | finish=tool_use | in=76 out=136 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=13698 out=145 | tools=finish_wrapup
+  [wrapup] done — 21 total concepts in DB (1 turns, 13,843 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run4.md
+
+Run 4: turns=40/40  tokens=35,445  tests=FAIL  submitted=✗  concepts+=0  elapsed=587.1s
+
+============================================================
+  Run 5 — Lore ON (21 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run5_213g4bu6
+  turn 01/40 | finish=tool_use | in=3448 out=52 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=54 | tools=read_file
+  turn 03/40 | finish=tool_use | in=3933 out=46 | tools=bash
+  turn 04/40 | finish=tool_use | in=105 out=44 | tools=bash
+  turn 05/40 | finish=tool_use | in=23 out=267 | tools=write_file
+  turn 06/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 07/40 | finish=tool_use | in=21 out=51 | tools=write_file
+  turn 08/40 | finish=tool_use | in=32 out=4069 | tools=write_file
+  turn 09/40 | finish=tool_use | in=33 out=55 | tools=bash
+  turn 10/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 11/40 | finish=tool_use | in=611 out=53 | tools=bash
+  turn 12/40 | finish=tool_use | in=44 out=2793 | tools=write_file
+  turn 13/40 | finish=tool_use | in=32 out=43 | tools=bash
+  turn 14/40 | finish=tool_use | in=39 out=56 | tools=bash
+  turn 15/40 | finish=tool_use | in=23 out=56 | tools=bash
+  turn 16/40 | finish=tool_use | in=23 out=72 | tools=bash
+  turn 17/40 | finish=tool_use | in=23 out=79 | tools=bash
+  turn 18/40 | finish=tool_use | in=40 out=80 | tools=bash
+  turn 19/40 | finish=tool_use | in=34 out=2759 | tools=write_file
+  turn 20/40 | finish=tool_use | in=32 out=43 | tools=bash
+  turn 21/40 | finish=tool_use | in=27 out=66 | tools=bash
+  turn 22/40 | finish=tool_use | in=46 out=70 | tools=bash
+  turn 23/40 | finish=tool_use | in=1160 out=2798 | tools=write_file
+  turn 24/40 | finish=tool_use | in=32 out=136 | tools=bash
+  turn 25/40 | finish=tool_use | in=67 out=55 | tools=bash
+  turn 26/40 | finish=tool_use | in=177 out=2319 | tools=write_file
+  turn 27/40 | finish=tool_use | in=32 out=43 | tools=bash
+  turn 28/40 | finish=tool_use | in=41 out=69 | tools=bash
+  turn 29/40 | finish=tool_use | in=78 out=2580 | tools=write_file
+  turn 30/40 | finish=tool_use | in=32 out=43 | tools=bash
+  turn 31/40 | finish=tool_use | in=122 out=66 | tools=bash
+  turn 32/40 | finish=tool_use | in=47 out=394 | tools=bash
+  turn 33/40 | finish=tool_use | in=50 out=2242 | tools=write_file
+  turn 34/40 | finish=tool_use | in=32 out=85 | tools=bash
+  turn 35/40 | finish=tool_use | in=65 out=1928 | tools=write_file
+  turn 36/40 | finish=tool_use | in=32 out=85 | tools=bash
+  turn 37/40 | finish=tool_use | in=138 out=911 | tools=bash
+  turn 38/40 | finish=tool_use | in=192 out=1205 | tools=bash
+  turn 39/40 | finish=tool_use | in=277 out=421 | tools=bash
+  turn 40/40 | finish=tool_use | in=361 out=752 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=17981 out=754 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=tool_use | in=876 out=318 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=tool_use | in=70 out=328 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=69 out=316 | tools=submit_concept
+  [wrapup] turn 05/30 | finish=tool_use | in=74 out=312 | tools=submit_concept
+  [wrapup] turn 06/30 | finish=tool_use | in=64 out=351 | tools=submit_concept
+  [wrapup] turn 07/30 | finish=tool_use | in=73 out=311 | tools=submit_concept
+  [wrapup] turn 08/30 | finish=tool_use | in=71 out=314 | tools=submit_concept
+  [wrapup] turn 09/30 | finish=tool_use | in=67 out=343 | tools=submit_concept
+  [wrapup] [concept cap reached: 9/9 submitted — injecting finish_wrapup prompt]
+  [wrapup] turn 10/30 | finish=tool_use | in=4011 out=144 | tools=finish_wrapup
+  [wrapup] done — 30 total concepts in DB (10 turns, 26,847 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run5.md
+
+Run 5: turns=40/40  tokens=65,684  tests=FAIL  submitted=✗  concepts+=9  elapsed=1381.0s
+
+============================================================
+  Run 6 — Lore ON (30 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run6_ordszw9u
+  turn 01/40 | finish=tool_use | in=3448 out=50 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=28 | tools=bash
+  turn 03/40 | finish=tool_use | in=105 out=34 | tools=bash
+  turn 04/40 | finish=tool_use | in=1048 out=40 | tools=bash
+  turn 05/40 | finish=tool_use | in=1143 out=40 | tools=bash
+  turn 06/40 | finish=tool_use | in=1033 out=285 | tools=write_file
+  turn 07/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 08/40 | finish=tool_use | in=21 out=67 | tools=write_file
+  turn 09/40 | finish=tool_use | in=32 out=1954 | tools=write_file
+  turn 10/40 | finish=tool_use | in=32 out=39 | tools=bash
+  turn 11/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 12/40 | finish=tool_use | in=538 out=43 | tools=bash
+  turn 13/40 | finish=tool_use | in=137 out=1958 | tools=write_file
+  turn 14/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 15/40 | finish=tool_use | in=85 out=43 | tools=bash
+  turn 16/40 | finish=tool_use | in=24 out=69 | tools=bash
+  turn 17/40 | finish=tool_use | in=40 out=70 | tools=bash
+  turn 18/40 | finish=tool_use | in=69 out=59 | tools=bash
+  turn 19/40 | finish=tool_use | in=30 out=52 | tools=bash
+  turn 20/40 | finish=tool_use | in=175 out=47 | tools=bash
+  turn 21/40 | finish=tool_use | in=801 out=48 | tools=bash
+  turn 22/40 | finish=tool_use | in=170 out=48 | tools=bash
+  turn 23/40 | finish=tool_use | in=216 out=48 | tools=bash
+  turn 24/40 | finish=tool_use | in=169 out=50 | tools=bash
+  turn 25/40 | finish=tool_use | in=1054 out=1772 | tools=write_file
+  turn 26/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 27/40 | finish=tool_use | in=60 out=43 | tools=bash
+  turn 28/40 | finish=tool_use | in=41 out=83 | tools=bash
+  turn 29/40 | finish=tool_use | in=19 out=66 | tools=bash
+  turn 30/40 | finish=tool_use | in=19 out=63 | tools=bash
+  turn 31/40 | finish=tool_use | in=42 out=72 | tools=bash
+  turn 32/40 | finish=tool_use | in=229 out=91 | tools=bash
+  turn 33/40 | finish=tool_use | in=27 out=65 | tools=bash
+  turn 34/40 | finish=tool_use | in=66 out=55 | tools=bash
+  turn 35/40 | finish=tool_use | in=177 out=73 | tools=bash
+  turn 36/40 | finish=tool_use | in=216 out=60 | tools=bash
+  turn 37/40 | finish=tool_use | in=23 out=2514 | tools=write_file
+  turn 38/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 39/40 | finish=tool_use | in=60 out=43 | tools=bash
+  turn 40/40 | finish=tool_use | in=35 out=66 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=8554 out=1186 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=tool_use | in=1298 out=759 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=tool_use | in=70 out=568 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=72 out=142 | tools=finish_wrapup
+  [wrapup] done — 33 total concepts in DB (4 turns, 12,649 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run6.md
+
+Run 6: turns=40/40  tokens=34,786  tests=FAIL  submitted=✗  concepts+=3  elapsed=693.0s
+
+============================================================
+  Run 7 — Lore ON (33 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run7_o6r2oyeo
+  turn 01/40 | finish=tool_use | in=3448 out=51 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=50 | tools=read_file
+  turn 03/40 | finish=tool_use | in=3933 out=52 | tools=bash
+  turn 04/40 | finish=tool_use | in=105 out=68 | tools=web_search
+  turn 05/40 | finish=tool_use | in=30 out=37 | tools=web_search
+  turn 06/40 | finish=tool_use | in=30 out=58 | tools=bash
+  turn 07/40 | finish=tool_use | in=260 out=44 | tools=bash
+  turn 08/40 | finish=tool_use | in=226 out=78 | tools=bash
+  turn 09/40 | finish=tool_use | in=21 out=221 | tools=write_file
+  turn 10/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 11/40 | finish=tool_use | in=21 out=51 | tools=write_file
+  turn 12/40 | finish=tool_use | in=32 out=4321 | tools=write_file
+  turn 13/40 | finish=tool_use | in=33 out=2790 | tools=write_file
+  turn 14/40 | finish=tool_use | in=2852 out=48 | tools=bash
+  turn 15/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 16/40 | finish=tool_use | in=526 out=48 | tools=bash
+  turn 17/40 | finish=tool_use | in=45 out=2473 | tools=write_file
+  turn 18/40 | finish=tool_use | in=32 out=48 | tools=bash
+  turn 19/40 | finish=tool_use | in=49 out=66 | tools=bash
+  turn 20/40 | finish=tool_use | in=1206 out=2648 | tools=write_file
+  turn 21/40 | finish=tool_use | in=32 out=72 | tools=bash
+  turn 22/40 | finish=tool_use | in=432 out=526 | tools=bash
+  turn 23/40 | finish=tool_use | in=103 out=1852 | tools=bash
+  turn 24/40 | finish=tool_use | in=133 out=1353 | tools=bash
+  turn 25/40 | finish=tool_use | in=502 out=1070 | tools=bash
+  turn 26/40 | finish=tool_use | in=76 out=1221 | tools=bash
+  turn 27/40 | finish=tool_use | in=145 out=1554 | tools=bash
+  turn 28/40 | finish=tool_use | in=66 out=1629 | tools=write_file
+  turn 29/40 | finish=tool_use | in=32 out=226 | tools=write_file
+  turn 30/40 | finish=tool_use | in=29 out=43 | tools=bash
+  turn 31/40 | finish=tool_use | in=289 out=45 | tools=bash
+  turn 32/40 | finish=tool_use | in=773 out=88 | tools=bash
+  turn 33/40 | finish=tool_use | in=270 out=1218 | tools=bash
+  turn 34/40 | finish=tool_use | in=188 out=1806 | tools=write_file
+  turn 35/40 | finish=tool_use | in=32 out=45 | tools=bash
+  turn 36/40 | finish=tool_use | in=520 out=834 | tools=bash
+  turn 37/40 | finish=tool_use | in=418 out=869 | tools=bash
+  turn 38/40 | finish=tool_use | in=62 out=1154 | tools=bash
+  turn 39/40 | finish=tool_use | in=105 out=910 | tools=bash
+  turn 40/40 | finish=tool_use | in=267 out=527 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=max_tokens | in=18725 out=8192 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=max_tokens | in=500 out=8192 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=max_tokens | in=87 out=8192 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=87 out=229 | tools=submit_concept
+  [wrapup] turn 05/30 | finish=tool_use | in=66 out=222 | tools=submit_concept
+  [wrapup] turn 06/30 | finish=tool_use | in=71 out=204 | tools=submit_concept
+  [wrapup] turn 07/30 | finish=tool_use | in=67 out=231 | tools=submit_concept
+  [wrapup] turn 08/30 | finish=tool_use | in=68 out=198 | tools=submit_concept
+  [wrapup] turn 09/30 | finish=tool_use | in=69 out=214 | tools=submit_concept
+  [wrapup] [concept cap reached: 9/9 submitted — injecting finish_wrapup prompt]
+  [wrapup] turn 10/30 | finish=tool_use | in=2299 out=128 | tools=finish_wrapup
+  [wrapup] done — 39 total concepts in DB (10 turns, 48,041 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run7.md
+
+Run 7: turns=40/40  tokens=95,951  tests=FAIL  submitted=✗  concepts+=6  elapsed=1630.5s
+
+============================================================
+  Run 8 — Lore ON (39 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run8_ps_5ju3y
+  turn 01/40 | finish=tool_use | in=3448 out=50 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=47 | tools=search_concepts
+  turn 03/40 | finish=tool_use | in=23 out=49 | tools=search_concepts
+  turn 04/40 | finish=tool_use | in=23 out=37 | tools=web_search
+  turn 05/40 | finish=tool_use | in=637 out=50 | tools=read_file
+  turn 06/40 | finish=tool_use | in=3933 out=194 | tools=write_file
+  turn 07/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 08/40 | finish=tool_use | in=21 out=73 | tools=write_file
+  turn 09/40 | finish=tool_use | in=32 out=3362 | tools=write_file
+  turn 10/40 | finish=tool_use | in=33 out=50 | tools=bash
+  turn 11/40 | finish=tool_use | in=96 out=42 | tools=bash
+  turn 12/40 | finish=tool_use | in=85 out=45 | tools=bash
+  turn 13/40 | finish=tool_use | in=1259 out=2984 | tools=write_file
+  turn 14/40 | finish=tool_use | in=33 out=63 | tools=bash
+  turn 15/40 | finish=tool_use | in=1010 out=44 | tools=bash
+  turn 16/40 | finish=tool_use | in=187 out=50 | tools=bash
+  turn 17/40 | finish=tool_use | in=40 out=42 | tools=bash
+  turn 18/40 | finish=tool_use | in=164 out=42 | tools=bash
+  turn 19/40 | finish=tool_use | in=37 out=2979 | tools=write_file
+  turn 20/40 | finish=tool_use | in=33 out=62 | tools=bash
+  turn 21/40 | finish=tool_use | in=236 out=56 | tools=bash
+  turn 22/40 | finish=tool_use | in=109 out=43 | tools=bash
+  turn 23/40 | finish=tool_use | in=226 out=83 | tools=bash
+  turn 24/40 | finish=tool_use | in=216 out=74 | tools=bash
+  turn 25/40 | finish=tool_use | in=22 out=2927 | tools=write_file
+  turn 26/40 | finish=tool_use | in=33 out=62 | tools=bash
+  turn 27/40 | finish=tool_use | in=394 out=71 | tools=bash
+  turn 28/40 | finish=tool_use | in=21 out=1512 | tools=write_file
+  turn 29/40 | finish=tool_use | in=32 out=62 | tools=bash
+  turn 30/40 | finish=tool_use | in=231 out=70 | tools=bash
+  turn 31/40 | finish=tool_use | in=31 out=62 | tools=bash
+  turn 32/40 | finish=tool_use | in=176 out=49 | tools=bash
+  turn 33/40 | finish=tool_use | in=43 out=51 | tools=bash
+  turn 34/40 | finish=tool_use | in=43 out=78 | tools=bash
+  turn 35/40 | finish=tool_use | in=24 out=54 | tools=bash
+  turn 36/40 | finish=tool_use | in=213 out=57 | tools=bash
+  turn 37/40 | finish=tool_use | in=62 out=56 | tools=bash
+  turn 38/40 | finish=tool_use | in=182 out=1553 | tools=write_file
+  turn 39/40 | finish=tool_use | in=32 out=62 | tools=bash
+  turn 40/40 | finish=tool_use | in=68 out=53 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=9811 out=732 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=tool_use | in=866 out=387 | tools=submit_concept
+  [wrapup] turn 03/30 | finish=tool_use | in=68 out=345 | tools=submit_concept
+  [wrapup] turn 04/30 | finish=tool_use | in=68 out=367 | tools=submit_concept
+  [wrapup] turn 05/30 | finish=tool_use | in=67 out=363 | tools=submit_concept
+  [wrapup] turn 06/30 | finish=tool_use | in=66 out=204 | tools=finish_wrapup
+  [wrapup] done — 44 total concepts in DB (6 turns, 13,344 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run8.md
+
+Run 8: turns=40/40  tokens=44,216  tests=FAIL  submitted=✗  concepts+=5  elapsed=961.4s
+
+============================================================
+  Run 9 — Lore ON (44 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run9_b2fiy1be
+  turn 01/40 | finish=tool_use | in=3448 out=52 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=62 | tools=bash
+  turn 03/40 | finish=tool_use | in=1048 out=63 | tools=bash
+  turn 04/40 | finish=tool_use | in=1086 out=38 | tools=bash
+  turn 05/40 | finish=tool_use | in=991 out=46 | tools=bash
+  turn 06/40 | finish=tool_use | in=1017 out=46 | tools=bash
+  turn 07/40 | finish=tool_use | in=1013 out=47 | tools=bash
+  turn 08/40 | finish=tool_use | in=21 out=74 | tools=write_file
+  turn 09/40 | finish=tool_use | in=33 out=437 | tools=write_file
+  turn 10/40 | finish=tool_use | in=33 out=2390 | tools=write_file
+  turn 11/40 | finish=tool_use | in=34 out=198 | tools=write_file
+  turn 12/40 | finish=tool_use | in=29 out=48 | tools=bash
+  turn 13/40 | finish=tool_use | in=96 out=44 | tools=bash
+  turn 14/40 | finish=tool_use | in=21 out=51 | tools=bash
+  turn 15/40 | finish=tool_use | in=43 out=30 | tools=bash
+  turn 16/40 | finish=tool_use | in=178 out=56 | tools=bash
+  turn 17/40 | finish=tool_use | in=1255 out=94 | tools=bash
+  turn 18/40 | finish=tool_use | in=44 out=79 | tools=bash
+  turn 19/40 | finish=tool_use | in=57 out=65 | tools=bash
+  turn 20/40 | finish=tool_use | in=19 out=91 | tools=bash
+  turn 21/40 | finish=tool_use | in=33 out=169 | tools=bash
+  turn 22/40 | finish=tool_use | in=36 out=2338 | tools=write_file
+  turn 23/40 | finish=tool_use | in=34 out=44 | tools=bash
+  turn 24/40 | finish=tool_use | in=38 out=83 | tools=bash
+  turn 25/40 | finish=tool_use | in=48 out=2091 | tools=write_file
+  turn 26/40 | finish=tool_use | in=34 out=53 | tools=bash
+  turn 27/40 | finish=tool_use | in=48 out=118 | tools=bash
+  turn 28/40 | finish=tool_use | in=137 out=430 | tools=bash
+  turn 29/40 | finish=tool_use | in=102 out=419 | tools=bash
+  turn 30/40 | finish=tool_use | in=51 out=380 | tools=bash
+  turn 31/40 | finish=tool_use | in=275 out=65 | tools=bash
+  turn 32/40 | finish=tool_use | in=24 out=2163 | tools=write_file
+  turn 33/40 | finish=tool_use | in=2217 out=123 | tools=bash
+  turn 34/40 | finish=tool_use | in=115 out=530 | tools=bash
+  turn 35/40 | finish=tool_use | in=745 out=666 | tools=bash
+  turn 36/40 | finish=tool_use | in=177 out=2449 | tools=write_file
+  turn 37/40 | finish=tool_use | in=34 out=123 | tools=bash
+  turn 38/40 | finish=tool_use | in=115 out=650 | tools=bash
+  turn 39/40 | finish=tool_use | in=280 out=769 | tools=bash
+  turn 40/40 | finish=tool_use | in=37 out=2506 | tools=write_file
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=tool_use | in=16914 out=190 | tools=finish_wrapup
+  [wrapup] done — 44 total concepts in DB (1 turns, 17,104 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run9.md
+
+Run 9: turns=40/40  tokens=52,353  tests=FAIL  submitted=✗  concepts+=0  elapsed=1016.4s
+
+============================================================
+  Run 10 — Lore ON (44 concepts)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run10_1hhocrqm
+  turn 01/40 | finish=tool_use | in=3448 out=54 | tools=search_concepts
+  turn 02/40 | finish=tool_use | in=23 out=34 | tools=bash
+  turn 03/40 | finish=tool_use | in=1048 out=33 | tools=bash
+  turn 04/40 | finish=tool_use | in=133 out=180 | tools=write_file
+  turn 05/40 | finish=tool_use | in=29 out=63 | tools=write_file
+  turn 06/40 | finish=tool_use | in=33 out=3215 | tools=write_file
+  turn 07/40 | finish=tool_use | in=34 out=39 | tools=bash
+  turn 08/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 09/40 | finish=tool_use | in=534 out=46 | tools=bash
+  turn 10/40 | finish=tool_use | in=47 out=68 | tools=bash
+  turn 11/40 | finish=tool_use | in=38 out=84 | tools=bash
+  turn 12/40 | finish=tool_use | in=44 out=74 | tools=bash
+  turn 13/40 | finish=tool_use | in=30 out=66 | tools=bash
+  turn 14/40 | finish=tool_use | in=21 out=53 | tools=bash
+  turn 15/40 | finish=tool_use | in=238 out=51 | tools=bash
+  turn 16/40 | finish=tool_use | in=19 out=63 | tools=bash
+  turn 17/40 | finish=tool_use | in=21 out=1737 | tools=write_file
+  turn 18/40 | finish=tool_use | in=33 out=46 | tools=bash
+  turn 19/40 | finish=tool_use | in=56 out=95 | tools=bash
+  turn 20/40 | finish=tool_use | in=106 out=101 | tools=bash
+  turn 21/40 | finish=tool_use | in=19 out=56 | tools=bash
+  turn 22/40 | finish=tool_use | in=71 out=58 | tools=bash
+  turn 23/40 | finish=tool_use | in=58 out=298 | tools=bash
+  turn 24/40 | finish=tool_use | in=73 out=60 | tools=bash
+  turn 25/40 | finish=tool_use | in=45 out=292 | tools=bash
+  turn 26/40 | finish=tool_use | in=31 out=322 | tools=bash
+  turn 27/40 | finish=tool_use | in=121 out=137 | tools=bash
+  turn 28/40 | finish=tool_use | in=23 out=263 | tools=bash
+  turn 29/40 | finish=tool_use | in=39 out=289 | tools=bash
+  turn 30/40 | finish=tool_use | in=67 out=287 | tools=bash
+  turn 31/40 | finish=tool_use | in=49 out=409 | tools=bash
+  turn 32/40 | finish=tool_use | in=34 out=417 | tools=bash
+  turn 33/40 | finish=tool_use | in=86 out=58 | tools=bash
+  turn 34/40 | finish=tool_use | in=84 out=409 | tools=bash
+  turn 35/40 | finish=tool_use | in=25 out=589 | tools=bash
+  turn 36/40 | finish=tool_use | in=44 out=523 | tools=bash
+  turn 37/40 | finish=tool_use | in=94 out=549 | tools=bash
+  turn 38/40 | finish=tool_use | in=358 out=474 | tools=bash
+  turn 39/40 | finish=tool_use | in=25 out=57 | tools=bash
+  turn 40/40 | finish=tool_use | in=22 out=58 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+
+  [wrapup] 0 concept(s) to rate — up to 30 turns (session context: last 30 messages)...
+  [wrapup] turn 01/30 | finish=max_tokens | in=9221 out=8192 | tools=submit_concept
+  [wrapup] turn 02/30 | finish=tool_use | in=476 out=84 | tools=finish_wrapup
+  [wrapup] done — 44 total concepts in DB (2 turns, 17,973 tokens) — session cleared.
+  Results → /workspace/AgentLore/samples/stlgen/results/series_001/run10.md
+
+Run 10: turns=40/40  tokens=37,292  tests=FAIL  submitted=✗  concepts+=0  elapsed=678.0s
+
+Comparison → /workspace/AgentLore/samples/stlgen/results/series_001/comparison.md
+
+Aggregate → /workspace/AgentLore/samples/stlgen/results/aggregate.json
+
+@@SERIES_COMPLETE@@:1/1:passes=1/10
+
+=================================================================
+  Multi-Series Summary (1 series x 10 runs)
+=================================================================
+ Run | Pass rate | Avg turns (pass) | Avg tokens | Avg elapsed
+-----+-----------+------------------+------------+------------
+   1 |      100% |             40.0 |     62,720 |       16.1m
+   2 |        0% |                — |     56,611 |       12.6m
+   3 |        0% |                — |     40,600 |       10.8m
+   4 |        0% |                — |     35,445 |        9.8m
+   5 |        0% |                — |     65,684 |       23.0m
+   6 |        0% |                — |     34,786 |       11.5m
+   7 |        0% |                — |     95,951 |       27.2m
+   8 |        0% |                — |     44,216 |       16.0m
+   9 |        0% |                — |     52,353 |       16.9m
+  10 |        0% |                — |     37,292 |       11.3m
+

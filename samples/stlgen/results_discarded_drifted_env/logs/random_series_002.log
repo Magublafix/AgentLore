@@ -1,0 +1,23 @@
+
+=== attempt 1 2026-11-20 05:46:12 ===
+
+############################################################
+  SERIES 2/2
+  Output dir: /workspace/AgentLore/samples/stlgen/results/random/series_002
+############################################################
+
+============================================================
+  Run 1 — condition=random  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run1_r4uyshp9
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+  Results → /workspace/AgentLore/samples/stlgen/results/random/series_002/run1.md
+
+Run 1: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=393.2s
+
+============================================================
+  Run 2 — condition=random (381 ctx tokens)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run2_449donzz

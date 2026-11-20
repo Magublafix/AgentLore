@@ -1,0 +1,150 @@
+
+=== attempt 1 2026-11-20 05:39:36 ===
+
+############################################################
+  SERIES 1/1
+  Output dir: /workspace/AgentLore/samples/stlgen/results/random/series_001
+############################################################
+
+============================================================
+  Run 1 — condition=random  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run1_t28azzja
+  [API ERROR turn 1] Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details.
+
+Main loop ✗ hit limit. Running tests...
+  Results → /workspace/AgentLore/samples/stlgen/results/random/series_001/run1.md
+
+Run 1: turns=0/40  tokens=0  tests=FAIL  submitted=✗  concepts+=0  elapsed=394.4s
+
+[FATAL] S1R2 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R3 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R4 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R5 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R6 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R7 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R8 crashed: pool of 24 concepts reaches 0 tokens; cannot match 12 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 12 ±10%
+
+
+[FATAL] S1R9 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R10 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2017, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1331, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+  [WARN] S1: 9 failed run(s): [2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+Aggregate → /workspace/AgentLore/samples/stlgen/results/random/aggregate.json
+
+@@SERIES_COMPLETE@@:1/1:passes=0/1
+
+=================================================================
+  Multi-Series Summary (1 series x 1 runs)
+=================================================================
+ Run | Pass rate | Avg turns (pass) | Avg tokens | Avg elapsed
+-----+-----------+------------------+------------+------------
+   1 |        0% |                — |          0 |        6.6m
+
+=== series discarded: no run made a model turn (check LLM endpoint/key) ===
