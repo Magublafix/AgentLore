@@ -34,10 +34,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
 import shutil
+import site
 import subprocess
 import sys
 import tempfile
@@ -1288,9 +1290,84 @@ def run_tests(workdir: Path) -> tuple[bool, str]:
         return False, f"[test suite timed out after 600s]\n{install_header}{out}"
 
 # ---------------------------------------------------------------------------
+# Per-run isolated package environment
+# ---------------------------------------------------------------------------
+# The agent's ``pip install`` and the generated CLI use the interpreter's *user* site, a
+# location shared by every run.  Libraries one run installs or downgrades then leak into later
+# runs, series and conditions.  With ``LORE_BENCH_BASELINE_USERBASE`` set, every run instead gets
+# a fresh copy of that frozen package set as its own ``PYTHONUSERBASE`` (installs stay inside the
+# copy, which is deleted afterwards) and any package changes the agent made are recorded.
+
+BASELINE_USERBASE_ENV = "LORE_BENCH_BASELINE_USERBASE"
+
+
+def _user_site_packages(userbase: Path) -> dict[str, str]:
+    """``pip freeze --user`` of ``userbase`` as {name: version} (empty on failure)."""
+    env = {**os.environ, "PYTHONUSERBASE": str(userbase)}
+    try:
+        out = subprocess.run(["/usr/bin/python3", "-m", "pip", "freeze", "--user"],
+                             capture_output=True, text=True, timeout=120, env=env).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    pkgs = {}
+    for line in out.splitlines():
+        if line.lstrip().startswith(("#", "-")):   # "# Editable install ... (x==0.1.0)" comments, -e lines
+            continue
+        name, sep, ver = line.partition("==")
+        if sep:
+            pkgs[name.strip().lower()] = ver.strip()
+    return pkgs
+
+
+def _package_changes(before: dict[str, str], after: dict[str, str]) -> str:
+    """Compact description of packages the agent added/removed/changed ('' if none)."""
+    parts = [f"+{k}=={after[k]}" for k in sorted(after) if k not in before]
+    parts += [f"-{k}" for k in sorted(before) if k not in after]
+    parts += [f"{k}:{before[k]}->{after[k]}" for k in sorted(before)
+              if k in after and before[k] != after[k]]
+    return ";".join(parts)
+
+
+def _isolated_userbase(func):
+    """Run ``func`` inside a throw-away copy of the frozen baseline package set."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        baseline = os.environ.get(BASELINE_USERBASE_ENV)
+        if not baseline:
+            return func(*args, **kwargs)
+        base = Path(baseline)
+        if not base.is_dir():
+            raise RuntimeError(f"{BASELINE_USERBASE_ENV}={baseline} is not a directory")
+        run_base = Path(tempfile.mkdtemp(prefix="lore_userbase_")) / "userbase"
+        shutil.copytree(base, run_base, symlinks=True)
+        before = _user_site_packages(run_base)
+        saved = {k: os.environ.get(k) for k in ("PYTHONUSERBASE", "PATH")}
+        # Drop the real user's bin dir: scripts left there by earlier runs (e.g. an upgraded
+        # ``pip``) point at packages that are invisible inside the isolated user base.
+        real_bin = str(Path(site.getuserbase()) / "bin")
+        rest = [d for d in (saved["PATH"] or "").split(os.pathsep) if d and d != real_bin]
+        os.environ["PYTHONUSERBASE"] = str(run_base)
+        os.environ["PATH"] = os.pathsep.join([str(run_base / "bin"), *rest])
+        try:
+            res = func(*args, **kwargs)
+            if isinstance(res, dict):
+                res["agent_pkg_changes"] = _package_changes(before, _user_site_packages(run_base))
+            return res
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            shutil.rmtree(run_base.parent, ignore_errors=True)
+    return wrapper
+
+
+# ---------------------------------------------------------------------------
 # Core step function — all runs share this logic
 # ---------------------------------------------------------------------------
 
+@_isolated_userbase
 def step_run(
     run_num: int,
     verbose: bool,
@@ -1835,7 +1912,7 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
                 "noise_injected": r.get("noise_injected", 0),
                 "context_tokens": r.get("context_tokens", 0),
                 **({k: r[k] for k in ("random_seed", "random_target_tokens", "random_concepts",
-                                      "token_tolerance") if k in r}),
+                                      "token_tolerance", "agent_pkg_changes") if k in r}),
             }
             for r in series_results
         ],

@@ -15,6 +15,14 @@ finally:
     sys.path.remove(str(BENCH))
 
 
+@pytest.fixture(autouse=True)
+def _no_real_pip_freeze(request, monkeypatch):
+    """run_series snapshots the agent's user site; keep that off the real interpreter in tests."""
+    if request.cls is not None and request.cls.__name__ == "TestEnvDrift":
+        return
+    monkeypatch.setattr(bd, "env_snapshot", lambda *a, **k: {})
+
+
 def _agg(path: Path, ids):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"series": [{"series_id": i} for i in ids]}))
@@ -155,3 +163,37 @@ class TestEmbeddedQdrantLauncher:
         monkeypatch.delenv("LORE_BENCH_QDRANT_PATH", raising=False)
         with pytest.raises(SystemExit):
             bench_server.main()
+
+
+class TestEnvDrift:
+    def test_diff_reports_added_removed_changed(self):
+        d = bd.env_diff({"a": "1", "b": "1", "c": "1"}, {"a": "1", "b": "2", "d": "1"})
+        assert d == {"added": ["d"], "removed": ["c"], "changed": ["b: 1 -> 2"]}
+
+    def test_no_drift_is_all_empty(self):
+        assert not any(bd.env_diff({"a": "1"}, {"a": "1"}).values())
+
+    def test_snapshot_parses_freeze_output(self, monkeypatch):
+        class R:
+            stdout = "numpy==2.5.5\nTrimesh==5.2.1\n# comment\n-e git+x#egg=y\n"
+        monkeypatch.setattr(bd.subprocess, "run", lambda *a, **k: R())
+        assert bd.env_snapshot() == {"numpy": "2.5.5", "trimesh": "5.2.1"}
+
+    def test_snapshot_failure_is_empty_not_fatal(self, monkeypatch):
+        def boom(*a, **k): raise OSError("no python")
+        monkeypatch.setattr(bd.subprocess, "run", boom)
+        assert bd.env_snapshot() == {}
+
+    def test_drift_logged_by_run_series(self, tmp_path, monkeypatch):
+        snaps = iter([{"a": "1"}, {"a": "1", "rtree": "1.4"}])
+        monkeypatch.setattr(bd, "env_snapshot", lambda *a, **k: next(snaps))
+        monkeypatch.setattr(bd.subprocess, "run", lambda *a, **k: None)
+        bd.run_series("py", "control", 1, [], None, tmp_path, {}, retries=1)
+        rec = json.loads((tmp_path / "logs" / "env_drift.jsonl").read_text())
+        assert rec["added"] == ["rtree"] and rec["condition"] == "control"
+
+    def test_snapshot_ignores_freeze_comments_containing_double_equals(self, monkeypatch):
+        class R:
+            stdout = "numpy==2.5.5\n# Editable install with no version control (text2stl==0.1.0)\n-e /tmp/x\n"
+        monkeypatch.setattr(bd.subprocess, "run", lambda *a, **k: R())
+        assert bd.env_snapshot() == {"numpy": "2.5.5"}

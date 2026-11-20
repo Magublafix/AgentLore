@@ -220,7 +220,7 @@ class TestLoadAndReport:
         assert "Assumptions" in bs.format_report(rep)
 
     def test_baseline_on_real_ten_series_data(self):
-        results = Path(__file__).parents[2] / "samples" / "stlgen" / "results"
+        results = Path(__file__).parents[2] / "samples" / "stlgen" / "results_legacy_10series"
         if not (results / "aggregate.json").exists():
             pytest.skip("baseline data absent")
         rep = bs.analyse(results, n_perm=200)

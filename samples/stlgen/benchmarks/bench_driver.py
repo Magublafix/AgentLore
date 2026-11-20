@@ -40,6 +40,7 @@ MODEL_NAME = "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M"  # must equal the earlier ser
 LLM_BASE_URL = "http://192.168.1.38:8080"
 SERVER_PORT = 8765
 ADMIN_TOKEN = "bench-admin"
+BASELINE_USERBASE = Path("/workspace/AgentLore-scratch/baseline-userbase")   # frozen agent packages
 SECRET_ENV = ("LORE_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "LORE_SEMANTIC_URL")
 
 
@@ -80,6 +81,7 @@ def runner_env(base: dict[str, str], db_dir: Path) -> dict[str, str]:
         "LORE_ADMIN_TOKEN": ADMIN_TOKEN,
         "LORE_SESSION_FILE": str(db_dir / "session.json"),
         "PYTHONUNBUFFERED": "1",
+        BASELINE_USERBASE_ENV: str(BASELINE_USERBASE),
         "PYTHONPATH": os.pathsep.join(filter(None, [str(REPO), base.get("PYTHONPATH", "")])),
     })
     return env
@@ -153,6 +155,44 @@ class Server:
         self.proc = None
 
 
+AGENT_PYTHON = "/usr/bin/python3"   # interpreter the agent's pip/bash and the generated CLI use
+
+
+BASELINE_USERBASE_ENV = "LORE_BENCH_BASELINE_USERBASE"
+
+
+def env_snapshot(python: str = AGENT_PYTHON, userbase: str | None = None) -> dict[str, str]:
+    """Packages in the agent's user site (``pip freeze --user``) as {name: version}.
+
+    The agent installs libraries into this *shared* location, so state can leak between runs,
+    series and conditions.  Snapshots before/after each series make such drift visible.
+    """
+    try:
+        env = {**os.environ, **({"PYTHONUSERBASE": userbase} if userbase else {})}
+        out = subprocess.run([python, "-m", "pip", "freeze", "--user"], capture_output=True,
+                             text=True, timeout=120, env=env).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    pkgs: dict[str, str] = {}
+    for line in out.splitlines():
+        if line.lstrip().startswith(("#", "-")):   # pip freeze comments / -e lines, not packages
+            continue
+        name, sep, ver = line.partition("==")
+        if sep:
+            pkgs[name.strip().lower()] = ver.strip()
+    return pkgs
+
+
+def env_diff(before: dict[str, str], after: dict[str, str]) -> dict[str, list]:
+    """Added / removed / changed packages between two snapshots."""
+    return {
+        "added": sorted(k for k in after if k not in before),
+        "removed": sorted(k for k in before if k not in after),
+        "changed": sorted(f"{k}: {before[k]} -> {after[k]}" for k in before
+                          if k in after and before[k] != after[k]),
+    }
+
+
 def log_line(fh, msg: str) -> None:
     line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
     print(line, flush=True)
@@ -191,11 +231,18 @@ def run_series(py: str, cond: str, series: int, extra: list[str], server: Server
         if server is not None:
             server.ensure()
         log = logdir / f"{cond}_series_{series:03d}.log"
+        ub = env.get(BASELINE_USERBASE_ENV)
+        env_before = env_snapshot(userbase=ub)
         with log.open("ab") as fh:
             fh.write(f"\n=== attempt {attempt} {time.strftime('%F %T')} ===\n".encode())
             fh.flush()
             subprocess.run(series_command(py, cond, series, extra), cwd=HERE, env=env,
                            stdout=fh, stderr=subprocess.STDOUT)
+        drift = env_diff(env_before, env_snapshot(userbase=ub))
+        if any(drift.values()):
+            with (results / "logs" / "env_drift.jsonl").open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"condition": cond, "series": series, "attempt": attempt,
+                                     **drift}) + "\n")
         if series in completed_series(results, cond):
             if series_is_degenerate(results, cond, series):
                 with log.open("ab") as fh:

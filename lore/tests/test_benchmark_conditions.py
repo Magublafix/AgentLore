@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -527,3 +528,85 @@ class TestMultiSeriesMain:
         with pytest.raises(SystemExit):
             runner.main()
         step.assert_not_called()
+
+
+class TestIsolatedUserbase:
+    """Per-run copy of the frozen package set so installs cannot leak between runs."""
+
+    def _baseline(self, tmp_path):
+        base = tmp_path / "baseline"
+        (base / "bin").mkdir(parents=True)
+        (base / "marker.txt").write_text("frozen")
+        return base
+
+    def test_noop_without_env(self, runner, monkeypatch):
+        monkeypatch.delenv(runner.BASELINE_USERBASE_ENV, raising=False)
+        seen = {}
+        f = runner._isolated_userbase(lambda: seen.update(ub=os.environ.get("PYTHONUSERBASE")) or {"x": 1})
+        assert f() == {"x": 1} and "agent_pkg_changes" not in f()
+
+    def test_each_call_gets_own_copy_and_baseline_is_untouched(self, runner, monkeypatch, tmp_path):
+        base = self._baseline(tmp_path)
+        monkeypatch.setenv(runner.BASELINE_USERBASE_ENV, str(base))
+        monkeypatch.setattr(runner, "_user_site_packages", lambda p: {})
+        seen = []
+
+        def work():
+            ub = Path(os.environ["PYTHONUSERBASE"])
+            seen.append(ub)
+            assert (ub / "marker.txt").read_text() == "frozen"
+            assert os.environ["PATH"].startswith(str(ub / "bin"))
+            import site
+            assert str(Path(site.getuserbase()) / "bin") not in os.environ["PATH"].split(os.pathsep)
+            (ub / "leak.txt").write_text("agent install")        # what a pip install would do
+            return {}
+
+        f = runner._isolated_userbase(work)
+        f(); f()
+        assert seen[0] != seen[1]
+        assert not (base / "leak.txt").exists()                  # baseline never mutated
+        assert not seen[0].exists() and not seen[1].exists()     # copies removed afterwards
+
+    def test_environment_restored_even_on_error(self, runner, monkeypatch, tmp_path):
+        monkeypatch.setenv(runner.BASELINE_USERBASE_ENV, str(self._baseline(tmp_path)))
+        monkeypatch.setenv("PYTHONUSERBASE", "/orig")
+        monkeypatch.setattr(runner, "_user_site_packages", lambda p: {})
+        path = os.environ["PATH"]
+
+        def boom():
+            raise RuntimeError("x")
+
+        with pytest.raises(RuntimeError):
+            runner._isolated_userbase(boom)()
+        assert os.environ["PYTHONUSERBASE"] == "/orig" and os.environ["PATH"] == path
+
+    def test_package_changes_recorded_in_result(self, runner, monkeypatch, tmp_path):
+        monkeypatch.setenv(runner.BASELINE_USERBASE_ENV, str(self._baseline(tmp_path)))
+        snaps = iter([{"trimesh": "5.2.1", "a": "1"}, {"trimesh": "4.12.2", "b": "2"}])
+        monkeypatch.setattr(runner, "_user_site_packages", lambda p: next(snaps))
+        res = runner._isolated_userbase(lambda: {})()
+        assert res["agent_pkg_changes"] == "+b==2;-a;trimesh:5.2.1->4.12.2"
+
+    def test_missing_baseline_dir_fails_fast(self, runner, monkeypatch, tmp_path):
+        monkeypatch.setenv(runner.BASELINE_USERBASE_ENV, str(tmp_path / "nope"))
+        with pytest.raises(RuntimeError, match="not a directory"):
+            runner._isolated_userbase(lambda: {})()
+
+    def test_changes_reach_aggregate(self, runner, monkeypatch):
+        monkeypatch.setenv(runner.BASELINE_USERBASE_ENV, "")
+        monkeypatch.setattr(sys, "argv", ["run.py", "--series", "1", "--condition", "control"])
+        for n in ("_write_comparison", "_print_series_summary", "_cleanup_all_workdirs", "_cleanup_series_gists"):
+            monkeypatch.setattr(runner, n, lambda *a, **k: None)
+        real = runner.step_run
+        monkeypatch.setattr(runner, "step_run",
+                            lambda *a, **k: {**real(*a, **k), "agent_pkg_changes": "+x==1"})
+        runner.main()
+        agg = json.loads((runner.RESULTS_DIR / "control" / "aggregate.json").read_text())
+        assert all(r["agent_pkg_changes"] == "+x==1" for r in agg["series"][0]["runs"])
+
+
+    def test_freeze_comment_lines_are_not_packages(self, runner, monkeypatch):
+        class R:
+            stdout = "numpy==2.5.5\n# Editable install with no version control (text2stl==0.1.0)\n-e /tmp/x\n"
+        monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: R())
+        assert runner._user_site_packages(Path("/x")) == {"numpy": "2.5.5"}
