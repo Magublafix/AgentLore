@@ -194,6 +194,25 @@ def select_random_context(
     return chosen, total
 
 
+def min_matchable_tokens(pool: list[dict], tolerance: float = TOKEN_TOLERANCE) -> int:
+    """Smallest target the pool can match: one smallest concept must fit under the upper bound."""
+    smallest = min(estimate_tokens(concept_text(c)) + 1 for c in pool)
+    return math.ceil(smallest / (1 + tolerance))
+
+
+def effective_target(target: int, pool: list[dict], tolerance: float = TOKEN_TOLERANCE) -> int:
+    """Map a relevant-context size to the random-context target.
+
+    A relevant context smaller than any single pool concept (e.g. an empty search result of a
+    few tokens) cannot be matched by whole concepts.  It is treated as *no context* (0): the
+    relevant condition delivered effectively nothing, so the matched random run gets nothing too.
+    Documented deviation; the raw target is recorded separately in each run's results.
+    """
+    if 0 < target < min_matchable_tokens(pool, tolerance):
+        return 0
+    return target
+
+
 def run_seed(base_seed: int, series: int, run: int) -> int:
     """Stable per-(series, run) seed derived from the base seed."""
     digest = hashlib.sha256(f"{base_seed}:{series}:{run}".encode()).hexdigest()

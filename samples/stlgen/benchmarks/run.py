@@ -1380,6 +1380,7 @@ def step_run(
     condition: str = "agentlore",
     random_target_tokens: int | None = None,
     random_seed: int = bc.DEFAULT_SEED,
+    random_target_raw: int | None = None,
 ) -> dict | None:
     """Execute a single benchmark run.
 
@@ -1395,6 +1396,8 @@ def step_run(
             ``random`` (token-matched unrelated concepts). See ``bench_conditions``.
         random_target_tokens: Token budget the random context must match (``random`` only).
         random_seed: Base seed; the per-(series, run) seed is derived from it and recorded.
+        random_target_raw: Relevant-context size before ``bc.effective_target`` mapped targets
+            smaller than any pool concept to 0; recorded when it differs.
     """
     baseline = condition != "agentlore"
     lore_active = (run_num > 1) and not baseline
@@ -1508,6 +1511,7 @@ def step_run(
         result.update({
             "random_seed": run_seed,
             "random_target_tokens": random_target_tokens,
+            "random_target_raw": random_target_raw if random_target_raw is not None else random_target_tokens,
             "random_concepts": [c["name"] for c in random_ctx],
             "token_tolerance": bc.TOKEN_TOLERANCE,
         })
@@ -1912,7 +1916,7 @@ def _write_aggregate_json(series_id: int, series_results: list[dict], turn_budge
                 "noise_injected": r.get("noise_injected", 0),
                 "context_tokens": r.get("context_tokens", 0),
                 **({k: r[k] for k in ("random_seed", "random_target_tokens", "random_concepts",
-                                      "token_tolerance", "agent_pkg_changes") if k in r}),
+                                      "token_tolerance", "random_target_raw", "agent_pkg_changes") if k in r}),
             }
             for r in series_results
         ],
@@ -2058,13 +2062,20 @@ def main() -> None:
     cond = args.condition
     cond_dir = bc.condition_results_dir(RESULTS_DIR, cond)
 
-    def _random_target(offset: int, run_num: int) -> int | None:
-        """Token target for a random-context run (None for other conditions)."""
+    def _random_target_raw(offset: int, run_num: int) -> int | None:
+        """Relevant-context size the random run is matched to (None for other conditions)."""
         if cond != "random":
             return None
         if args.random_target_tokens is not None:
             return args.random_target_tokens
         return bc.relevant_context_tokens(RESULTS_DIR, args.match_series + offset, run_num)
+
+    def _random_target(offset: int, run_num: int) -> int | None:
+        """Token target actually used: matched targets smaller than any pool concept become 0."""
+        raw = _random_target_raw(offset, run_num)
+        if raw is None or args.random_target_tokens is not None:
+            return raw                      # an explicit --random-target-tokens is used as given
+        return bc.effective_target(raw, bc.load_pool())
 
     global _ACTIVE_BACKEND, _gists_client_instance
     _ACTIVE_BACKEND = args.backend
@@ -2103,6 +2114,7 @@ def main() -> None:
                         condition=cond,
                         random_target_tokens=_random_target(series_num - start_series, run_num),
                         random_seed=args.random_seed,
+                        random_target_raw=_random_target_raw(series_num - start_series, run_num),
                     )
                 except Exception as _run_exc:
                     import traceback as _tb
@@ -2166,6 +2178,7 @@ def main() -> None:
                 condition=cond,
                 random_target_tokens=_random_target(0, run_num),
                 random_seed=args.random_seed,
+                random_target_raw=_random_target_raw(0, run_num),
             )
             if res:
                 if run_num == runs[0]:

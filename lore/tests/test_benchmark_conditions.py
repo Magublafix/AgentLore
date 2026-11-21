@@ -610,3 +610,67 @@ class TestIsolatedUserbase:
             stdout = "numpy==2.5.5\n# Editable install with no version control (text2stl==0.1.0)\n-e /tmp/x\n"
         monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: R())
         assert runner._user_site_packages(Path("/x")) == {"numpy": "2.5.5"}
+
+
+class TestEffectiveTarget:
+    """Relevant contexts smaller than any pool concept are matched with *no* context."""
+
+    def _pool(self, sizes):
+        return [_concept(f"c{i}", n_words=n) for i, n in enumerate(sizes)]
+
+    def test_min_matchable_follows_smallest_concept(self):
+        pool = self._pool([60, 100])
+        smallest = min(bc.estimate_tokens(bc.concept_text(c)) + 1 for c in pool)
+        import math
+        assert bc.min_matchable_tokens(pool) == math.ceil(smallest / (1 + bc.TOKEN_TOLERANCE))
+
+    def test_tiny_target_becomes_zero_context(self):
+        pool = self._pool([60, 100])
+        floor = bc.min_matchable_tokens(pool)
+        assert bc.effective_target(4, pool) == 0
+        assert bc.effective_target(floor - 1, pool) == 0
+
+    def test_zero_and_matchable_targets_unchanged(self):
+        pool = self._pool([60, 100])
+        floor = bc.min_matchable_tokens(pool)
+        assert bc.effective_target(0, pool) == 0
+        assert bc.effective_target(floor, pool) == floor
+        assert bc.effective_target(900, pool) == 900
+
+    def test_floor_target_is_actually_matchable(self):
+        pool = self._pool([60, 100])
+        floor = bc.min_matchable_tokens(pool)
+        chosen, total = bc.select_random_context(pool, floor, seed=1)
+        assert chosen and abs(total - floor) <= floor * bc.TOKEN_TOLERANCE
+
+    def test_real_pool_floor_is_80(self):
+        assert bc.min_matchable_tokens(bc.load_pool()) == 80
+
+
+class TestTinyTargetsThroughMain:
+    def _go(self, runner, monkeypatch, argv):
+        monkeypatch.setattr(sys, "argv", ["run.py", *argv])
+        for n in ("_write_comparison", "_print_series_summary", "_cleanup_all_workdirs", "_cleanup_series_gists"):
+            monkeypatch.setattr(runner, n, lambda *a, **k: None)
+        runner.main()
+
+    def test_tiny_relevant_context_gives_empty_random_run_with_raw_recorded(self, runner, monkeypatch):
+        runs = [{"run": r, "context_tokens": 4 if r in (2, 3) else 465 if r == 4 else 0} for r in range(1, 11)]
+        agg = runner.RESULTS_DIR / "aggregate.json"
+        agg.parent.mkdir(parents=True)
+        agg.write_text(json.dumps({"model": runner.MODEL, "turn_budget": 40,
+                                   "series": [{"series_id": 1, "runs": runs}]}))
+        self._go(runner, monkeypatch, ["--series", "1", "--condition", "random", "--match-series", "1"])
+        out = json.loads((runner.RESULTS_DIR / "random" / "aggregate.json").read_text())
+        s = out["series"][0]
+        assert s["failed_runs"] == [] and len(s["runs"]) == 10      # nothing lost to InfeasibleMatch
+        by = {r["run"]: r for r in s["runs"]}
+        assert by[2]["random_target_tokens"] == 0 and by[2]["random_target_raw"] == 4
+        assert by[2]["context_tokens"] == 0 and by[2]["random_concepts"] == []
+        assert by[4]["random_target_tokens"] == 465 and by[4]["random_target_raw"] == 465
+        assert by[4]["context_tokens"] > 0
+
+    def test_explicit_fixed_target_is_not_remapped(self, runner, monkeypatch):
+        self._go(runner, monkeypatch, ["--series", "1", "--condition", "random", "--random-target-tokens", "300"])
+        out = json.loads((runner.RESULTS_DIR / "random" / "aggregate.json").read_text())
+        assert all(r["random_target_tokens"] == 300 for r in out["series"][0]["runs"])

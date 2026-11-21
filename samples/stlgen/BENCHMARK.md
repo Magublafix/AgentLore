@@ -74,6 +74,15 @@ Rules enforced by the runner:
 - **Feasibility limit:** the pool totals about 2,300 estimated tokens. If a run's relevant context is
   larger, selection fails with an explicit `InfeasibleMatch` error rather than silently using a
   smaller dump; the pool must then be extended before that run can be matched.
+- **Tiny relevant contexts (deviation):** in many relevant-condition runs `search_concepts` returned
+  only a few tokens (an empty result, 4–12 tokens), but the smallest pool concept is 87 tokens, so
+  no whole-concept selection can match it within ±10 %. Matched targets below
+  `ceil(smallest_concept / 1.1)` (80 tokens for this pool) are therefore treated as **no context**
+  (target 0): the relevant condition delivered effectively nothing, so the matched random run gets
+  nothing either. Each random run records both `random_target_raw` (what the relevant run received)
+  and `random_target_tokens` (what was used). Such runs behave like control runs inside the random
+  series, which dilutes the random-vs-relevant contrast; the analysis should report how many random
+  runs are in this category. An explicit `--random-target-tokens` is never remapped.
 
 Analysis is in `benchmarks/bench_stats.py` (mixed-effects logistic regression with series as a
 random effect, plus a within-series permutation test and series-level bootstrap CIs). It states its
