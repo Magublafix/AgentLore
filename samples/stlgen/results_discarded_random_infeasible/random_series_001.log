@@ -1,0 +1,225 @@
+
+=== attempt 1 2026-11-21 20:21:14 ===
+
+############################################################
+  SERIES 1/1
+  Output dir: /workspace/AgentLore/samples/stlgen/results/random/series_001
+############################################################
+
+============================================================
+  Run 1 — condition=random  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run1_k8kncf87
+  turn 01/40 | finish=tool_use | in=1235 out=32 | tools=read_file
+  turn 02/40 | finish=tool_use | in=3933 out=28 | tools=bash
+  turn 03/40 | finish=tool_use | in=107 out=45 | tools=bash
+  turn 04/40 | finish=tool_use | in=24 out=51 | tools=bash
+  turn 05/40 | finish=tool_use | in=21 out=42 | tools=bash
+  turn 06/40 | finish=tool_use | in=48 out=51 | tools=bash
+  turn 07/40 | finish=tool_use | in=21 out=52 | tools=bash
+  turn 08/40 | finish=tool_use | in=260 out=54 | tools=bash
+  turn 09/40 | finish=tool_use | in=226 out=47 | tools=bash
+  turn 10/40 | finish=tool_use | in=21 out=58 | tools=bash
+  turn 11/40 | finish=tool_use | in=22 out=82 | tools=bash
+  turn 12/40 | finish=tool_use | in=26 out=56 | tools=bash
+  turn 13/40 | finish=tool_use | in=19 out=57 | tools=bash
+  turn 14/40 | finish=tool_use | in=19 out=55 | tools=bash
+  turn 15/40 | finish=tool_use | in=216 out=219 | tools=write_file
+  turn 16/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 17/40 | finish=tool_use | in=21 out=73 | tools=write_file
+  turn 18/40 | finish=tool_use | in=32 out=2122 | tools=write_file
+  turn 19/40 | finish=tool_use | in=32 out=39 | tools=bash
+  turn 20/40 | finish=tool_use | in=266 out=43 | tools=bash
+  turn 21/40 | finish=tool_use | in=559 out=52 | tools=bash
+  turn 22/40 | finish=tool_use | in=48 out=73 | tools=bash
+  turn 23/40 | finish=tool_use | in=38 out=49 | tools=bash
+  turn 24/40 | finish=tool_use | in=31 out=58 | tools=bash
+  turn 25/40 | finish=tool_use | in=327 out=86 | tools=bash
+  turn 26/40 | finish=tool_use | in=28 out=1419 | tools=write_file
+  turn 27/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 28/40 | finish=tool_use | in=85 out=95 | tools=bash
+  turn 29/40 | finish=tool_use | in=40 out=39 | tools=bash
+  turn 30/40 | finish=tool_use | in=1108 out=583 | tools=bash
+  turn 31/40 | finish=tool_use | in=122 out=200 | tools=bash
+  turn 32/40 | finish=tool_use | in=25 out=616 | tools=bash
+  turn 33/40 | finish=tool_use | in=108 out=473 | tools=bash
+  turn 34/40 | finish=tool_use | in=52 out=689 | tools=bash
+  turn 35/40 | finish=tool_use | in=85 out=860 | tools=bash
+  turn 36/40 | finish=tool_use | in=62 out=1610 | tools=write_file
+  turn 37/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 38/40 | finish=tool_use | in=60 out=95 | tools=bash
+  turn 39/40 | finish=tool_use | in=42 out=39 | tools=bash
+  turn 40/40 | finish=tool_use | in=649 out=78 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+  Results → /workspace/AgentLore/samples/stlgen/results/random/series_001/run1.md
+
+Run 1: turns=40/40  tokens=20,547  tests=PASS  submitted=✗  concepts+=0  elapsed=1118.5s
+
+[FATAL] S1R2 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2094, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1352, in wrapper
+    res = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1408, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R3 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2094, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1352, in wrapper
+    res = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1408, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R4 crashed: pool of 24 concepts reaches 0 tokens; cannot match 8 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2094, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1352, in wrapper
+    res = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1408, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 8 ±10%
+
+
+[FATAL] S1R5 crashed: pool of 24 concepts reaches 0 tokens; cannot match 8 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2094, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1352, in wrapper
+    res = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1408, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 8 ±10%
+
+
+[FATAL] S1R6 crashed: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2094, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1352, in wrapper
+    res = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1408, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 4 ±10%
+
+
+[FATAL] S1R7 crashed: pool of 24 concepts reaches 0 tokens; cannot match 8 ±10%
+Traceback (most recent call last):
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 2094, in main
+    res = step_run(
+          ^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1352, in wrapper
+    res = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/run.py", line 1408, in step_run
+    random_ctx, random_tokens = bc.select_random_context(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/AgentLore/samples/stlgen/benchmarks/bench_conditions.py", line 190, in select_random_context
+    raise InfeasibleMatch(
+bench_conditions.InfeasibleMatch: pool of 24 concepts reaches 0 tokens; cannot match 8 ±10%
+
+
+============================================================
+  Run 8 — condition=random (497 ctx tokens)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run8_7p7seojn
+  turn 01/40 | finish=tool_use | in=1637 out=40 | tools=bash
+  turn 02/40 | finish=tool_use | in=34 out=32 | tools=read_file
+  turn 03/40 | finish=tool_use | in=3933 out=29 | tools=read_file
+  turn 04/40 | finish=tool_use | in=39 out=28 | tools=bash
+  turn 05/40 | finish=tool_use | in=107 out=41 | tools=bash
+  turn 06/40 | finish=tool_use | in=37 out=40 | tools=bash
+  turn 07/40 | finish=tool_use | in=40 out=41 | tools=bash
+  turn 08/40 | finish=tool_use | in=21 out=50 | tools=bash
+  turn 09/40 | finish=tool_use | in=80 out=34 | tools=bash
+  turn 10/40 | finish=tool_use | in=28 out=42 | tools=bash
+  turn 11/40 | finish=tool_use | in=260 out=44 | tools=bash
+  turn 12/40 | finish=tool_use | in=226 out=256 | tools=write_file
+  turn 13/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 14/40 | finish=tool_use | in=21 out=63 | tools=write_file
+  turn 15/40 | finish=max_tokens | in=32 out=8192 | tools=write_file
+  turn 16/40 | finish=tool_use | in=73 out=3592 | tools=write_file
+  turn 17/40 | finish=tool_use | in=33 out=39 | tools=bash
+  turn 18/40 | finish=tool_use | in=156 out=43 | tools=bash
+  turn 19/40 | finish=tool_use | in=376 out=48 | tools=bash
+  turn 20/40 | finish=tool_use | in=317 out=67 | tools=bash
+  turn 21/40 | finish=tool_use | in=296 out=4610 | tools=write_file
+  turn 22/40 | finish=tool_use | in=33 out=42 | tools=bash
+  turn 23/40 | finish=tool_use | in=85 out=92 | tools=bash
+  turn 24/40 | finish=tool_use | in=173 out=96 | tools=bash
+  turn 25/40 | finish=tool_use | in=226 out=55 | tools=bash
+  turn 26/40 | finish=tool_use | in=216 out=66 | tools=bash
+  turn 27/40 | finish=tool_use | in=22 out=49 | tools=bash
+  turn 28/40 | finish=tool_use | in=19 out=3985 | tools=write_file
+  turn 29/40 | finish=tool_use | in=33 out=42 | tools=bash
+  turn 30/40 | finish=tool_use | in=60 out=92 | tools=bash
+  turn 31/40 | finish=tool_use | in=36 out=59 | tools=bash
+  turn 32/40 | finish=tool_use | in=32 out=135 | tools=bash
+  turn 33/40 | finish=tool_use | in=166 out=2415 | tools=write_file
+  turn 34/40 | finish=tool_use | in=32 out=42 | tools=bash
+  turn 35/40 | finish=tool_use | in=60 out=92 | tools=bash
+  turn 36/40 | finish=tool_use | in=44 out=112 | tools=bash
+  turn 37/40 | finish=tool_use | in=45 out=40 | tools=bash
+  turn 38/40 | finish=tool_use | in=1132 out=392 | tools=bash
+  turn 39/40 | finish=tool_use | in=147 out=454 | tools=bash
+  turn 40/40 | finish=tool_use | in=43 out=201 | tools=bash
+
+Main loop ✗ hit limit. Running tests...
+  Results → /workspace/AgentLore/samples/stlgen/results/random/series_001/run8.md
+
+Run 8: turns=40/40  tokens=36,203  tests=FAIL  submitted=✗  concepts+=0  elapsed=2361.4s
+
+============================================================
+  Run 9 — condition=random (498 ctx tokens)  |  40 turns  |  unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+============================================================
+Working dir: /tmp/lore_stlgen_run9_p_eqh1vj
+  turn 01/40 | finish=tool_use | in=1642 out=34 | tools=bash
+  turn 02/40 | finish=tool_use | in=1048 out=42 | tools=bash
+  turn 03/40 | finish=tool_use | in=1077 out=50 | tools=bash
+  turn 04/40 | finish=tool_use | in=991 out=59 | tools=bash
+  turn 05/40 | finish=tool_use | in=1053 out=49 | tools=bash
+  turn 06/40 | finish=tool_use | in=26 out=31 | tools=bash
+  turn 07/40 | finish=tool_use | in=1048 out=35 | tools=bash
+  turn 08/40 | finish=tool_use | in=1081 out=43 | tools=bash
+  turn 09/40 | finish=tool_use | in=983 out=43 | tools=bash
+  turn 10/40 | finish=tool_use | in=597 out=43 | tools=bash
+  turn 11/40 | finish=tool_use | in=1033 out=70 | tools=bash
+  turn 12/40 | finish=tool_use | in=113 out=66 | tools=bash
+  turn 13/40 | finish=tool_use | in=40 out=33 | tools=bash
+  turn 14/40 | finish=tool_use | in=31 out=49 | tools=bash
+  turn 15/40 | finish=tool_use | in=21 out=190 | tools=write_file
+  turn 16/40 | finish=tool_use | in=29 out=32 | tools=bash
+  turn 17/40 | finish=tool_use | in=21 out=63 | tools=write_file
